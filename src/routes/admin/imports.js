@@ -75,7 +75,7 @@ r.post('/', upload.single('file'), async (req, res) => {
         method = 'spreadsheet'; supplier = parsed.supplier; rows = parsed.products;
         notes.push('Read with column matching (AI not configured). Check that every column landed in the right field.');
       } else {
-        throw new Error('No product table found. Use the Highs template, or set ANTHROPIC_API_KEY so AI can read free-form files.');
+        throw new Error('No product table found. Use the Lumi Trade template, or set ANTHROPIC_API_KEY so AI can read free-form files.');
       }
     } else if (ext === 'pdf' || IMG_TYPES[ext]) {
       if (!aiEnabled()) throw new Error('Reading PDFs and photos needs AI — set ANTHROPIC_API_KEY in Railway, or use the Excel template.');

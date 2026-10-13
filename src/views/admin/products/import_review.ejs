@@ -5,7 +5,7 @@
   const ms = imp.supplier_match?.status || 'new';
   const errRows = rows.filter(r => r.checks.some(c => c.level === 'error')).length;
   const flagged = rows.filter(r => r.checks.length || (r.ai_issues || []).length).length;
-  const methodLabel = { ai: 'Read by AI', template: 'Highs template', spreadsheet: 'Column matching' }[imp.method] || imp.method;
+  const methodLabel = { ai: 'Read by AI', template: 'Lumi Trade template', spreadsheet: 'Column matching' }[imp.method] || imp.method;
   const v = x => (x == null ? '' : x);
 %>
 <div class="pagehead">

@@ -7,7 +7,7 @@
 
     <% if (step === 'code') { %>
       <h1>You're invited</h1>
-      <p class="lead">Join<% if (inv.organizations?.name) { %> the <strong><%= inv.organizations.name %></strong> portal<% } else { %> the Highs Business team<% } %>. Enter the 6-digit code from the invitation email sent to <strong><%= inv.email %></strong>.</p>
+      <p class="lead">Join<% if (inv.organizations?.name) { %> the <strong><%= inv.organizations.name %></strong> portal<% } else { %> the Lumi Trade team<% } %>. Enter the 6-digit code from the invitation email sent to <strong><%= inv.email %></strong>.</p>
       <form method="post" action="/invite/<%= inv.token %>/code" autocomplete="off">
         <input class="codeinput" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,12}" maxlength="12" required autofocus placeholder="000000" aria-label="Confirmation code">
         <button class="btn primary wide lg">Confirm email</button>
@@ -52,7 +52,7 @@
   <% } else if (state === 'expired') { %>
     <%- include('../partials/auth_icon', { icon: 'warn' }) %>
     <h1>This invitation has expired</h1>
-    <p class="lead">It was valid until <%= fmt.date(inv.expires_at) %> (invitations last 14 days). Please ask your Highs Business contact to send a new one.</p>
+    <p class="lead">It was valid until <%= fmt.date(inv.expires_at) %> (invitations last 14 days). Please ask your Lumi Trade contact to send a new one.</p>
   <% } else if (state === 'revoked') { %>
     <%- include('../partials/auth_icon', { icon: 'mail' }) %>
     <h1>There's a newer invitation</h1>

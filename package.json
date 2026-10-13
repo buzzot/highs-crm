@@ -2,7 +2,7 @@
   "name": "highs-crm",
   "version": "0.1.0",
   "private": true,
-  "description": "Highs Business — order tracking & CRM (client portal + admin) on Node.js + Supabase",
+  "description": "Lumi Trade — order tracking & CRM (client portal + admin) on Node.js + Supabase",
   "main": "src/server.js",
   "type": "module",
   "engines": { "node": ">=22" },

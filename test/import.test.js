@@ -23,7 +23,7 @@ test('value clean-up', () => {
 });
 
 test('blank template parses to zero products (example row ignored)', () => {
-  const r = parseWorkbook(readXlsx(fs.readFileSync(path.join(dir, '..', 'public', 'templates', 'highs-product-import-template.xlsx'))));
+  const r = parseWorkbook(readXlsx(fs.readFileSync(path.join(dir, '..', 'public', 'templates', 'lumi-trade-product-import-template.xlsx'))));
   assert.equal(r.template, true);
   assert.equal(r.products.length, 0);
 });

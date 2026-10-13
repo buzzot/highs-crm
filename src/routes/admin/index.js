@@ -75,7 +75,7 @@ r.post('/email-check/test', requireAdmin, async (req, res) => {
   const to = String(req.body.to || req.user.email).trim();
   try {
     const m = codeEmail({ url: `${(process.env.APP_URL || '').replace(/\/+$/, '')}/login`, code: '123456', minutes: 15 });
-    const r2 = await sendEmail({ to, ...m, subject: 'Highs Business — test email' });
+    const r2 = await sendEmail({ to, ...m, subject: 'Lumi Trade — test email' });
     await emailCheck(req, res, { test: { ok: true, to, id: r2.id } });
   } catch (e) {
     await emailCheck(req, res, { test: { ok: false, to, error: e.message } });

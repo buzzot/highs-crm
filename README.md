@@ -1,4 +1,4 @@
-# Highs Business — Order Tracking & CRM
+# Lumi Trade — Order Tracking & CRM
 
 Client portal + admin workspace for a China-sourcing trading company.
 Node.js (Express, server-rendered EJS) on **Supabase** (Postgres, Auth, Storage). AI quote checks via the Claude API.
@@ -19,7 +19,7 @@ Node.js (Express, server-rendered EJS) on **Supabase** (Postgres, Auth, Storage)
 | Orders | All orders with status / client filters, cost, freight, margin, profit. Order page: status updates (optional client-visible note), items, landed price per unit, shipments, packing list (bulk-add cartons), product & packing photos, documents, activity |
 | Clients | Companies, their users, pending invites, "Send invite", requests and orders per client. Staff list and staff invites (admins only) |
 | Suppliers | Contacts (WeChat, phone, email), payment terms, lead time, rating, whether they can export officially, products, order history, purchases, licences and certificates |
-| Products | **Import** from the supplier Excel template (`public/templates/highs-product-import-template.xlsx`, rebuilt by `scripts/make_template.py`), supplier price lists, PDFs or photos (AI), with duplicate-supplier detection and a review/confirm step. Add photos by drag & drop, file picker or paste. Catalogue with photos, supplier cost, MOQ, HS code, carton size and weight, specs, quote history |
+| Products | **Import** from the supplier Excel template (`public/templates/lumi-trade-product-import-template.xlsx`, rebuilt by `scripts/make_template.py`), supplier price lists, PDFs or photos (AI), with duplicate-supplier detection and a review/confirm step. Add photos by drag & drop, file picker or paste. Catalogue with photos, supplier cost, MOQ, HS code, carton size and weight, specs, quote history |
 | Sourcing | Request pipeline (new → reviewing → quoted → accepted), owner, internal notes, AI sourcing brief, quotes, accepted quote → order |
 | Logistics | Shipments (third-party forwarders), status, ETD/ETA, B/L, container, **export declaration no.**, freight cost ledger by type (multi-currency, paid/unpaid), landed cost & price per unit, shipping documents, forwarder directory |
 | Pricing | Live calculator + quotes register. Margin on **product cost only** (min 20%, configurable), logistics passed through to give the landed price. Target-price → margin solver, freight helper (LCL/FCL/air from carton data), **AI verification**, send-to-client gate (minimum margin enforced, admin override with a reason) |
@@ -53,9 +53,9 @@ Node.js (Express, server-rendered EJS) on **Supabase** (Postgres, Auth, Storage)
    - Email Templates → "Invite user" / "Reset password": brand them as you like. The link must keep `{{ .ConfirmationURL }}`.
    - For production, set up custom SMTP (Project Settings → Auth → SMTP). The built-in sender is rate-limited.
    - **Email** is sent by the app itself through **Resend**, from your own domain (Supabase sends no emails):
-     1. resend.com → Domains → add your domain (e.g. `highsbusiness.com`), add the DNS records it shows, wait for "Verified".
+     1. resend.com → Domains → add your domain (e.g. `lumitrade.com`), add the DNS records it shows, wait for "Verified".
      2. resend.com → API Keys → create a key with "Sending access".
-     3. Railway → Variables: `RESEND_API_KEY=re_...`, `EMAIL_FROM=Highs Business <no-reply@yourdomain.com>`,
+     3. Railway → Variables: `RESEND_API_KEY=re_...`, `EMAIL_FROM=Lumi Trade <no-reply@yourdomain.com>`,
         optional `EMAIL_REPLY_TO=sales@yourdomain.com`.
    - Invitation codes, sign-in codes (15 min) and password-reset links (30 min) are created and checked by the app
      (table `auth_codes`, migration 0007). Emergency switch: `LOGIN_2FA=off` signs in with password only.

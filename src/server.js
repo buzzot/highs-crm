@@ -76,5 +76,5 @@ export default app;
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const port = process.env.PORT || 3000;
-  app.listen(port, () => console.log(`Highs CRM listening on :${port}`));
+  app.listen(port, () => console.log(`Lumi Trade CRM listening on :${port}`));
 }

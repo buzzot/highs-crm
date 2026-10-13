@@ -33,7 +33,7 @@ export async function loadUser(req, res, next) {
   }
 
   const { data: profile, error: pErr } = await admin.from('profiles')
-    .select('*, organizations(id, name, country)').eq('id', user.id).single();
+    .select('*, organizations(id, name, country, details_completed_at)').eq('id', user.id).single();
   if (!profile || !profile.active) {
     console.error(`[session] ${user.email}: profile ${profile ? 'inactive' : 'not found'}${pErr ? ` (${pErr.message})` : ''}`);
     clearSession(res); return next();
@@ -65,5 +65,7 @@ export function requireAdmin(req, res, next) {
 export function requireClient(req, res, next) {
   if (!req.user) return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl));
   if (req.user.role !== 'client' || !req.user.org_id) return res.redirect('/admin');
+  // first sign-in for this company: details must be completed before anything else
+  if (!req.user.organizations?.details_completed_at && !req.path.startsWith('/company')) return res.redirect('/portal/company?first=1');
   next();
 }

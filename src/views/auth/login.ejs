@@ -1,7 +1,7 @@
 <%- include('../partials/head') %>
 <%- include('../partials/auth_start') %>
   <h1>Welcome back</h1>
-  <p class="lead">Sign in to your Highs Business account.</p>
+  <p class="lead">Sign in to your Lumi Trade account.</p>
   <% if (error) { %><div class="alert err"><%= error %></div><% } %>
   <form method="post" action="/login">
     <input type="hidden" name="next" value="<%= next %>">

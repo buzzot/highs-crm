@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title><%= title %> · Highs Business</title>
+  <title><%= title %> · Lumi Trade</title>
   <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
@@ -11,7 +11,7 @@
 <% if (user) { %>
 <nav class="topbar">
   <button class="navtoggle" aria-label="Menu" onclick="this.parentNode.classList.toggle('open')">☰</button>
-  <a class="brand" href="/">Highs<span>Business</span></a>
+  <a class="brand" href="/">Lumi<span>Trade</span></a>
   <div class="links">
     <% if (isStaff) { %>
       <a href="/admin" class="<%= path === '/admin' ? 'on' : '' %>">Dashboard</a>
@@ -26,6 +26,7 @@
       <a href="/portal" class="<%= path === '/portal' ? 'on' : '' %>">Overview</a>
       <a href="/portal/requests" class="<%= path.startsWith('/portal/requests') ? 'on' : '' %>">Requests</a>
       <a href="/portal/orders" class="<%= path.startsWith('/portal/orders') ? 'on' : '' %>">Orders</a>
+      <a href="/portal/company" class="<%= path.startsWith('/portal/company') ? 'on' : '' %>">Company</a>
     <% } %>
   </div>
   <div class="me">

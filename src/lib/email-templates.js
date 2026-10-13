@@ -21,7 +21,7 @@ export function layout(o) {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f3f6;">
     <tr><td align="center" style="padding:36px 14px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">
-        <tr><td style="padding:0 6px 18px;font-family:${FONT};font-size:22px;font-weight:700;letter-spacing:-0.3px;color:#0f3d5c;">Highs<span style="color:#0b8a7a;">Business</span></td></tr>
+        <tr><td style="padding:0 6px 18px;font-family:${FONT};font-size:22px;font-weight:700;letter-spacing:-0.3px;color:#0f3d5c;">Lumi<span style="color:#0b8a7a;">Trade</span></td></tr>
         <tr><td style="background:#ffffff;border-radius:18px;border:1px solid #e3e6eb;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
             <tr><td style="height:6px;background:#0b8a7a;border-radius:18px 18px 0 0;font-size:0;line-height:0;">&nbsp;</td></tr>
@@ -39,7 +39,7 @@ export function layout(o) {
             </td></tr>
           </table>
         </td></tr>
-        <tr><td style="padding:20px 6px 0;font-family:${FONT};font-size:12px;line-height:1.6;color:#9aa3b0;text-align:center;">Highs Business · Sourcing, orders and shipments in one place</td></tr>
+        <tr><td style="padding:20px 6px 0;font-family:${FONT};font-size:12px;line-height:1.6;color:#9aa3b0;text-align:center;">Lumi Trade · Sourcing, orders and shipments in one place</td></tr>
       </table>
     </td></tr>
   </table>
@@ -49,12 +49,12 @@ export function layout(o) {
 const text = (...lines) => lines.filter(l => l != null).join('\n');
 
 export function inviteEmail({ url, code, orgName, inviterName, days }) {
-  const where = orgName ? `the ${orgName} portal at Highs Business` : 'the Highs Business team';
+  const where = orgName ? `the ${orgName} portal at Lumi Trade` : 'the Lumi Trade team';
   return {
-    subject: orgName ? `You're invited to the ${orgName} portal` : "You're invited to Highs Business",
+    subject: orgName ? `You're invited to the ${orgName} portal` : "You're invited to Lumi Trade",
     html: layout({
       preheader: `Your invitation code is ${code}.`,
-      eyebrow: 'Invitation', title: 'You’re invited to Highs Business',
+      eyebrow: 'Invitation', title: 'You’re invited to Lumi Trade',
       introHtml: `${inviterName ? `<strong>${esc(inviterName)}</strong> invited you to ` : 'You have been invited to '}${esc(where)}. Send sourcing requests, approve quotes and follow every order and shipment in one place.`,
       code, codeLabel: 'On the next page, enter this confirmation code:',
       buttonText: 'Accept invitation', buttonUrl: url,
@@ -67,29 +67,29 @@ export function inviteEmail({ url, code, orgName, inviterName, days }) {
 export function codeEmail({ url, code, minutes, purpose = 'login' }) {
   const invite = purpose === 'invite';
   return {
-    subject: invite ? `Your Highs Business invitation code: ${code}` : `Your Highs Business sign-in code: ${code}`,
+    subject: invite ? `Your Lumi Trade invitation code: ${code}` : `Your Lumi Trade sign-in code: ${code}`,
     html: layout({
       preheader: `Your code is ${code}`,
       eyebrow: invite ? 'Invitation code' : 'Sign-in code', title: 'Here’s your code',
-      introHtml: invite ? 'Enter this code on your invitation page to confirm your email address.' : 'Enter this code on the Highs Business sign-in page to finish signing in.',
+      introHtml: invite ? 'Enter this code on your invitation page to confirm your email address.' : 'Enter this code on the Lumi Trade sign-in page to finish signing in.',
       code, codeLabel: 'Your one-time code:',
-      buttonText: invite ? 'Open invitation' : 'Open Highs Business', buttonUrl: url,
+      buttonText: invite ? 'Open invitation' : 'Open Lumi Trade', buttonUrl: url,
       fineHtml: `The code works once${minutes ? ` and expires in <strong>${minutes} minutes</strong>` : ''}. ${invite ? '' : "If you didn't try to sign in, someone may know your password — change it under <em>My account</em>."}`,
     }),
-    text: text(`Your Highs Business code: ${code}`, '', `Open: ${url}`, minutes ? `Expires in ${minutes} minutes.` : null),
+    text: text(`Your Lumi Trade code: ${code}`, '', `Open: ${url}`, minutes ? `Expires in ${minutes} minutes.` : null),
   };
 }
 
 export function resetEmail({ url, email, minutes }) {
   return {
-    subject: 'Reset your Highs Business password',
+    subject: 'Reset your Lumi Trade password',
     html: layout({
-      preheader: 'Choose a new password for your Highs Business account.',
+      preheader: 'Choose a new password for your Lumi Trade account.',
       eyebrow: 'Password reset', title: 'Choose a new password',
       introHtml: `We received a request to reset the password for <strong>${esc(email)}</strong>. Click the button to choose a new one.`,
       buttonText: 'Reset password', buttonUrl: url,
       fineHtml: `The link works for <strong>${minutes} minutes</strong> and only once. If you didn't ask for this, you can ignore this email — your password stays the same.`,
     }),
-    text: text(`Reset your Highs Business password (${email}):`, url, '', `The link works for ${minutes} minutes and only once.`),
+    text: text(`Reset your Lumi Trade password (${email}):`, url, '', `The link works for ${minutes} minutes and only once.`),
   };
 }

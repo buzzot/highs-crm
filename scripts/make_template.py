@@ -1,4 +1,4 @@
-"""Builds public/templates/highs-product-import-template.xlsx — the file sent to suppliers.
+"""Builds public/templates/lumi-trade-product-import-template.xlsx — the file sent to suppliers.
 Run:  python3 scripts/make_template.py
 Sheet / column headers are what the importer looks for, so keep them in sync with src/lib/product-import.js.
 """
@@ -10,7 +10,7 @@ from openpyxl.comments import Comment
 from openpyxl.drawing.image import Image as XLImage
 from PIL import Image, ImageDraw
 
-OUT = os.path.join(os.path.dirname(__file__), '..', 'public', 'templates', 'highs-product-import-template.xlsx')
+OUT = os.path.join(os.path.dirname(__file__), '..', 'public', 'templates', 'lumi-trade-product-import-template.xlsx')
 F = 'Arial'
 NAVY = '0F3D5C'; INPUT = 'FFF7D6'; EX = 'EEF2F7'; GREY = '7A8494'
 thin = Side(style='thin', color='D5DAE1')
@@ -25,7 +25,7 @@ ws = wb.active; ws.title = 'Instructions'
 ws.sheet_view.showGridLines = False
 ws.column_dimensions['A'].width = 3; ws.column_dimensions['B'].width = 110
 lines = [
-    ('Highs Business — Supplier product form  /  供应商产品信息表', font(size=16, bold=True, color=NAVY)),
+    ('Lumi Trade — Supplier product form  /  供应商产品信息表', font(size=16, bold=True, color=NAVY)),
     ('Template version HB-PI-1', font(size=9, color=GREY)),
     ('', None),
     ('How to fill in  /  填写说明', font(size=12, bold=True, color=NAVY)),
@@ -70,7 +70,7 @@ for i, (label, hint) in enumerate(fields, start=4):
     a = ss.cell(row=i, column=1, value=label); a.font = font(size=10, bold=True); a.alignment = Alignment(vertical='center')
     b = ss.cell(row=i, column=2); b.fill = PatternFill('solid', fgColor=INPUT); b.border = box; b.font = font(size=10)
     b.alignment = Alignment(vertical='center', wrap_text=True)
-    if hint: b.comment = Comment(hint, 'Highs Business')
+    if hint: b.comment = Comment(hint, 'Lumi Trade')
     ss.row_dimensions[i].height = 22
 ss.row_dimensions[5].height = 36
 
@@ -115,7 +115,7 @@ for j, v in enumerate(example, start=1):
     c = ps.cell(row=3, column=j, value=v); c.fill = ex_fill; c.border = box
     c.font = font(size=10, italic=True, color='4A5566'); c.alignment = Alignment(vertical='center', wrap_text=True)
     if cols[j - 1][3]: c.number_format = cols[j - 1][3]
-ps.cell(row=3, column=3).comment = Comment('Example row — overwrite or delete it. Rows with SKU "EXAMPLE-…" are ignored on import.\n示例行，可覆盖或删除。', 'Highs Business')
+ps.cell(row=3, column=3).comment = Comment('Example row — overwrite or delete it. Rows with SKU "EXAMPLE-…" are ignored on import.\n示例行，可覆盖或删除。', 'Lumi Trade')
 ps.row_dimensions[3].height = 62
 
 # example photo (drawn, so the template has no third-party image)
@@ -142,7 +142,7 @@ ps.add_data_validation(cur); cur.add('P3:P503')
 num = DataValidation(type='decimal', operator='greaterThanOrEqual', formula1='0', allow_blank=True, showErrorMessage=True,
                      errorTitle='Number', error='Please enter a number (no units). 请输入数字，不要带单位。')
 ps.add_data_validation(num); num.add('F3:O503'); num.add('Q3:Q503')
-ps.cell(row=1, column=1).comment = Comment('Insert the product photo inside this cell (Insert → Pictures).\n插入→图片，放在本单元格内。', 'Highs Business')
+ps.cell(row=1, column=1).comment = Comment('Insert the product photo inside this cell (Insert → Pictures).\n插入→图片，放在本单元格内。', 'Lumi Trade')
 
 # print: fit each sheet to one page wide
 for sh, land in ((ws, False), (ss, False), (ps, True)):

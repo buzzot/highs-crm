@@ -1,0 +1,59 @@
+<%- include('../partials/head') %>
+<%
+  const v = k => form[k] ?? '';
+  const err = k => errors[k] ? `<span class="ferr">${errors[k]}</span>` : '';
+  const req = '<span class="reqmark" title="Required">*</span>';
+%>
+<div class="companywrap">
+  <% if (first) { %>
+    <div class="welcome">
+      <span class="wstep">One quick step before you start</span>
+      <h1>Welcome<%= user.full_name ? ', ' + user.full_name.split(' ')[0] : '' %>! Please confirm your company details</h1>
+      <p>We use these on your quotes, invoices and shipping documents. It only takes a minute, and anyone at <strong><%= org.name %></strong> can update them later under <em>Company</em>.</p>
+    </div>
+  <% } else { %>
+    <div class="pagehead"><div><h1>Company details</h1>
+      <p class="muted">Used on your quotes, invoices and shipping documents.<% if (org.details_completed_at) { %> Completed <%= fmt.date(org.details_completed_at) %><%= org.completer ? ' by ' + (org.completer.full_name || org.completer.email) : '' %>.<% } %></p></div></div>
+    <% if (saved) { %><div class="alert ok">Saved.</div><% } %>
+  <% } %>
+  <% if (errors._) { %><div class="alert err"><%= errors._ %></div><% } else if (Object.keys(errors).length) { %><div class="alert err">Please complete the highlighted fields.</div><% } %>
+
+  <form method="post" action="/portal/company" class="card companyform" novalidate>
+    <section>
+      <h3>Company</h3>
+      <label class="<%= errors.name ? 'haserr' : '' %>">Registered company name <%- req %><input name="name" value="<%= v('name') %>" required autocomplete="organization"><%- err('name') %></label>
+      <div class="row">
+        <label>Company registration no. <input name="registration_no" value="<%= v('registration_no') %>"></label>
+        <label>Tax / VAT ID <input name="tax_id" value="<%= v('tax_id') %>" placeholder="e.g. EIN, VAT, TIN"></label>
+      </div>
+    </section>
+    <section>
+      <h3>Address</h3>
+      <label class="<%= errors.address ? 'haserr' : '' %>">Street address <%- req %><textarea name="address" rows="2" required autocomplete="street-address"><%= v('address') %></textarea><%- err('address') %></label>
+      <div class="row">
+        <label class="<%= errors.city ? 'haserr' : '' %>">City <%- req %><input name="city" value="<%= v('city') %>" required autocomplete="address-level2"><%- err('city') %></label>
+        <label>Postal code <input name="postal_code" value="<%= v('postal_code') %>" autocomplete="postal-code"></label>
+        <label class="<%= errors.country ? 'haserr' : '' %>">Country <%- req %><input name="country" value="<%= v('country') %>" required autocomplete="country-name" list="countries"><%- err('country') %></label>
+      </div>
+      <datalist id="countries"><% ['United States','Canada','United Kingdom','Germany','France','Netherlands','Spain','Italy','Poland','Sweden','Australia','United Arab Emirates','Saudi Arabia','Kazakhstan','Uzbekistan','Russia','Turkey','Mexico','Brazil','Japan','South Korea','Singapore','India','China','Hong Kong'].forEach(c => { %><option value="<%= c %>"><% }) %></datalist>
+      <label>Delivery address <span class="muted small">— if goods should go somewhere else (warehouse, forwarder)</span><textarea name="delivery_address" rows="2"><%= v('delivery_address') %></textarea></label>
+    </section>
+    <section>
+      <h3>Contact</h3>
+      <div class="row">
+        <label class="<%= errors.phone ? 'haserr' : '' %>">Company phone <%- req %><input name="phone" value="<%= v('phone') %>" required autocomplete="tel" placeholder="+1 555 123 4567"><%- err('phone') %></label>
+        <label class="<%= errors.email ? 'haserr' : '' %>">Company email <%- req %><input type="email" name="email" value="<%= v('email') %>" required autocomplete="email" placeholder="purchasing@company.com"><%- err('email') %></label>
+      </div>
+      <div class="row">
+        <label>Website <input name="website" value="<%= v('website') %>" placeholder="www.company.com" autocomplete="url"></label>
+        <label>Preferred currency <select name="default_currency"><% ['USD','EUR','GBP','CNY'].forEach(c => { %><option <%= (v('default_currency') || 'USD') === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+      </div>
+    </section>
+    <div class="actions formend">
+      <span class="muted small"><span class="reqmark">*</span> required</span>
+      <span class="grow"></span>
+      <button class="btn primary lg"><%= first ? 'Save and continue →' : 'Save changes' %></button>
+    </div>
+  </form>
+</div>
+<%- include('../partials/foot') %>

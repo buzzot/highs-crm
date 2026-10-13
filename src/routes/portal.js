@@ -4,6 +4,7 @@ import { requireClient } from '../middleware/auth.js';
 import { admin } from '../lib/supabase.js';
 import { log } from '../lib/activity.js';
 import { uploadDocument, signedUrl } from '../lib/storage.js';
+import { validateCompany, COMPANY_FIELDS } from '../lib/company.js';
 
 const r = Router();
 // Explicit column lists: clients have column-level grants only (see migration 0002).
@@ -16,6 +17,26 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 
 r.use(requireClient);
 
 // Everything here uses req.db (the user's token) so Supabase RLS enforces org scoping.
+
+// ---- company details (required on the company's first sign-in) ----
+r.get('/company', async (req, res) => {
+  const { data: org } = await admin.from('organizations').select('*, completer:profiles!organizations_details_completed_by_fkey(full_name, email)').eq('id', req.user.org_id).single();
+  res.render('portal/company', { title: 'Company details', org: org || {}, form: org || {}, errors: {}, first: !org?.details_completed_at, saved: req.query.saved });
+});
+r.post('/company', async (req, res) => {
+  const { data: org } = await admin.from('organizations').select('*').eq('id', req.user.org_id).single();
+  const { data, errors } = validateCompany(req.body);
+  if (Object.keys(errors).length) {
+    return res.status(400).render('portal/company', { title: 'Company details', org, form: { ...org, ...data }, errors, first: !org?.details_completed_at, saved: false });
+  }
+  const first = !org.details_completed_at;
+  const patch = Object.fromEntries(COMPANY_FIELDS.map(k => [k, data[k]]));
+  if (first) Object.assign(patch, { details_completed_at: new Date().toISOString(), details_completed_by: req.user.id });
+  const { error } = await admin.from('organizations').update(patch).eq('id', req.user.org_id);
+  if (error) return res.status(400).render('portal/company', { title: 'Company details', org, form: { ...org, ...data }, errors: { _: error.message }, first, saved: false });
+  await log({ entityType: 'organization', entityId: req.user.org_id, action: first ? 'company_details_completed' : 'company_details_updated', actorId: req.user.id, detail: { note: data.name } });
+  res.redirect(first ? '/portal?msg=' + encodeURIComponent('Thanks — your company details are saved. Welcome to Lumi Trade!') : '/portal/company?saved=1');
+});
 
 r.get('/', async (req, res) => {
   const [{ data: requests }, { data: orders }] = await Promise.all([

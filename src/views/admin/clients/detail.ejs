@@ -37,9 +37,17 @@
       <p class="muted small">They get an email with a link to set their password (valid 14 days), then land in the client portal.</p>
     </div>
     <div class="card">
-      <h2>Details</h2>
+      <h2>Company details
+        <% if (org.details_completed_at) { %><span class="badge ok">✓ completed by client <%= fmt.date(org.details_completed_at) %></span><% } else { %><span class="badge warn">waiting for client — asked on first sign-in</span><% } %></h2>
       <dl class="dl">
-        <dt>Address</dt><dd class="pre"><%= org.address || '—' %></dd>
+        <dt>Registration no.</dt><dd><%= org.registration_no || '—' %></dd>
+        <dt>Tax / VAT ID</dt><dd><%= org.tax_id || '—' %></dd>
+        <dt>Address</dt><dd class="pre"><%= [org.address, [org.postal_code, org.city].filter(Boolean).join(' '), org.country].filter(Boolean).join('\n') || '—' %></dd>
+        <dt>Delivery address</dt><dd class="pre"><%= org.delivery_address || 'same as above' %></dd>
+        <dt>Phone</dt><dd><%= org.phone || '—' %></dd>
+        <dt>Email</dt><dd><% if (org.email) { %><a href="mailto:<%= org.email %>"><%= org.email %></a><% } else { %>—<% } %></dd>
+        <dt>Website</dt><dd><% if (org.website) { %><a href="<%= org.website %>" target="_blank" rel="noopener"><%= org.website %></a><% } else { %>—<% } %></dd>
+        <dt>Currency</dt><dd><%= org.default_currency %></dd>
         <dt>Notes</dt><dd class="pre"><%= org.notes || '—' %></dd>
         <dt>Since</dt><dd><%= fmt.date(org.created_at) %></dd>
       </dl>

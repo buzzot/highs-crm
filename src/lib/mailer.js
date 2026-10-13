@@ -1,5 +1,5 @@
 // Sends email through Resend (https://resend.com) from your own domain.
-// Env: RESEND_API_KEY, EMAIL_FROM ("Highs Business <no-reply@yourdomain.com>"), optional EMAIL_REPLY_TO.
+// Env: RESEND_API_KEY, EMAIL_FROM ("Lumi Trade <no-reply@yourdomain.com>"), optional EMAIL_REPLY_TO.
 // Without RESEND_API_KEY (local development) the email is printed to the server log instead.
 
 export const mailConfigured = () => !!process.env.RESEND_API_KEY && !!process.env.EMAIL_FROM;

@@ -5,7 +5,7 @@ from openpyxl.drawing.image import Image as XLImage
 from PIL import Image
 
 HERE = os.path.dirname(__file__)
-TPL = os.path.join(HERE, '..', '..', 'public', 'templates', 'highs-product-import-template.xlsx')
+TPL = os.path.join(HERE, '..', '..', 'public', 'templates', 'lumi-trade-product-import-template.xlsx')
 
 def png(color):
     b = io.BytesIO(); Image.new('RGB', (40, 40), color).save(b, 'PNG'); b.seek(0); return b

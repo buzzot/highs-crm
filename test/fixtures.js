@@ -7,7 +7,7 @@ const d = n => new Date(Date.now() + n * 864e5).toISOString();
 const day = n => d(n).slice(0, 10);
 export const settings = { fx: { CNY_USD: 0.138, USD_CNY: 7.25, EUR_USD: 1.08 }, pricing: { min_margin_pct: 20, default_margin_pct: 25 } };
 
-const staffUser = { id: 'u1', email: 'anna@highs.example', full_name: 'Anna Highs', role: 'admin', org_id: null };
+const staffUser = { id: 'u1', email: 'anna@lumitrade.example', full_name: 'Anna Lee', role: 'admin', org_id: null };
 const clientUser = { id: 'u9', email: 'tom@acme.example', full_name: 'Tom Baker', role: 'client', org_id: 'o1', organizations: { id: 'o1', name: 'Acme Retail LLC' } };
 
 const org = { id: 'o1', name: 'Acme Retail LLC', country: 'USA', tax_id: 'US-88-1234567', default_currency: 'USD', address: '120 Market St\nSan Francisco, CA', notes: 'Prefers sea LCL, monthly reorders.', active: true, created_at: d(-200) };
@@ -17,7 +17,7 @@ const prod2 = { ...prod, id: 'p2', sku: 'SH-STB-210', name: 'Stainless Steel Tum
 
 const request = { id: 'r1', ref: 'REQ-2610-0042', org_id: 'o1', title: 'LED desk lamp, custom logo', description: '10W, foldable, USB-C, black.\nLaser logo on base. Retail box with our artwork.', quantity: 2000, target_unit_price: 6.9, target_currency: 'USD', destination_country: 'USA', destination_city: 'Los Angeles', needed_by: day(45), status: 'reviewing', assigned_to: 'u1', internal_notes: 'Brightway + one backup supplier.', ai_brief: '• Spec: 10W LED, foldable arm, USB-C\n• HS chapter 94 (9405)\n• Ask: colour temperature? certifications (FCC/UL)?', created_at: d(-6), updated_at: d(-1) };
 const requests = [
-  { ...request, organizations: { id: 'o1', name: 'Acme Retail LLC' }, assignee: { full_name: 'Anna Highs' }, quotes: [{ id: 'q1', status: 'sent' }] },
+  { ...request, organizations: { id: 'o1', name: 'Acme Retail LLC' }, assignee: { full_name: 'Anna Lee' }, quotes: [{ id: 'q1', status: 'sent' }] },
   { ...request, id: 'r2', ref: 'REQ-2610-0043', title: 'Stainless tumbler 500ml', status: 'new', needed_by: day(10), quantity: 5000, organizations: { id: 'o2', name: 'Nordic Home AB' }, assignee: null, quotes: [] },
 ];
 
@@ -39,8 +39,8 @@ const docs = [
   { id: 'doc3', entity_type: 'order', entity_id: 'ord1', kind: 'proforma_invoice', title: 'PI-HB-2610-1187.pdf', mime_type: 'application/pdf', client_visible: true, created_at: d(-8) },
 ];
 const events = [
-  { id: 1, action: 'status_in_production', detail: { note: 'Production started, 40% done' }, client_visible: true, created_at: d(-1), profiles: { full_name: 'Anna Highs' } },
-  { id: 2, action: 'documents_uploaded', detail: { note: '1 × proforma invoice' }, client_visible: true, created_at: d(-8), profiles: { full_name: 'Anna Highs' } },
+  { id: 1, action: 'status_in_production', detail: { note: 'Production started, 40% done' }, client_visible: true, created_at: d(-1), profiles: { full_name: 'Anna Lee' } },
+  { id: 2, action: 'documents_uploaded', detail: { note: '1 × proforma invoice' }, client_visible: true, created_at: d(-8), profiles: { full_name: 'Anna Lee' } },
   { id: 3, action: 'note', detail: { note: 'Supplier asked to confirm logo artwork' }, client_visible: false, created_at: d(-5), profiles: { email: 'ops@highs.example' } },
 ];
 const packing = Array.from({ length: 4 }, (_, i) => ({ id: 'pk' + i, carton_no: String(i + 1), description: 'LED Desk Lamp 10W', quantity: 20, length_cm: 52, width_cm: 38, height_cm: 23, gross_weight_kg: 14, net_weight_kg: 13, cbm: 0.0454 }));
@@ -101,8 +101,8 @@ export const pages = {
   'admin/pricing/quote': base(staffUser, '/admin/pricing/quotes/q1', { title: 'Quote', q: { ...quote, requests: { ...request, organizations: { name: 'Acme Retail LLC' } }, products: prod, suppliers: sup }, calc, settings, order: null, ...lists, incoterms: INCOTERMS, currencies: CURRENCIES }),
   'admin/pricing/settings': base(staffUser, '/admin/pricing/settings', { title: 'Pricing settings', settings }),
   'admin/products/import': base(staffUser, '/admin/products/import', { title: 'Import products', ai: true, imports: [
-    { id: 'imp1', file_name: 'Brightway_pricelist_Oct.xlsx', method: 'template', status: 'review', supplier: { name: 'Shenzhen Brightway Electronic Co., Ltd.' }, rows: impRows, created_at: d(0), profiles: { full_name: 'Anna Highs' } },
-    { id: 'imp2', file_name: 'Sunhome catalogue 2026.pdf', method: 'ai', status: 'committed', supplier: { name: 'Yiwu Sunhome Houseware' }, rows: impRows, result: { created: 12, updated: 3 }, created_at: d(-3), profiles: { full_name: 'Anna Highs' } },
+    { id: 'imp1', file_name: 'Brightway_pricelist_Oct.xlsx', method: 'template', status: 'review', supplier: { name: 'Shenzhen Brightway Electronic Co., Ltd.' }, rows: impRows, created_at: d(0), profiles: { full_name: 'Anna Lee' } },
+    { id: 'imp2', file_name: 'Sunhome catalogue 2026.pdf', method: 'ai', status: 'committed', supplier: { name: 'Yiwu Sunhome Houseware' }, rows: impRows, result: { created: 12, updated: 3 }, created_at: d(-3), profiles: { full_name: 'Anna Lee' } },
   ] }),
   'admin/products/import_review': base(staffUser, '/admin/products/import/imp1', { title: 'Import', ai: true, currencies: ['USD', 'EUR', 'GBP', 'CNY'],
     imp: { id: 'imp1', file_name: 'Brightway_pricelist_Oct.xlsx', method: 'template', status: 'review', created_at: d(0), ai_notes: 'AI check: 2 rows need attention — missing HS code and a carton weight lighter than its contents.',
@@ -110,12 +110,14 @@ export const pages = {
       supplier_match: { status: 'suspect', candidates: [{ id: 's1', name: sup.name, city: 'Shenzhen', score: 0.9, strong: false, reasons: ['similar name (90% alike)', 'same contact person'] }] } },
     rows: impRows, suppliers: lists.suppliers, decision: '', candidates: [{ id: 's1', name: sup.name, city: 'Shenzhen', score: 0.9, strong: false, reasons: ['similar name (90% alike)', 'same contact person'] }] }),
   'admin/email_check': base(staffUser, '/admin/email-check', { title: 'Email check', appUrl: 'https://highs-crm-production.up.railway.app', twoFa: true,
-    diag: { key: 'set (re_…a1b2)', keyOk: true, from: 'Highs Business <no-reply@highs.example>', fromOk: true, fromDomain: 'highs.example', replyTo: null, domains: [{ name: 'highs.example', status: 'pending', region: 'us-east-1' }], domainsError: null },
+    diag: { key: 'set (re_…a1b2)', keyOk: true, from: 'Lumi Trade <no-reply@lumitrade.example>', fromOk: true, fromDomain: 'lumitrade.example', replyTo: null, domains: [{ name: 'lumitrade.example', status: 'pending', region: 'us-east-1' }], domainsError: null },
     tables: { 'auth_codes table (migration 0007)': 'ok', 'profile columns (migrations 0004/0006)': 'column profiles.job_title does not exist', 'invitation columns (migrations 0004/0006)': 'ok' },
     recent: [{ email: 'mars4wo@gmail.com', purpose: 'reset', created_at: d(0), used_at: null, attempts: 0 }],
-    test: { ok: false, to: 'anna@highs.example', error: 'Email could not be sent: the domain in EMAIL_FROM is not verified in Resend (The highs.example domain is not verified).' } }),
+    test: { ok: false, to: 'anna@lumitrade.example', error: 'Email could not be sent: the domain in EMAIL_FROM is not verified in Resend (The lumitrade.example domain is not verified).' } }),
   // ---- client portal ----
   'portal/dashboard': base(clientUser, '/portal', { title: 'Overview', requests, orders: [{ ...overview, shipments: [{ eta: day(48), status: 'booked' }] }], openCount: 1 }),
+  'portal/company': base(clientUser, '/portal/company', { title: 'Company details', first: true, saved: false,
+    org: { ...org, details_completed_at: null }, form: { ...org, city: 'San Francisco', email: 'bad' }, errors: { phone: 'Company phone is required.', email: 'Enter a valid email address.' } }),
   'portal/requests': base(clientUser, '/portal/requests', { title: 'My requests', requests }),
   'portal/request_form': base(clientUser, '/portal/requests/new', { title: 'New request', error: null, form: {} }),
   'portal/request_detail': base(clientUser, '/portal/requests/r1', { title: request.ref, request, quotes: [{ ...quote, status: 'sent' }], docs: docs.slice(0, 1), events }),

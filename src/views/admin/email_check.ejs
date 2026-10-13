@@ -11,7 +11,7 @@
       <h2>1. Railway variables</h2>
       <table class="tbl"><tbody>
         <tr><td><code>RESEND_API_KEY</code></td><td><%= diag.key %></td><td class="right"><%- ok(diag.keyOk) %></td></tr>
-        <tr><td><code>EMAIL_FROM</code></td><td><%= diag.from %><% if (!diag.fromOk && diag.from !== 'MISSING') { %><div class="small bad">Format: <code>Highs Business &lt;no-reply@yourdomain.com&gt;</code></div><% } %></td><td class="right"><%- ok(diag.fromOk) %></td></tr>
+        <tr><td><code>EMAIL_FROM</code></td><td><%= diag.from %><% if (!diag.fromOk && diag.from !== 'MISSING') { %><div class="small bad">Format: <code>Lumi Trade &lt;no-reply@yourdomain.com&gt;</code></div><% } %></td><td class="right"><%- ok(diag.fromOk) %></td></tr>
         <tr><td><code>EMAIL_REPLY_TO</code></td><td><%= diag.replyTo || '— (optional)' %></td><td></td></tr>
         <tr><td><code>APP_URL</code></td><td><%= appUrl || 'MISSING' %></td><td class="right"><%- ok(appUrl && /^https:\/\//.test(appUrl) && !/localhost/.test(appUrl)) %></td></tr>
         <tr><td><code>LOGIN_2FA</code></td><td><%= twoFa ? 'on — sign-in needs an emailed code' : 'off — password only' %></td><td></td></tr>
