@@ -17,21 +17,27 @@ export async function loadUser(req, res, next) {
   const raw = req.cookies?.[COOKIE];
   if (!raw) return next();
   let tokens;
-  try { tokens = JSON.parse(raw); } catch { clearSession(res); return next(); }
+  try { tokens = JSON.parse(raw); } catch { console.error('[session] unreadable cookie'); clearSession(res); return next(); }
 
   let { data: { user }, error } = await anon.auth.getUser(tokens.a);
   if (error || !user) {
     // try refresh
     const { data, error: rErr } = await anon.auth.refreshSession({ refresh_token: tokens.r });
-    if (rErr || !data?.session) { clearSession(res); return next(); }
+    if (rErr || !data?.session) {
+      console.error(`[session] token rejected (${error?.message || 'no user'}); refresh failed (${rErr?.message || 'no session'})`);
+      clearSession(res); return next();
+    }
     setSession(res, data.session);
     tokens = { a: data.session.access_token, r: data.session.refresh_token };
     user = data.session.user;
   }
 
-  const { data: profile } = await admin.from('profiles')
+  const { data: profile, error: pErr } = await admin.from('profiles')
     .select('*, organizations(id, name, country)').eq('id', user.id).single();
-  if (!profile || !profile.active) { clearSession(res); return next(); }
+  if (!profile || !profile.active) {
+    console.error(`[session] ${user.email}: profile ${profile ? 'inactive' : 'not found'}${pErr ? ` (${pErr.message})` : ''}`);
+    clearSession(res); return next();
+  }
 
   req.user = profile;
   req.accessToken = tokens.a;

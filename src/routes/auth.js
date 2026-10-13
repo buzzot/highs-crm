@@ -12,11 +12,23 @@ r.get('/login', (req, res) => {
 
 r.post('/login', async (req, res) => {
   const { email, password, next } = req.body;
-  const { data, error } = await anon.auth.signInWithPassword({ email, password });
-  if (error || !data.session) return res.status(401).render('auth/login', { title: 'Sign in', error: 'Invalid email or password.', next: next || '' });
+  const { data, error } = await anon.auth.signInWithPassword({ email: String(email || '').trim(), password });
+  if (error || !data.session) {
+    console.error(`[login] ${String(email || '').trim()}: ${error?.status || ''} ${error?.code || ''} ${error?.message || 'no session'}`);
+    const msg = /invalid login credentials/i.test(error?.message || '') ? 'Invalid email or password.'
+      : /not confirmed/i.test(error?.message || '') ? 'Email not confirmed yet — open the link in your invitation email.'
+      : /api key|apikey|jwt/i.test(error?.message || '') ? 'Server configuration error (Supabase key). Check SUPABASE_ANON_KEY.'
+      : 'Sign-in failed. Please try again.';
+    return res.status(401).render('auth/login', { title: 'Sign in', error: msg, next: next || '' });
+  }
   setSession(res, data.session);
-  const { data: profile } = await admin.from('profiles').select('role').eq('id', data.user.id).single();
-  res.redirect(next && next.startsWith('/') ? next : (profile?.role === 'client' ? '/portal' : '/admin'));
+  const { data: profile, error: pErr } = await admin.from('profiles').select('role, active').eq('id', data.user.id).single();
+  if (!profile || !profile.active) {
+    console.error(`[login] ${data.user.email}: signed in but profile ${profile ? 'inactive' : 'missing'} ${pErr?.message || ''}`);
+    clearSession(res);
+    return res.status(403).render('auth/login', { title: 'Sign in', error: 'Your account is not activated yet. Ask an administrator.', next: '' });
+  }
+  res.redirect(next && next.startsWith('/') && !next.startsWith('//') ? next : (profile.role === 'client' ? '/portal' : '/admin'));
 });
 
 r.post('/logout', (req, res) => { clearSession(res); res.redirect('/login'); });
