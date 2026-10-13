@@ -1,18 +1,16 @@
 import { randomBytes } from 'node:crypto';
 import { admin } from './supabase.js';
-import { sendCode } from './otp.js';
+import { sendInvite } from './otp.js';
 
 import { INVITE_DAYS } from './members.js';
 export { INVITE_DAYS, memberRows } from './members.js';
-const appUrl = () => (process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
 
 /**
  * Invite (or re-invite) a person by email.
  *
- * Each invitation gets its own random token and a 14-day expiry. The email Supabase sends links to
- * APP_URL/invite/<token>; that page lets the person set a password for as long as the token is valid —
- * even after Supabase's own one-time code (max 24 h) has expired.
- * Re-inviting revokes any earlier open invitation for the same email.
+ * Each invitation gets its own random link token and a 6-digit code, both valid 14 days, emailed through
+ * Resend from your own domain. The login is created here (without a password); the person sets the
+ * password on the invitation page after confirming the code. Re-inviting revokes earlier open invitations.
  */
 export async function inviteUser({ email, role = 'client', orgId = null, invitedBy = null }) {
   email = String(email || '').trim().toLowerCase();
@@ -36,27 +34,22 @@ export async function inviteUser({ email, role = 'client', orgId = null, invited
     .insert({ email, role, org_id: orgId, invited_by: invitedBy, token, expires_at: expiresAt });
   if (iErr) throw iErr;
 
-  const redirectTo = `${appUrl()}/invite/${token}`;
-  const { error } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo });
-  if (!error) {
-    await admin.from('profiles').update({ invited_at: new Date().toISOString() }).ilike('email', email);
-    return { resent: false, expiresAt };
-  }
-  if (!/already|registered|exists/i.test(error.message)) throw error;
-
-  // Login already exists (earlier invite, or an existing user): make sure the profile points at this
-  // client/role, then email a link (password-reset email) that lands on the same invite page.
+  // the login (no password yet) — the database trigger links it to the invitation (role + client)
+  const now = new Date().toISOString();
   if (existing) {
-    const patch = { role, org_id: orgId, active: true, invited_at: new Date().toISOString() };
-    await admin.from('profiles').update(patch).eq('id', existing.id);
+    await admin.from('profiles').update({ role, org_id: orgId, active: true, invited_at: now }).eq('id', existing.id);
+  } else {
+    const { error } = await admin.auth.admin.createUser({ email, email_confirm: true });
+    if (error && !/already|registered|exists/i.test(error.message)) throw error;
+    await admin.from('profiles').update({ invited_at: now }).ilike('email', email);
   }
-  // email them a fresh code; the button in that email opens the same invitation page
-  try { await sendCode(email, `/invite/${token}`); }
-  catch (e) {
-    const { error: rErr } = await admin.auth.resetPasswordForEmail(email, { redirectTo });
-    if (rErr) throw new Error(e.message);
-  }
-  return { resent: true, expiresAt };
+
+  const [{ data: org }, { data: inviter }] = await Promise.all([
+    orgId ? admin.from('organizations').select('name').eq('id', orgId).single() : { data: null },
+    invitedBy ? admin.from('profiles').select('full_name').eq('id', invitedBy).single() : { data: null },
+  ]);
+  await sendInvite({ email, token, orgName: org?.name || null, inviterName: inviter?.full_name || null, days: INVITE_DAYS });
+  return { resent: !!existing, expiresAt };
 }
 
 /** Look up an invitation by its link token and say whether it can still be used. */

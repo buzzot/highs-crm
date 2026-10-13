@@ -1,0 +1,21 @@
+<%- include('../partials/head') %>
+<%- include('../partials/auth_start') %>
+  <% if (valid) { %>
+    <%- include('../partials/auth_icon', { icon: 'key' }) %>
+    <h1>Choose a new password</h1>
+    <p class="lead">Use at least 8 characters with letters and a number.</p>
+    <% if (error) { %><div class="alert err"><%= error %></div><% } %>
+    <form method="post">
+      <label>New password <span class="pwfield"><input type="password" name="password" minlength="8" required autofocus autocomplete="new-password"><button type="button" class="pwtoggle" aria-label="Show password">Show</button></span></label>
+      <label>Repeat new password <input type="password" name="password2" minlength="8" required autocomplete="new-password"></label>
+      <button class="btn primary wide lg">Save password & sign in</button>
+    </form>
+  <% } else { %>
+    <%- include('../partials/auth_icon', { icon: 'warn' }) %>
+    <h1>This link has expired</h1>
+    <p class="lead">Reset links work once and only for a short time. Request a new one and use the newest email.</p>
+    <a class="btn primary wide lg" href="/forgot">Send a new link</a>
+    <p class="hintline"><a href="/login">← Back to sign in</a></p>
+  <% } %>
+<%- include('../partials/auth_end') %>
+<%- include('../partials/foot') %>

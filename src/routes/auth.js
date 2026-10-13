@@ -3,8 +3,8 @@ import { admin, anon } from '../lib/supabase.js';
 import { setSession, clearSession, requireAuth } from '../middleware/auth.js';
 import { findInvite } from '../lib/invites.js';
 import { log } from '../lib/activity.js';
-import { sign, unsign } from '../lib/signed.js';
-import { sendCode, verifyCode, twoFactorOn, tooManyAttempts, maskEmail, CODE_TTL_MIN } from '../lib/otp.js';
+import { sign, unsign, seal, unseal } from '../lib/signed.js';
+import { sendCode, sendReset, checkCode, codeError, twoFactorOn, maskEmail, CODE_TTL_MIN, RESET_TTL_MIN } from '../lib/otp.js';
 
 const r = Router();
 const APP_URL = () => (process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
@@ -40,12 +40,11 @@ r.post('/login', async (req, res) => {
     setSession(res, data.session);
     return res.redirect(safeNext(next) || home(profile.role));
   }
-  // Step 2: the password session is thrown away; the real session comes from the emailed code.
-  await admin.auth.admin.signOut(data.session.access_token, 'local').catch(() => {});
-  try { await sendCode(data.user.email); } catch (e) {
+  // Step 2: keep the (encrypted) session aside until the emailed code is entered.
+  try { await sendCode(data.user.email, 'login', '/login/verify'); } catch (e) {
     return res.status(503).render('auth/login', { title: 'Sign in', error: e.message, next: next || '' });
   }
-  res.cookie(PENDING, sign({ e: data.user.email, n: safeNext(next) }, CODE_TTL_MIN * 60e3), cookieOpts(CODE_TTL_MIN * 60e3));
+  res.cookie(PENDING, seal({ e: data.user.email, rt: data.session.refresh_token, n: safeNext(next) }, CODE_TTL_MIN * 60e3), cookieOpts(CODE_TTL_MIN * 60e3));
   res.redirect('/login/verify');
 });
 
@@ -54,29 +53,30 @@ const verifyView = (res, pending, extra = {}) => res.render('auth/verify', {
 });
 
 r.get('/login/verify', (req, res) => {
-  const pending = unsign(req.cookies[PENDING]);
+  const pending = unseal(req.cookies[PENDING]);
   if (!pending) return res.redirect('/login');
   verifyView(res, pending, { msg: req.query.sent ? 'A new code is on its way.' : null });
 });
 
 r.post('/login/verify', async (req, res) => {
-  const pending = unsign(req.cookies[PENDING]);
+  const pending = unseal(req.cookies[PENDING]);
   if (!pending) return res.redirect('/login');
-  if (tooManyAttempts(pending.e)) return verifyView(res.status(429), pending, { error: 'Too many wrong codes. Wait 15 minutes, then sign in again.' });
-  const ok = await verifyCode(pending.e, req.body.code, ['email', 'magiclink']);
-  if (!ok) return verifyView(res.status(401), pending, { error: 'That code is not correct or has expired. Check the latest email, or send a new code.' });
-  const { data: profile } = await admin.from('profiles').select('role, active').eq('id', ok.user.id).single();
+  const result = await checkCode(pending.e, 'login', req.body.code);
+  if (result !== 'ok') return verifyView(res.status(401), pending, { error: codeError(result) });
+  const { data, error } = await anon.auth.refreshSession({ refresh_token: pending.rt });
+  if (error || !data?.session) return res.status(401).render('auth/login', { title: 'Sign in', error: 'Your sign-in expired — please enter your password again.', next: pending.n || '' });
+  const { data: profile } = await admin.from('profiles').select('role, active').eq('id', data.user.id).single();
   if (!profile?.active) return res.status(403).render('auth/login', { title: 'Sign in', error: 'Your account is not active.', next: '' });
   res.clearCookie(PENDING);
-  setSession(res, ok.session);
+  setSession(res, data.session);
   console.log(`[login] ${pending.e}: signed in with email code`);
   res.redirect(pending.n || home(profile.role));
 });
 
 r.post('/login/resend', async (req, res) => {
-  const pending = unsign(req.cookies[PENDING]);
+  const pending = unseal(req.cookies[PENDING]);
   if (!pending) return res.redirect('/login');
-  try { await sendCode(pending.e); } catch (e) { return verifyView(res.status(429), pending, { error: e.message }); }
+  try { await sendCode(pending.e, 'login', '/login/verify'); } catch (e) { return verifyView(res.status(429), pending, { error: e.message }); }
   res.redirect('/login/verify?sent=1');
 });
 
@@ -131,10 +131,8 @@ r.get('/invite/:token', async (req, res) => {
 r.post('/invite/:token/code', async (req, res) => {
   const found = await findInvite(req.params.token);
   if (found.state !== 'valid') return inviteView(res.status(400), found);
-  const email = found.inv.email;
-  if (tooManyAttempts(email)) return inviteView(res.status(429), found, { error: 'Too many wrong codes. Wait 15 minutes, then request a new code.' });
-  const ok = await verifyCode(email, req.body.code, ['invite', 'email', 'magiclink', 'signup']);
-  if (!ok) return inviteView(res.status(401), found, { error: 'That code is not correct or has expired. Use the newest email, or send a new code.' });
+  const result = await checkCode(found.inv.email, 'invite', req.body.code);
+  if (result !== 'ok') return inviteView(res.status(401), found, { error: codeError(result) });
   await admin.from('invitations').update({ verified_at: new Date().toISOString() }).eq('id', found.inv.id);
   markVerified(res, req.params.token);
   res.redirect(`/invite/${req.params.token}`);
@@ -143,7 +141,7 @@ r.post('/invite/:token/code', async (req, res) => {
 r.post('/invite/:token/resend', async (req, res) => {
   const found = await findInvite(req.params.token);
   if (found.state !== 'valid') return inviteView(res.status(400), found);
-  try { await sendCode(found.inv.email, `/invite/${req.params.token}`); }
+  try { await sendCode(found.inv.email, 'invite', `/invite/${req.params.token}`); }
   catch (e) { return inviteView(res.status(429), found, { error: e.message }); }
   res.redirect(`/invite/${req.params.token}?sent=1`);
 });
@@ -209,9 +207,36 @@ r.get('/forgot', (req, res) => res.render('auth/forgot', { title: 'Reset passwor
 r.post('/forgot', async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).render('auth/forgot', { title: 'Reset password', sent: false, email, error: 'Enter a valid email address.' });
-  const { error } = await anon.auth.resetPasswordForEmail(email, { redirectTo: `${APP_URL()}/auth/accept` });
-  if (error) console.error(`[forgot] ${email}: ${error.message}`);   // same answer either way: don't reveal which emails exist
-  res.render('auth/forgot', { title: 'Check your inbox', sent: true, email, error: null });
+  // only people who finished their invitation can reset; the answer is the same either way
+  const { data: p } = await admin.from('profiles').select('id, active, accepted_at').ilike('email', email).maybeSingle();
+  if (p?.active && p.accepted_at) {
+    try { await sendReset(email); } catch (e) { console.error(`[forgot] ${email}: ${e.message}`); }
+  } else console.log(`[forgot] ${email}: no active account — no email sent`);
+  res.render('auth/forgot', { title: 'Check your inbox', sent: true, email, error: null, minutes: RESET_TTL_MIN });
+});
+
+// link from the reset email: /reset/<email>/<token>
+const resetView = (res, extra = {}) => res.render('auth/reset', { title: 'Choose a new password', error: null, valid: true, ...extra });
+r.get('/reset/:email/:token', async (req, res) => {
+  const state = await checkCode(req.params.email, 'reset', req.params.token, { consume: false });
+  resetView(res, { valid: state === 'ok', expired: state !== 'ok' });
+});
+r.post('/reset/:email/:token', async (req, res) => {
+  const email = String(req.params.email).toLowerCase();
+  const password = String(req.body.password || '');
+  if (password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) return resetView(res.status(400), { error: 'Use at least 8 characters with letters and a number.' });
+  if (password !== req.body.password2) return resetView(res.status(400), { error: 'Passwords do not match.' });
+  const state = await checkCode(email, 'reset', req.params.token);
+  if (state !== 'ok') return resetView(res.status(400), { valid: false, expired: true });
+  const { data: p } = await admin.from('profiles').select('id, role, active').ilike('email', email).maybeSingle();
+  if (!p?.active) return resetView(res.status(400), { valid: false, expired: true });
+  const { error } = await admin.auth.admin.updateUserById(p.id, { password });
+  if (error) return resetView(res.status(400), { error: error.message });
+  // the link proved access to the mailbox → sign straight in
+  const { data: signed } = await anon.auth.signInWithPassword({ email, password });
+  if (signed?.session) setSession(res, signed.session);
+  console.log(`[reset] ${email}: password changed`);
+  res.redirect(home(p.role) + '?msg=' + encodeURIComponent('Password changed.'));
 });
 
 r.get('/account', requireAuth, (req, res) => res.render('auth/account', { title: 'My account', saved: req.query.saved }));

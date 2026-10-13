@@ -121,7 +121,8 @@ export const pages = {
   'auth/accept': base(null, '/auth/accept', { title: 'Choose a new password', error: null }),
   'auth/invite': base(null, '/invite/x', { title: 'Accept invitation', state: 'valid', step: 'profile', msg: null, inv: { email: 'mars4wo@gmail.com', token: 'tok', expires_at: d(13), organizations: { name: 'Acme Retail LLC' } }, error: null, form: {} }),
   'auth/verify': base(null, '/login/verify', { title: 'Enter your code', email: 'ma•••@gmail.com', error: null, msg: null }),
-  'auth/forgot': base(null, '/forgot', { title: 'Check your inbox', sent: true, email: 'mars4wo@gmail.com', error: null }),
+  'auth/reset': base(null, '/reset/x/y', { title: 'Choose a new password', error: null, valid: true }),
+  'auth/forgot': base(null, '/forgot', { title: 'Check your inbox', sent: true, email: 'mars4wo@gmail.com', error: null, minutes: 30 }),
   'auth/account': base({ ...clientUser, job_title: 'Buyer', phone: '+1 555 0100' }, '/account', { title: 'My account', saved: false }),
   error: base(staffUser, '/x', { title: 'Not found', message: 'Page not found.' }),
 };

@@ -5,7 +5,7 @@
     <h1>Check your inbox</h1>
     <p class="lead">If <strong><%= email || 'that email' %></strong> has an account, we've sent a link to choose a new password.</p>
     <ul class="checklist-tips">
-      <li>The link works for <strong>15 minutes</strong> and only once.</li>
+      <li>The link works for <strong><%= typeof minutes !== "undefined" && minutes ? minutes : 30 %> minutes</strong> and only once.</li>
       <li>Not there after a minute? Look in spam or promotions.</li>
       <li>Asked more than once? Use the newest email.</li>
     </ul>
