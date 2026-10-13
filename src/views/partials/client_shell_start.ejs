@@ -1,0 +1,42 @@
+<%
+  const org = user.organizations || {};
+  const initial = s => String(s || '?').trim().charAt(0).toUpperCase();
+  const nav = [
+    ['/portal', 'Overview', 'home', p => p === '/portal'],
+    ['/portal/requests', 'My requests', 'inbox', p => p.startsWith('/portal/requests') && p !== '/portal/requests/new'],
+    ['/portal/requests/new', 'New request', 'plus', p => p === '/portal/requests/new'],
+    ['/portal/orders', 'My orders', 'package', p => p.startsWith('/portal/orders')],
+    ['/portal/company', 'Company', 'building', p => p.startsWith('/portal/company')],
+    ['/account', 'Account', 'user', p => p.startsWith('/account')],
+  ];
+  const pageCrumb = typeof crumb !== 'undefined' && crumb ? crumb : title;
+%>
+<div class="shell" id="shell">
+  <aside class="side">
+    <a class="sbrand" href="/portal">
+      <span class="smark">L</span>
+      <span><strong>Lumi Trade</strong><small>Client portal</small></span>
+    </a>
+    <a class="sorg" href="/portal/company" title="Company details">
+      <span class="oav"><%= initial(org.name) %></span>
+      <span><strong><%= org.name || 'Your company' %></strong><small>Company account</small></span>
+    </a>
+    <nav class="snav">
+      <% nav.forEach(([href, label, ico, on]) => { %>
+        <a href="<%= href %>" class="<%= on(path) ? 'on' : '' %>"><%- icon(ico) %><span><%= label %></span></a>
+      <% }) %>
+    </nav>
+    <div class="sfoot">
+      <a class="suser" href="/account">
+        <span class="uav"><%= initial(user.full_name || user.email) %></span>
+        <span><strong><%= user.full_name || 'My account' %></strong><small><%= user.email %></small></span>
+      </a>
+      <form method="post" action="/logout"><button class="ssignout"><%- icon('logout') %><span>Sign out</span></button></form>
+    </div>
+  </aside>
+  <div class="shell-main">
+    <header class="crumbbar">
+      <button class="sidetoggle" aria-label="Menu" onclick="document.getElementById('shell').classList.toggle('open')"><%- icon('menu') %></button>
+      <span class="crumbs"><a href="/portal"><%= org.name || 'Lumi Trade' %></a><%- icon('chevron', 'sep') %><strong><%= pageCrumb %></strong></span>
+    </header>
+    <main class="page cpage">

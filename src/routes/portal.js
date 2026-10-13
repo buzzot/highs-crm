@@ -44,13 +44,35 @@ r.get('/', async (req, res) => {
     req.db.from('orders').select(`${ORDER}, shipments(eta, status)`).order('created_at', { ascending: false }).limit(10),
   ]);
   const open = (orders || []).filter(o => !['delivered', 'closed', 'cancelled'].includes(o.status));
-  res.render('portal/dashboard', { title: 'Overview', requests: requests || [], orders: orders || [], openCount: open.length });
+  // counts over everything, not just the 10 most recent
+  const [{ data: allReq }, { data: allOrd }] = await Promise.all([
+    req.db.from('requests').select('status'), req.db.from('orders').select('status'),
+  ]);
+  const kpi = {
+    openRequests: (allReq || []).filter(x => ['new', 'reviewing'].includes(x.status)).length,
+    quotesWaiting: (allReq || []).filter(x => x.status === 'quoted').length,
+    inProgress: (allOrd || []).filter(x => ['confirmed', 'deposit_paid', 'in_production', 'qc', 'packed'].includes(x.status)).length,
+    onTheWay: (allOrd || []).filter(x => ['shipped', 'in_transit', 'customs'].includes(x.status)).length,
+  };
+  res.render('portal/dashboard', { title: 'Overview', requests: requests || [], orders: orders || [], openCount: open.length, kpi });
 });
 
 // ---- requests ----
 r.get('/requests', async (req, res) => {
   const { data } = await req.db.from('requests').select(REQ).order('created_at', { ascending: false });
-  res.render('portal/requests', { title: 'My requests', requests: data || [] });
+  const all = data || [];
+  const groups = {
+    all: () => true,
+    open: x => ['new', 'reviewing'].includes(x.status),
+    quoted: x => x.status === 'quoted',
+    accepted: x => x.status === 'accepted',
+    closed: x => ['declined', 'cancelled'].includes(x.status),
+  };
+  const tab = groups[req.query.tab] ? req.query.tab : 'all';
+  const q = String(req.query.q || '').trim().toLowerCase();
+  const list = all.filter(groups[tab]).filter(x => !q || `${x.ref} ${x.title}`.toLowerCase().includes(q));
+  const counts = Object.fromEntries(Object.entries(groups).map(([k, f]) => [k, all.filter(f).length]));
+  res.render('portal/requests', { title: 'My requests', requests: list, counts, tab, q });
 });
 
 r.get('/requests/new', (req, res) => res.render('portal/request_form', { title: 'New request', error: null, form: {} }));
@@ -98,7 +120,18 @@ r.post('/quotes/:id/:decision(accept|reject)', async (req, res) => {
 // ---- orders ----
 r.get('/orders', async (req, res) => {
   const { data } = await req.db.from('orders').select(`${ORDER}, shipments(eta, status, tracking_no)`).order('created_at', { ascending: false });
-  res.render('portal/orders', { title: 'My orders', orders: data || [] });
+  const all = data || [];
+  const groups = {
+    all: () => true,
+    production: x => ['confirmed', 'deposit_paid', 'in_production', 'qc', 'packed'].includes(x.status),
+    shipping: x => ['shipped', 'in_transit', 'customs'].includes(x.status),
+    delivered: x => ['delivered', 'closed'].includes(x.status),
+  };
+  const tab = groups[req.query.tab] ? req.query.tab : 'all';
+  const q = String(req.query.q || '').trim().toLowerCase();
+  const list = all.filter(groups[tab]).filter(x => !q || x.order_no.toLowerCase().includes(q));
+  const counts = Object.fromEntries(Object.entries(groups).map(([k, f]) => [k, all.filter(f).length]));
+  res.render('portal/orders', { title: 'My orders', orders: list, counts, tab, q });
 });
 
 r.get('/orders/:id', async (req, res) => {

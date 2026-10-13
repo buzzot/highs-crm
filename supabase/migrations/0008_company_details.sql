@@ -8,3 +8,6 @@ alter table organizations add column if not exists registration_no text;
 alter table organizations add column if not exists delivery_address text;
 alter table organizations add column if not exists details_completed_at timestamptz;
 alter table organizations add column if not exists details_completed_by uuid references profiles(id);
+
+-- new order numbers use the Lumi Trade prefix (existing orders keep their numbers)
+alter table orders alter column order_no set default ('LT-' || to_char(now(), 'YYMM') || '-' || lpad(floor(random()*9999)::text, 4, '0'));

@@ -1,19 +1,30 @@
 <%- include('../partials/head') %>
-<div class="pagehead"><h1>My orders</h1></div>
-<div class="card">
-<table class="tbl">
-  <thead><tr><th>Order</th><th>Status</th><th>Goods total</th><th>Tracking</th><th>ETA</th><th>Created</th></tr></thead>
-  <tbody>
-  <% if (!orders.length) { %><tr><td colspan="6" class="muted">No orders yet.</td></tr><% } %>
-  <% orders.forEach(o => { const sh = (o.shipments||[]).slice().sort((a,b)=>(b.eta||'').localeCompare(a.eta||''))[0]; %>
-    <tr>
-      <td><a href="/portal/orders/<%= o.id %>"><%= o.order_no %></a></td>
-      <td><span class="pill <%= o.status %>"><%= fmt.status(o.status) %></span></td>
-      <td><%= fmt.money(o.subtotal, o.currency) %></td>
-      <td><%= sh?.tracking_no || '—' %></td><td><%= fmt.date(sh?.eta) %></td><td class="muted"><%= fmt.date(o.created_at) %></td>
-    </tr>
-  <% }) %>
-  </tbody>
-</table>
+<% const STEPS = ['confirmed','deposit_paid','in_production','qc','packed','shipped','in_transit','customs','delivered','closed']; %>
+<div class="phead">
+  <div><span class="eyebrow">Orders</span><h1>My orders</h1><p class="sub">Follow production, shipping and documents for every order.</p></div>
+</div>
+<div class="tcard">
+  <nav class="tabs2">
+    <% [['all','All'],['production','In production'],['shipping','On the way'],['delivered','Delivered']].forEach(([k, l]) => { %>
+      <a href="?tab=<%= k %>" class="<%= tab === k ? 'on' : '' %>"><%= l %> <span><%= counts[k] %></span></a>
+    <% }) %>
+  </nav>
+  <form class="tsearch" method="get"><input type="hidden" name="tab" value="<%= tab %>"><span class="sicon"><%- icon('search') %></span><input name="q" value="<%= q %>" placeholder="Search by order number…"><button class="btn">Search</button></form>
+  <table class="tbl big">
+    <thead><tr><th>Order</th><th class="right">Goods total</th><th>Status</th><th>Progress</th><th>Tracking</th><th>ETA</th></tr></thead>
+    <tbody>
+    <% if (!orders.length) { %><tr><td colspan="6"><div class="empty slim"><p><%= q || tab !== 'all' ? 'Nothing matches.' : 'No orders yet — they appear here once you accept a quote.' %></p></div></td></tr><% } %>
+    <% orders.forEach(o => { const sh = (o.shipments||[]).slice().sort((a,b)=>(b.eta||'').localeCompare(a.eta||''))[0]; const i = Math.max(0, STEPS.indexOf(o.status)); const pct = o.status === 'cancelled' ? 0 : Math.round((i + 1) / STEPS.length * 100); %>
+      <tr class="rowlink" onclick="location='/portal/orders/<%= o.id %>'">
+        <td><a href="/portal/orders/<%= o.id %>"><strong><%= o.order_no %></strong></a><div class="muted small">placed <%= fmt.date(o.created_at) %></div></td>
+        <td class="right"><%= fmt.money(o.subtotal, o.currency) %></td>
+        <td><span class="pill <%= o.status %>"><%= fmt.status(o.status) %></span></td>
+        <td class="progcell"><div class="prog"><span style="width:<%= pct %>%"></span></div><small class="muted"><%= pct %>%</small></td>
+        <td class="small"><%= sh?.tracking_no || '—' %></td>
+        <td><%= fmt.date(sh?.eta) %></td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table>
 </div>
 <%- include('../partials/foot') %>

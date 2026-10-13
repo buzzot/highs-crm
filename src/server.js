@@ -8,6 +8,7 @@ import authRoutes from './routes/auth.js';
 import portalRoutes from './routes/portal.js';
 import adminRoutes from './routes/admin/index.js';
 import { fmt } from './lib/format.js';
+import { icon } from './lib/icons.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -22,7 +23,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 // the quote calculator in the browser uses the exact same pricing module as the server
 app.get('/js/pricing.js', (req, res) => res.type('application/javascript').sendFile(path.join(__dirname, 'lib', 'pricing.js')));
 app.use((req, res, next) => {
-  Object.assign(res.locals, { fmt, path: req.path, query: req.query, msg: req.query.msg, err: req.query.err });
+  Object.assign(res.locals, { fmt, icon, path: req.path, query: req.query, msg: req.query.msg, err: req.query.err });
   next();
 });
 app.use(loadUser);

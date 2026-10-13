@@ -1,5 +1,6 @@
 // Realistic sample data shaped like the Supabase query results each route passes to its view.
 import { fmt } from '../src/lib/format.js';
+import { icon } from '../src/lib/icons.js';
 import { calcQuote } from '../src/lib/pricing.js';
 import { landed } from '../src/lib/landed.js';
 
@@ -53,7 +54,7 @@ const INCOTERMS = ['EXW', 'FOB', 'FCA', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DDP'
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CNY'];
 const ORDER_STATUSES = ['confirmed', 'deposit_paid', 'in_production', 'qc', 'packed', 'shipped', 'in_transit', 'customs', 'delivered', 'closed', 'cancelled'];
 
-const base = (user, path, extra = {}) => ({ fmt, user, path, query: {}, msg: null, err: null, ...extra });
+const base = (user, path, extra = {}) => ({ fmt, icon, user, path, query: {}, msg: null, err: null, ...extra });
 const months = ['May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'].map((label, i) => ({ key: label, label, revenue: [8200, 12100, 9400, 15800, 18300, 13300][i], profit: [1500, 2300, 1700, 3000, 3500, 2500][i] }));
 const ordersList = [overview, { ...overview, id: 'ord2', order_no: 'HB-2610-1190', client_name: 'Nordic Home AB', status: 'qc', subtotal: 9150, cost_total: 7810, margin_pct: 17.2, gross_profit: 980, freight_total: 360 }, { ...overview, id: 'ord3', order_no: 'HB-2609-1102', status: 'in_transit', subtotal: 22400, margin_pct: 28, gross_profit: 3900 }];
 
@@ -115,13 +116,13 @@ export const pages = {
     recent: [{ email: 'mars4wo@gmail.com', purpose: 'reset', created_at: d(0), used_at: null, attempts: 0 }],
     test: { ok: false, to: 'anna@lumitrade.example', error: 'Email could not be sent: the domain in EMAIL_FROM is not verified in Resend (The lumitrade.example domain is not verified).' } }),
   // ---- client portal ----
-  'portal/dashboard': base(clientUser, '/portal', { title: 'Overview', requests, orders: [{ ...overview, shipments: [{ eta: day(48), status: 'booked' }] }], openCount: 1 }),
+  'portal/dashboard': base(clientUser, '/portal', { title: 'Overview', requests, orders: [{ ...overview, shipments: [{ eta: day(48), status: 'booked' }] }, { ...overview, id: 'o2', order_no: 'HB-2609-1102', status: 'in_transit', subtotal: 22400 }], openCount: 1, kpi: { openRequests: 1, quotesWaiting: 1, inProgress: 1, onTheWay: 1 } }),
   'portal/company': base(clientUser, '/portal/company', { title: 'Company details', first: true, saved: false,
     org: { ...org, details_completed_at: null }, form: { ...org, city: 'San Francisco', email: 'bad' }, errors: { phone: 'Company phone is required.', email: 'Enter a valid email address.' } }),
-  'portal/requests': base(clientUser, '/portal/requests', { title: 'My requests', requests }),
+  'portal/requests': base(clientUser, '/portal/requests', { title: 'My requests', requests, counts: { all: 2, open: 2, quoted: 0, accepted: 0, closed: 0 }, tab: 'all', q: '' }),
   'portal/request_form': base(clientUser, '/portal/requests/new', { title: 'New request', error: null, form: {} }),
   'portal/request_detail': base(clientUser, '/portal/requests/r1', { title: request.ref, request, quotes: [{ ...quote, status: 'sent' }], docs: docs.slice(0, 1), events }),
-  'portal/orders': base(clientUser, '/portal/orders', { title: 'My orders', orders: [{ ...overview, shipments: [shipment] }] }),
+  'portal/orders': base(clientUser, '/portal/orders', { title: 'My orders', orders: [{ ...overview, shipments: [shipment] }, { ...overview, id: 'o2', order_no: 'HB-2609-1102', status: 'in_transit', subtotal: 22400, shipments: [] }], counts: { all: 2, production: 1, shipping: 1, delivered: 0 }, tab: 'all', q: '' }),
   'portal/order_detail': base(clientUser, '/portal/orders/ord1', { title: overview.order_no, order: { ...overview, order_items: items }, shipments: [shipment], documents: docs, events, packing }),
   // ---- auth ----
   'auth/login': base(null, '/login', { title: 'Sign in', error: null, next: '' }),

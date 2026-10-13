@@ -1,18 +1,30 @@
 <%- include('../partials/head') %>
-<div class="pagehead"><h1>My requests</h1><a class="btn primary" href="/portal/requests/new">+ New request</a></div>
-<div class="card">
-<table class="tbl">
-  <thead><tr><th>Ref</th><th>Title</th><th>Qty</th><th>Target</th><th>Needed by</th><th>Status</th><th>Created</th></tr></thead>
-  <tbody>
-  <% if (!requests.length) { %><tr><td colspan="7" class="muted">No requests yet.</td></tr><% } %>
-  <% requests.forEach(r => { %>
-    <tr>
-      <td><a href="/portal/requests/<%= r.id %>"><%= r.ref %></a></td><td><%= r.title %></td>
-      <td><%= r.quantity ?? '—' %></td><td><%= r.target_unit_price ? fmt.money(r.target_unit_price, r.target_currency) : '—' %></td>
-      <td><%= fmt.date(r.needed_by) %></td><td><span class="pill <%= r.status %>"><%= fmt.status(r.status) %></span></td><td class="muted"><%= fmt.date(r.created_at) %></td>
-    </tr>
-  <% }) %>
-  </tbody>
-</table>
+<div class="phead">
+  <div><span class="eyebrow">Sourcing</span><h1>My requests</h1><p class="sub">Products you've asked us to source, and the quotes we've sent back.</p></div>
+  <div class="actions"><a class="btn primary" href="/portal/requests/new"><%- icon('plus') %> New request</a></div>
+</div>
+<div class="tcard">
+  <nav class="tabs2">
+    <% [['all','All'],['open','Being sourced'],['quoted','Quote ready'],['accepted','Accepted'],['closed','Closed']].forEach(([k, l]) => { %>
+      <a href="?tab=<%= k %><%= q ? '&q=' + encodeURIComponent(q) : '' %>" class="<%= tab === k ? 'on' : '' %>"><%= l %> <span><%= counts[k] %></span></a>
+    <% }) %>
+  </nav>
+  <form class="tsearch" method="get"><input type="hidden" name="tab" value="<%= tab %>"><span class="sicon"><%- icon('search') %></span><input name="q" value="<%= q %>" placeholder="Search by title or reference…"><button class="btn">Search</button></form>
+  <table class="tbl big">
+    <thead><tr><th>Request</th><th class="right">Quantity</th><th class="right">Target price</th><th>Needed by</th><th>Status</th><th>Created</th></tr></thead>
+    <tbody>
+    <% if (!requests.length) { %><tr><td colspan="6"><div class="empty slim"><p><%= q || tab !== 'all' ? 'Nothing matches.' : 'No requests yet.' %></p><a class="btn primary" href="/portal/requests/new">New request</a></div></td></tr><% } %>
+    <% requests.forEach(r => { %>
+      <tr class="rowlink" onclick="location='/portal/requests/<%= r.id %>'">
+        <td><a href="/portal/requests/<%= r.id %>"><strong><%= r.title %></strong></a><div class="muted small"><%= r.ref %></div></td>
+        <td class="right"><%= r.quantity ? Number(r.quantity).toLocaleString('en-US') : '—' %></td>
+        <td class="right"><%= r.target_unit_price ? fmt.money(r.target_unit_price, r.target_currency) : '—' %></td>
+        <td><%= fmt.date(r.needed_by) %></td>
+        <td><span class="pill <%= r.status %>"><%= r.status === 'quoted' ? 'quote ready' : fmt.status(r.status) %></span></td>
+        <td class="muted"><%= fmt.date(r.created_at) %></td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table>
 </div>
 <%- include('../partials/foot') %>

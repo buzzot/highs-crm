@@ -1,31 +1,51 @@
 <%- include('../partials/head') %>
-<div class="pagehead">
-  <h1>Hello, <%= user.full_name || user.email %></h1>
-  <a class="btn primary" href="/portal/requests/new">+ New request</a>
-</div>
-<div class="kpis">
-  <div class="kpi"><span class="n"><%= requests.filter(r => !['accepted','declined','cancelled'].includes(r.status)).length %></span><span class="l">Open requests</span></div>
-  <div class="kpi"><span class="n"><%= openCount %></span><span class="l">Orders in progress</span></div>
-  <div class="kpi"><span class="n"><%= orders.filter(o => o.status === 'in_transit' || o.status === 'shipped').length %></span><span class="l">In transit</span></div>
-</div>
-<div class="grid2">
-  <div class="card">
-    <h2>Recent requests <a class="more" href="/portal/requests">all →</a></h2>
-    <% if (!requests.length) { %><p class="muted">No requests yet — tell us what you need and we'll source it.</p><% } %>
-    <table class="tbl"><tbody>
-    <% requests.slice(0,6).forEach(r => { %>
-      <tr><td><a href="/portal/requests/<%= r.id %>"><%= r.ref %></a></td><td><%= r.title %></td><td><span class="pill <%= r.status %>"><%= fmt.status(r.status) %></span></td><td class="muted"><%= fmt.date(r.created_at) %></td></tr>
-    <% }) %>
-    </tbody></table>
+<% const STEPS = ['confirmed','deposit_paid','in_production','qc','packed','shipped','in_transit','customs','delivered','closed']; %>
+<div class="phead">
+  <div>
+    <span class="eyebrow">Overview</span>
+    <h1>Hello<%= user.full_name ? ', ' + user.full_name.split(' ')[0] : '' %></h1>
+    <p class="sub">Your sourcing requests, quotes and orders with Lumi Trade.</p>
   </div>
-  <div class="card">
-    <h2>Recent orders <a class="more" href="/portal/orders">all →</a></h2>
-    <% if (!orders.length) { %><p class="muted">No orders yet.</p><% } %>
+  <div class="actions"><a class="btn" href="/portal/orders"><%- icon('package') %> My orders</a><a class="btn primary" href="/portal/requests/new"><%- icon('plus') %> New request</a></div>
+</div>
+
+<div class="stats">
+  <a class="stat" href="/portal/requests?tab=open"><span class="sico c1"><%- icon('inbox') %></span><span><strong><%= kpi.openRequests %></strong><small>Requests being sourced</small></span></a>
+  <a class="stat <%= kpi.quotesWaiting ? 'attn' : '' %>" href="/portal/requests?tab=quoted"><span class="sico c2"><%- icon('quote') %></span><span><strong><%= kpi.quotesWaiting %></strong><small>Quotes waiting for you</small></span></a>
+  <a class="stat" href="/portal/orders?tab=production"><span class="sico c3"><%- icon('clock') %></span><span><strong><%= kpi.inProgress %></strong><small>Orders in production</small></span></a>
+  <a class="stat" href="/portal/orders?tab=shipping"><span class="sico c4"><%- icon('truck') %></span><span><strong><%= kpi.onTheWay %></strong><small>On the way to you</small></span></a>
+</div>
+
+<div class="grid2 even">
+  <div class="tcard">
+    <div class="thead"><h2>Recent requests</h2><a class="more" href="/portal/requests">View all →</a></div>
+    <% if (!requests.length) { %>
+      <div class="empty"><span class="sico c1"><%- icon('inbox') %></span><p><strong>No requests yet</strong><br>Tell us what you need — we'll find suppliers and send you a quote.</p><a class="btn primary" href="/portal/requests/new">Create your first request</a></div>
+    <% } else { %>
     <table class="tbl"><tbody>
-    <% orders.slice(0,6).forEach(o => { const eta = (o.shipments||[]).map(s=>s.eta).filter(Boolean).sort().pop(); %>
-      <tr><td><a href="/portal/orders/<%= o.id %>"><%= o.order_no %></a></td><td><span class="pill <%= o.status %>"><%= fmt.status(o.status) %></span></td><td><%= fmt.money(o.subtotal, o.currency) %></td><td class="muted">ETA <%= fmt.date(eta) %></td></tr>
-    <% }) %>
+      <% requests.slice(0, 6).forEach(r => { %>
+        <tr class="rowlink" onclick="location='/portal/requests/<%= r.id %>'">
+          <td><strong><%= r.title %></strong><div class="muted small"><%= r.ref %> · <%= fmt.date(r.created_at) %></div></td>
+          <td class="right"><span class="pill <%= r.status %>"><%= r.status === 'quoted' ? 'quote ready' : fmt.status(r.status) %></span></td>
+        </tr>
+      <% }) %>
     </tbody></table>
+    <% } %>
+  </div>
+  <div class="tcard">
+    <div class="thead"><h2>Recent orders</h2><a class="more" href="/portal/orders">View all →</a></div>
+    <% if (!orders.length) { %>
+      <div class="empty"><span class="sico c3"><%- icon('package') %></span><p><strong>No orders yet</strong><br>When you accept a quote, your order and its progress appear here.</p></div>
+    <% } else { %>
+    <table class="tbl"><tbody>
+      <% orders.slice(0, 6).forEach(o => { const eta = (o.shipments||[]).map(s=>s.eta).filter(Boolean).sort().pop(); const i = Math.max(0, STEPS.indexOf(o.status)); %>
+        <tr class="rowlink" onclick="location='/portal/orders/<%= o.id %>'">
+          <td><strong><%= o.order_no %></strong><div class="muted small"><%= fmt.money(o.subtotal, o.currency) %><%= eta ? ' · ETA ' + fmt.date(eta) : '' %></div></td>
+          <td class="right"><span class="pill <%= o.status %>"><%= fmt.status(o.status) %></span><div class="prog"><span style="width:<%= o.status === 'cancelled' ? 0 : Math.round((i + 1) / STEPS.length * 100) %>%"></span></div></td>
+        </tr>
+      <% }) %>
+    </tbody></table>
+    <% } %>
   </div>
 </div>
 <%- include('../partials/foot') %>
