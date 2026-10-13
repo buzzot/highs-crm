@@ -1,0 +1,14 @@
+<%- include('../partials/head') %>
+<div class="card narrow auth">
+  <h1>Reset password</h1>
+  <% if (sent) { %>
+    <div class="alert ok">If that email has an account, a reset link is on its way.</div>
+    <a class="btn" href="/login">Back to sign in</a>
+  <% } else { %>
+  <form method="post" action="/forgot">
+    <label>Email <input type="email" name="email" required autofocus></label>
+    <button class="btn primary wide">Send reset link</button>
+  </form>
+  <% } %>
+</div>
+<%- include('../partials/foot') %>

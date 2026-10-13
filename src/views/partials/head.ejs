@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><%= title %> · Highs Business</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<% const isStaff = user && ['admin','staff'].includes(user.role); %>
+<% if (user) { %>
+<nav class="topbar">
+  <button class="navtoggle" aria-label="Menu" onclick="this.parentNode.classList.toggle('open')">☰</button>
+  <a class="brand" href="/">Highs<span>Business</span></a>
+  <div class="links">
+    <% if (isStaff) { %>
+      <a href="/admin" class="<%= path === '/admin' ? 'on' : '' %>">Dashboard</a>
+      <a href="/admin/orders" class="<%= path.startsWith('/admin/orders') ? 'on' : '' %>">Orders</a>
+      <a href="/admin/clients" class="<%= path.startsWith('/admin/clients') ? 'on' : '' %>">Clients</a>
+      <a href="/admin/suppliers" class="<%= path.startsWith('/admin/suppliers') ? 'on' : '' %>">Suppliers</a>
+      <a href="/admin/products" class="<%= path.startsWith('/admin/products') ? 'on' : '' %>">Products</a>
+      <a href="/admin/sourcing" class="<%= path.startsWith('/admin/sourcing') ? 'on' : '' %>">Sourcing</a>
+      <a href="/admin/logistics" class="<%= path.startsWith('/admin/logistics') ? 'on' : '' %>">Logistics</a>
+      <a href="/admin/pricing" class="<%= path.startsWith('/admin/pricing') ? 'on' : '' %>">Pricing</a>
+    <% } else { %>
+      <a href="/portal" class="<%= path === '/portal' ? 'on' : '' %>">Overview</a>
+      <a href="/portal/requests" class="<%= path.startsWith('/portal/requests') ? 'on' : '' %>">Requests</a>
+      <a href="/portal/orders" class="<%= path.startsWith('/portal/orders') ? 'on' : '' %>">Orders</a>
+    <% } %>
+  </div>
+  <div class="me">
+    <% if (user.role === 'admin') { %><a href="/admin/clients/staff/list" class="muted">Staff</a><a href="/admin/pricing/settings" class="muted">Settings</a><% } %>
+    <a href="/account"><%= user.full_name || user.email %><% if (user.organizations) { %> · <%= user.organizations.name %><% } %></a>
+    <form method="post" action="/logout"><button class="link">Sign out</button></form>
+  </div>
+</nav>
+<% } %>
+<main class="page">
+<%- include('flash') %>

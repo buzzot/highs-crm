@@ -1,0 +1,26 @@
+<%- include('../../partials/head') %>
+<div class="pagehead">
+  <h1>Clients</h1>
+  <a class="btn primary" href="/admin/clients/new">+ New client</a>
+</div>
+<div class="card">
+  <input class="filter" placeholder="Filter clients…" data-filter="#clientTbl">
+  <table class="tbl" id="clientTbl">
+    <thead><tr><th>Client</th><th>Country</th><th>Users</th><th>Requests</th><th>Orders</th><th>Currency</th><th></th></tr></thead>
+    <tbody>
+    <% if (!clients.length) { %><tr><td colspan="7" class="muted">No clients yet. Add one, then invite their users by email.</td></tr><% } %>
+    <% clients.forEach(c => { %>
+      <tr class="<%= c.active ? '' : 'dim' %>">
+        <td><a href="/admin/clients/<%= c.id %>"><strong><%= c.name %></strong></a></td>
+        <td><%= c.country || '—' %></td>
+        <td><%= c.profiles?.[0]?.count ?? 0 %></td>
+        <td><%= c.requests?.[0]?.count ?? 0 %></td>
+        <td><%= c.orders?.[0]?.count ?? 0 %></td>
+        <td><%= c.default_currency %></td>
+        <td><%= c.active ? '' : 'inactive' %></td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table>
+</div>
+<%- include('../../partials/foot') %>

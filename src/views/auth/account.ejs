@@ -1,0 +1,12 @@
+<%- include('../partials/head') %>
+<div class="card narrow">
+  <h1>My account</h1>
+  <% if (saved) { %><div class="alert ok">Saved.</div><% } %>
+  <form method="post" action="/account">
+    <label>Email <input type="email" value="<%= user.email %>" disabled></label>
+    <label>Name <input type="text" name="full_name" value="<%= user.full_name || '' %>"></label>
+    <label>New password <input type="password" name="password" minlength="8" placeholder="leave blank to keep"></label>
+    <button class="btn primary">Save</button>
+  </form>
+</div>
+<%- include('../partials/foot') %>

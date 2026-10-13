@@ -1,0 +1,31 @@
+<%- include('../partials/head') %>
+<div class="pagehead">
+  <h1>Hello, <%= user.full_name || user.email %></h1>
+  <a class="btn primary" href="/portal/requests/new">+ New request</a>
+</div>
+<div class="kpis">
+  <div class="kpi"><span class="n"><%= requests.filter(r => !['accepted','declined','cancelled'].includes(r.status)).length %></span><span class="l">Open requests</span></div>
+  <div class="kpi"><span class="n"><%= openCount %></span><span class="l">Orders in progress</span></div>
+  <div class="kpi"><span class="n"><%= orders.filter(o => o.status === 'in_transit' || o.status === 'shipped').length %></span><span class="l">In transit</span></div>
+</div>
+<div class="grid2">
+  <div class="card">
+    <h2>Recent requests <a class="more" href="/portal/requests">all →</a></h2>
+    <% if (!requests.length) { %><p class="muted">No requests yet — tell us what you need and we'll source it.</p><% } %>
+    <table class="tbl"><tbody>
+    <% requests.slice(0,6).forEach(r => { %>
+      <tr><td><a href="/portal/requests/<%= r.id %>"><%= r.ref %></a></td><td><%= r.title %></td><td><span class="pill <%= r.status %>"><%= fmt.status(r.status) %></span></td><td class="muted"><%= fmt.date(r.created_at) %></td></tr>
+    <% }) %>
+    </tbody></table>
+  </div>
+  <div class="card">
+    <h2>Recent orders <a class="more" href="/portal/orders">all →</a></h2>
+    <% if (!orders.length) { %><p class="muted">No orders yet.</p><% } %>
+    <table class="tbl"><tbody>
+    <% orders.slice(0,6).forEach(o => { const eta = (o.shipments||[]).map(s=>s.eta).filter(Boolean).sort().pop(); %>
+      <tr><td><a href="/portal/orders/<%= o.id %>"><%= o.order_no %></a></td><td><span class="pill <%= o.status %>"><%= fmt.status(o.status) %></span></td><td><%= fmt.money(o.subtotal, o.currency) %></td><td class="muted">ETA <%= fmt.date(eta) %></td></tr>
+    <% }) %>
+    </tbody></table>
+  </div>
+</div>
+<%- include('../partials/foot') %>

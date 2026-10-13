@@ -1,0 +1,58 @@
+<%- include('../../partials/head') %>
+<div class="pagehead">
+  <div><a class="back" href="/admin/clients">← Clients</a><h1><%= client.name %></h1>
+    <p class="muted"><%= [client.country, client.tax_id && ('Tax ID ' + client.tax_id), client.default_currency].filter(Boolean).join(' · ') %></p></div>
+  <div class="actions"><a class="btn" href="/admin/clients/<%= client.id %>/edit">Edit</a><a class="btn primary" href="/admin/orders/new?org_id=<%= client.id %>">+ Order</a></div>
+</div>
+<div class="grid2">
+  <div>
+    <div class="card">
+      <h2>Orders</h2>
+      <% if (!orders.length) { %><p class="muted">No orders yet.</p><% } %>
+      <table class="tbl"><tbody>
+      <% orders.forEach(o => { %>
+        <tr><td><a href="/admin/orders/<%= o.id %>"><%= o.order_no %></a></td><td><span class="pill <%= o.status %>"><%= fmt.status(o.status) %></span></td>
+          <td class="right"><%= fmt.money(o.subtotal, o.currency) %></td><td class="right"><%= fmt.pct(o.margin_pct) %></td><td class="muted small"><%= fmt.date(o.created_at) %></td></tr>
+      <% }) %>
+      </tbody></table>
+    </div>
+    <div class="card">
+      <h2>Requests</h2>
+      <% if (!requests.length) { %><p class="muted">No requests yet.</p><% } %>
+      <table class="tbl"><tbody>
+      <% requests.forEach(q => { %>
+        <tr><td><a href="/admin/sourcing/<%= q.id %>"><%= q.ref %></a></td><td><%= q.title %></td><td><span class="pill <%= q.status %>"><%= fmt.status(q.status) %></span></td><td class="muted small"><%= fmt.date(q.created_at) %></td></tr>
+      <% }) %>
+      </tbody></table>
+    </div>
+  </div>
+  <div>
+    <div class="card">
+      <h2>Users <span class="muted small">— each client can have several</span></h2>
+      <table class="tbl"><tbody>
+      <% users.forEach(u => { %>
+        <tr class="<%= u.active ? '' : 'dim' %>"><td><%= u.full_name || '—' %><div class="muted small"><%= u.email %></div></td>
+          <td class="right"><form method="post" action="/admin/clients/<%= client.id %>/users/<%= u.id %>/toggle" class="inline"><button class="link small"><%= u.active ? 'Disable' : 'Enable' %></button></form></td></tr>
+      <% }) %>
+      <% invites.forEach(i => { %>
+        <tr class="dim"><td><%= i.email %><div class="muted small">invited <%= fmt.date(i.created_at) %> · pending</div></td><td></td></tr>
+      <% }) %>
+      <% if (!users.length && !invites.length) { %><tr><td class="muted">No users yet.</td></tr><% } %>
+      </tbody></table>
+      <form method="post" action="/admin/clients/<%= client.id %>/invite" class="row tight">
+        <input type="email" name="email" placeholder="name@client.com" required>
+        <button class="btn primary">Send invite</button>
+      </form>
+      <p class="muted small">They get an email link to set a password, then land in the client portal.</p>
+    </div>
+    <div class="card">
+      <h2>Details</h2>
+      <dl class="dl">
+        <dt>Address</dt><dd class="pre"><%= client.address || '—' %></dd>
+        <dt>Notes</dt><dd class="pre"><%= client.notes || '—' %></dd>
+        <dt>Since</dt><dd><%= fmt.date(client.created_at) %></dd>
+      </dl>
+    </div>
+  </div>
+</div>
+<%- include('../../partials/foot') %>

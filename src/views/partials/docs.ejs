@@ -1,0 +1,60 @@
+<%#
+  Documents & photos panel for admin detail pages.
+  locals: docs, entityType, entityId, redirect, [kinds], [heading], [defaultKind], [defaultVisible]
+%>
+<% const _kinds = (typeof kinds !== 'undefined' && kinds) || ['product_photo','packing_photo','proforma_invoice','commercial_invoice','packing_list','bill_of_lading','airway_bill','export_declaration','certificate','qc_report','other']; %>
+<% const _photos = docs.filter(d => (d.mime_type || '').startsWith('image/')); const _files = docs.filter(d => !(d.mime_type || '').startsWith('image/')); %>
+<div class="card" id="docs">
+  <h2><%= (typeof heading !== 'undefined' && heading) || 'Photos & documents' %> <span class="muted small"><%= docs.length %></span></h2>
+  <% if (_photos.length) { %>
+  <div class="gallery">
+    <% _photos.forEach(d => { %>
+      <figure>
+        <a href="/admin/documents/<%= d.id %>/download" target="_blank"><img loading="lazy" src="/admin/documents/<%= d.id %>/download" alt="<%= d.title %>"></a>
+        <figcaption><span class="tag"><%= fmt.status(d.kind) %></span><% if (!d.client_visible) { %> <span class="tag internal">internal</span><% } %></figcaption>
+      </figure>
+    <% }) %>
+  </div>
+  <% } %>
+  <% if (_files.length) { %>
+  <table class="tbl compact"><tbody>
+    <% _files.forEach(d => { %>
+      <tr>
+        <td><span class="tag"><%= fmt.status(d.kind) %></span></td>
+        <td><a href="/admin/documents/<%= d.id %>/download" target="_blank"><%= d.title %></a></td>
+        <td class="muted small"><%= fmt.date(d.created_at) %></td>
+        <td class="right nowrap">
+          <form method="post" action="/admin/documents/<%= d.id %>/toggle" class="inline"><input type="hidden" name="redirect" value="<%= redirect %>"><button class="link small" title="Toggle client visibility"><%= d.client_visible ? 'client sees' : 'internal' %></button></form>
+          <form method="post" action="/admin/documents/<%= d.id %>/delete" class="inline" onsubmit="return confirm('Delete this file?')"><input type="hidden" name="redirect" value="<%= redirect %>"><button class="link small danger">delete</button></form>
+        </td>
+      </tr>
+    <% }) %>
+  </tbody></table>
+  <% } %>
+  <% if (_photos.length) { %>
+  <details class="small muted"><summary>Manage photos</summary>
+    <ul class="plain">
+    <% _photos.forEach(d => { %>
+      <li><%= d.title %> ·
+        <form method="post" action="/admin/documents/<%= d.id %>/toggle" class="inline"><input type="hidden" name="redirect" value="<%= redirect %>"><button class="link small"><%= d.client_visible ? 'client sees' : 'internal' %></button></form> ·
+        <form method="post" action="/admin/documents/<%= d.id %>/delete" class="inline" onsubmit="return confirm('Delete this photo?')"><input type="hidden" name="redirect" value="<%= redirect %>"><button class="link small danger">delete</button></form>
+      </li>
+    <% }) %>
+    </ul>
+  </details>
+  <% } %>
+  <% if (!docs.length) { %><p class="muted">Nothing uploaded yet.</p><% } %>
+  <form method="post" action="/admin/documents/upload" enctype="multipart/form-data" class="upload">
+    <input type="hidden" name="entity_type" value="<%= entityType %>">
+    <input type="hidden" name="entity_id" value="<%= entityId %>">
+    <input type="hidden" name="redirect" value="<%= redirect %>">
+    <div class="row">
+      <label>Type <select name="kind"><% _kinds.forEach(k => { %><option value="<%= k %>" <%= (typeof defaultKind !== 'undefined' && defaultKind === k) ? 'selected' : '' %>><%= fmt.status(k) %></option><% }) %></select></label>
+      <label>Files <input type="file" name="files" multiple required></label>
+    </div>
+    <div class="row between">
+      <label class="check"><input type="checkbox" name="client_visible" <%= (typeof defaultVisible === 'undefined' || defaultVisible) ? 'checked' : '' %>> Visible to client</label>
+      <button class="btn">Upload</button>
+    </div>
+  </form>
+</div>

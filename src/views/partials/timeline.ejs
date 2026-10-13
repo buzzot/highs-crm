@@ -1,0 +1,17 @@
+<%# locals: events, [created] = {at, label} %>
+<div class="card">
+  <h2>Activity</h2>
+  <ul class="timeline">
+    <% events.forEach(e => { %>
+      <li>
+        <span class="t"><%= fmt.datetime(e.created_at) %></span>
+        <strong><%= fmt.status(e.action) %></strong>
+        <% if (e.detail?.note) { %> — <%= e.detail.note %><% } %>
+        <% if (e.detail?.order_no) { %> — <%= e.detail.order_no %><% } %>
+        <% if (e.detail?.reason) { %> — <%= e.detail.reason %><% } %>
+        <span class="muted small">· <%= e.profiles?.full_name || e.profiles?.email || 'system' %><%= e.client_visible ? '' : ' · internal' %></span>
+      </li>
+    <% }) %>
+    <% if (typeof created !== 'undefined' && created) { %><li><span class="t"><%= fmt.datetime(created.at) %></span> <%= created.label %></li><% } %>
+  </ul>
+</div>

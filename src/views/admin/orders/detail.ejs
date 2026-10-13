@@ -1,0 +1,137 @@
+<%- include('../../partials/head') %>
+<% const steps = ['confirmed','deposit_paid','in_production','qc','packed','shipped','in_transit','customs','delivered','closed']; const idx = steps.indexOf(order.status); const cur = order.currency; %>
+<div class="pagehead">
+  <div><a class="back" href="/admin/orders">← Orders</a><h1>Order <%= order.order_no %></h1>
+    <p class="muted"><a href="/admin/clients/<%= order.org_id %>"><%= order.client_name %></a>
+      <% if (order.supplier_id) { %> · supplier <a href="/admin/suppliers/<%= order.supplier_id %>"><%= order.supplier_name %></a><% } %>
+      <% if (order.request_id) { %> · <a href="/admin/sourcing/<%= order.request_id %>">request</a><% } %>
+      <% if (order.quote_id) { %> · <a href="/admin/pricing/quotes/<%= order.quote_id %>">quote</a><% } %></p></div>
+  <span class="pill lg <%= order.status %>"><%= fmt.status(order.status) %></span>
+</div>
+
+<div class="card">
+  <ol class="steps"><% steps.forEach((s, i) => { %><li class="<%= i < idx ? 'done' : i === idx ? 'now' : '' %>"><%= fmt.status(s) %></li><% }) %></ol>
+  <form method="post" action="/admin/orders/<%= order.id %>/status" class="row tight statusform">
+    <select name="status"><% statuses.forEach(s => { %><option value="<%= s %>" <%= order.status === s ? 'selected' : '' %>><%= fmt.status(s) %></option><% }) %></select>
+    <input name="note" placeholder="Update note (optional) — e.g. 'Production 60% done'">
+    <label class="check"><input type="checkbox" name="client_visible" checked> show client</label>
+    <button class="btn primary">Update</button>
+  </form>
+</div>
+
+<div class="kpis five">
+  <div class="kpi"><span class="n"><%= fmt.money(order.subtotal, cur) %></span><span class="l">Goods (client)</span></div>
+  <div class="kpi"><span class="n"><%= fmt.money(order.cost_total, cur) %></span><span class="l">Product cost</span></div>
+  <div class="kpi <%= order.margin_pct != null && order.margin_pct < 20 ? 'bad' : '' %>"><span class="n"><%= fmt.pct(order.margin_pct) %></span><span class="l">Margin on cost (min 20%)</span></div>
+  <div class="kpi"><span class="n"><%= fmt.money(order.freight_total, cur) %></span><span class="l">Logistics (actual)</span></div>
+  <div class="kpi"><span class="n"><%= fmt.money(order.gross_profit, cur) %></span><span class="l">Gross profit after logistics</span></div>
+</div>
+
+<div class="grid2">
+  <div>
+    <div class="card">
+      <h2>Items</h2>
+      <table class="tbl">
+        <thead><tr><th>Description</th><th>HS</th><th>Qty</th><th class="right">Unit cost</th><th class="right">Unit price</th><th class="right">Landed / unit</th><th class="right">Total</th><th></th></tr></thead>
+        <tbody>
+        <% land.items.forEach(i => { %>
+          <tr>
+            <td><%= i.description %><% if (i.products) { %><div class="small"><a href="/admin/products/<%= i.products.id %>"><%= i.products.sku || 'product' %></a></div><% } %></td>
+            <td class="small"><%= i.hs_code || '—' %></td>
+            <td><%= i.quantity %></td>
+            <td class="right muted"><%= fmt.money(i.unit_cost, cur, 4) %></td>
+            <td class="right"><%= fmt.money(i.unit_price, cur, 4) %></td>
+            <td class="right" title="client price + share of logistics"><%= fmt.money(i.landed_unit_price, cur, 4) %></td>
+            <td class="right"><%= fmt.money(i.quantity * i.unit_price, cur) %></td>
+            <td class="right"><form method="post" action="/admin/orders/<%= order.id %>/items/<%= i.id %>/delete" class="inline" onsubmit="return confirm('Remove item?')"><button class="link small danger">×</button></form></td>
+          </tr>
+        <% }) %>
+        <tr class="total"><td colspan="6">Goods total · logistics spread <%= fmt.money(land.freightPerUnit, cur, 4) %>/unit over <%= land.qty %> units</td><td class="right"><%= fmt.money(order.subtotal, cur) %></td><td></td></tr>
+        </tbody>
+      </table>
+      <details>
+        <summary class="btn small">+ Add item</summary>
+        <form method="post" action="/admin/orders/<%= order.id %>/items" class="sub">
+          <div class="row">
+            <label class="grow2">Product <select name="product_id"><option value="">— custom item —</option><% products.forEach(p => { %><option value="<%= p.id %>"><%= p.name %><%= p.sku ? ' · ' + p.sku : '' %></option><% }) %></select></label>
+            <label class="grow2">Description <input name="description" placeholder="defaults to product name"></label>
+          </div>
+          <div class="row">
+            <label>Qty <input type="number" name="quantity" min="1" required></label>
+            <label>Unit cost (<%= cur %>) <input type="number" step="0.0001" name="unit_cost"></label>
+            <label>Unit price (<%= cur %>) <input type="number" step="0.0001" name="unit_price" required></label>
+            <label>HS code <input name="hs_code"></label>
+          </div>
+          <button class="btn primary">Add</button>
+        </form>
+      </details>
+    </div>
+
+    <div class="card">
+      <h2>Shipments <a class="more" href="/admin/logistics/shipments/new?order_id=<%= order.id %>">+ shipment</a></h2>
+      <% if (!shipments.length) { %><p class="muted">No shipment yet.</p><% } %>
+      <table class="tbl"><tbody>
+      <% shipments.forEach(s => { const fr = (s.freight_costs||[]).reduce((t,c)=>t+Number(c.amount)*Number(c.fx_to_order||1),0); %>
+        <tr>
+          <td><a href="/admin/logistics/shipments/<%= s.id %>"><%= fmt.status(s.mode).toUpperCase() %></a><div class="muted small"><%= s.forwarders?.name || 'no forwarder' %></div></td>
+          <td class="small"><%= s.origin_port || '—' %> → <%= s.destination_port || '—' %></td>
+          <td><span class="pill <%= s.status %>"><%= fmt.status(s.status) %></span></td>
+          <td class="small">ETA <%= fmt.date(s.eta) %></td>
+          <td class="small"><% if (s.export_declaration_no) { %>Export decl. <%= s.export_declaration_no %><% } else if (s.export_official) { %><span class="bad">no export decl. yet</span><% } else { %>unofficial<% } %></td>
+          <td class="right"><%= fmt.money(fr, cur) %></td>
+        </tr>
+      <% }) %>
+      </tbody></table>
+    </div>
+
+    <div class="card" id="packing">
+      <h2>Packing list <span class="muted small"><%= packing.length %> cartons · <%= fmt.num(packing.reduce((t,p)=>t+Number(p.gross_weight_kg||0),0),1) %> kg · <%= fmt.num(packing.reduce((t,p)=>t+Number(p.cbm||0),0),3) %> cbm</span></h2>
+      <% if (packing.length) { %>
+      <table class="tbl compact"><thead><tr><th>Carton</th><th>Contents</th><th>Qty</th><th>L×W×H cm</th><th>GW</th><th>NW</th><th>CBM</th><th></th></tr></thead><tbody>
+      <% packing.forEach(p => { %>
+        <tr><td><%= p.carton_no %></td><td><%= p.description %></td><td><%= p.quantity %></td><td><%= p.length_cm %>×<%= p.width_cm %>×<%= p.height_cm %></td>
+          <td><%= fmt.num(p.gross_weight_kg,1) %></td><td><%= fmt.num(p.net_weight_kg,1) %></td><td><%= fmt.num(p.cbm,3) %></td>
+          <td><form method="post" action="/admin/orders/<%= order.id %>/packing/<%= p.id %>/delete" class="inline"><button class="link small danger">×</button></form></td></tr>
+      <% }) %>
+      </tbody></table>
+      <% } %>
+      <details>
+        <summary class="btn small">+ Add cartons</summary>
+        <form method="post" action="/admin/orders/<%= order.id %>/packing" class="sub">
+          <div class="row">
+            <label>First carton no. <input name="carton_no" required value="<%= packing.length + 1 %>"></label>
+            <label>× identical cartons <input type="number" name="copies" min="1" max="500" value="1"></label>
+            <label class="grow2">Contents <input name="description" value="<%= items[0]?.description || '' %>"></label>
+            <label>Pcs / carton <input type="number" name="quantity"></label>
+          </div>
+          <div class="row">
+            <label>L cm <input type="number" step="0.1" name="length_cm"></label>
+            <label>W cm <input type="number" step="0.1" name="width_cm"></label>
+            <label>H cm <input type="number" step="0.1" name="height_cm"></label>
+            <label>GW kg <input type="number" step="0.01" name="gross_weight_kg"></label>
+            <label>NW kg <input type="number" step="0.01" name="net_weight_kg"></label>
+          </div>
+          <button class="btn primary">Add</button>
+        </form>
+      </details>
+    </div>
+
+    <%- include('../../partials/docs', { docs, entityType: 'order', entityId: order.id, redirect: '/admin/orders/' + order.id, heading: 'Product & packing photos, documents', defaultKind: 'product_photo' }) %>
+  </div>
+  <div>
+    <div class="card">
+      <h2>Order details</h2>
+      <form method="post" action="/admin/orders/<%= order.id %>">
+        <div class="row">
+          <label class="grow2">Supplier <select name="supplier_id"><option value="">—</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= order.supplier_id === s.id ? 'selected' : '' %>><%= s.name %></option><% }) %></select></label>
+          <label>Expected ship <input type="date" name="expected_ship_date" value="<%= order.expected_ship_date || '' %>"></label>
+        </div>
+        <label>Note for client <span class="muted small">— shown in their portal</span><textarea name="client_notes" rows="2"><%= order.client_notes || '' %></textarea></label>
+        <label>Internal notes <textarea name="internal_notes" rows="3"><%= order.internal_notes || '' %></textarea></label>
+        <button class="btn">Save</button>
+      </form>
+    </div>
+    <%- include('../../partials/timeline', { events, created: { at: order.created_at, label: 'order created' } }) %>
+  </div>
+</div>
+<%- include('../../partials/foot') %>

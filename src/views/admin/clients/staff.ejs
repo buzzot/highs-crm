@@ -1,0 +1,18 @@
+<%- include('../../partials/head') %>
+<div class="pagehead"><h1>Staff</h1></div>
+<div class="grid2">
+  <div class="card">
+    <table class="tbl"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Since</th></tr></thead><tbody>
+    <% staff.forEach(s => { %><tr class="<%= s.active ? '' : 'dim' %>"><td><%= s.full_name || '—' %></td><td><%= s.email %></td><td><span class="tag"><%= s.role %></span></td><td class="muted small"><%= fmt.date(s.created_at) %></td></tr><% }) %>
+    </tbody></table>
+  </div>
+  <div class="card">
+    <h2>Invite a team member</h2>
+    <form method="post" action="/admin/clients/staff/invite">
+      <label>Email <input type="email" name="email" required></label>
+      <label>Role <select name="role"><option value="staff">Staff — full workspace, no settings</option><option value="admin">Admin — also staff & pricing settings</option></select></label>
+      <button class="btn primary">Send invite</button>
+    </form>
+  </div>
+</div>
+<%- include('../../partials/foot') %>

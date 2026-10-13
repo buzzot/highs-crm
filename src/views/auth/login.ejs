@@ -1,0 +1,14 @@
+<%- include('../partials/head') %>
+<div class="card narrow auth">
+  <h1>Highs<span class="accent">Business</span></h1>
+  <p class="muted">Sign in to your account</p>
+  <% if (error) { %><div class="alert err"><%= error %></div><% } %>
+  <form method="post" action="/login">
+    <input type="hidden" name="next" value="<%= next %>">
+    <label>Email <input type="email" name="email" required autofocus></label>
+    <label>Password <input type="password" name="password" required></label>
+    <button class="btn primary wide">Sign in</button>
+  </form>
+  <p class="muted small"><a href="/forgot">Forgot password?</a> · Access is by invitation only.</p>
+</div>
+<%- include('../partials/foot') %>

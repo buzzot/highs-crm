@@ -1,0 +1,7 @@
+<%- include('../../partials/head') %>
+<div class="pagehead"><div><a class="back" href="/admin/pricing">← Pricing</a><h1><%= title %></h1></div></div>
+<% if (error) { %><div class="alert err"><%= error %></div><% } %>
+<div class="card">
+  <%- include('_calc', { q, action: q.id ? '/admin/pricing/quotes/' + q.id : '/admin/pricing/quotes' }) %>
+</div>
+<%- include('../../partials/foot') %>

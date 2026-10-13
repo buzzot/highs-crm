@@ -1,0 +1,69 @@
+<%- include('../../partials/head') %>
+<div class="pagehead">
+  <div><a class="back" href="/admin/sourcing">← Sourcing</a><h1><%= request.ref %> · <%= request.title %></h1>
+    <p class="muted"><a href="/admin/clients/<%= request.organizations.id %>"><%= request.organizations.name %></a> · submitted by <%= request.creator?.full_name || request.creator?.email || '—' %> · <%= fmt.date(request.created_at) %></p></div>
+  <span class="pill lg <%= request.status %>"><%= fmt.status(request.status) %></span>
+</div>
+<div class="grid2">
+  <div>
+    <div class="card">
+      <h2>Client request</h2>
+      <dl class="dl">
+        <dt>Quantity</dt><dd><%= request.quantity ?? '—' %></dd>
+        <dt>Target price</dt><dd><%= request.target_unit_price ? fmt.money(request.target_unit_price, request.target_currency, 4) : '—' %></dd>
+        <dt>Destination</dt><dd><%= [request.destination_city, request.destination_country].filter(Boolean).join(', ') || '—' %></dd>
+        <dt>Needed by</dt><dd><%= fmt.date(request.needed_by) %></dd>
+      </dl>
+      <% if (request.description) { %><p class="pre"><%= request.description %></p><% } %>
+    </div>
+
+    <div class="card">
+      <h2>AI sourcing brief</h2>
+      <% if (request.ai_brief) { %><div class="pre ai"><%= request.ai_brief %></div><% } else { %><p class="muted">Turn the client's text into a spec checklist, likely HS chapter and questions to ask.</p><% } %>
+      <form method="post" action="/admin/sourcing/<%= request.id %>/brief"><button class="btn"><%= request.ai_brief ? 'Regenerate' : 'Generate brief' %></button></form>
+    </div>
+
+    <div class="card">
+      <h2>Quotes <a class="more" href="/admin/pricing/quotes/new?request_id=<%= request.id %>">+ new quote</a></h2>
+      <% if (!quotes.length) { %><p class="muted">No quotes yet.</p><% } %>
+      <table class="tbl">
+        <% if (quotes.length) { %><thead><tr><th>Product / supplier</th><th>Qty</th><th class="right">Unit price</th><th class="right">Landed</th><th>Margin</th><th>AI</th><th>Status</th><th></th></tr></thead><% } %>
+        <tbody>
+        <% quotes.forEach(q => { const ord = orders.find(o => o.quote_id === q.id); %>
+          <tr>
+            <td><a href="/admin/pricing/quotes/<%= q.id %>"><%= q.products?.name || 'Custom item' %></a><div class="muted small"><%= q.suppliers?.name || '' %></div></td>
+            <td><%= q.quantity %></td>
+            <td class="right"><%= fmt.money(q.unit_price, q.sell_currency, 4) %></td>
+            <td class="right"><%= fmt.money(q.landed_unit_price, q.sell_currency, 4) %></td>
+            <td class="<%= q.margin_pct < 20 ? 'bad' : '' %>"><%= fmt.pct(q.margin_pct) %></td>
+            <td><% if (q.ai_check) { %><span class="tag <%= q.ai_check.ok ? 'ok' : 'warn' %>"><%= q.ai_check.score %></span><% } else { %>—<% } %></td>
+            <td><span class="pill <%= q.status %>"><%= fmt.status(q.status) %></span></td>
+            <td class="right">
+              <% if (ord) { %><a href="/admin/orders/<%= ord.id %>"><%= ord.order_no %></a>
+              <% } else if (q.status === 'accepted' || (user.role === 'admin' && q.status === 'sent')) { %>
+                <form method="post" action="/admin/sourcing/quotes/<%= q.id %>/convert" class="inline"><button class="btn small primary">Create order</button></form>
+              <% } %>
+            </td>
+          </tr>
+        <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <%- include('../../partials/docs', { docs, entityType: 'request', entityId: request.id, redirect: '/admin/sourcing/' + request.id, heading: 'Client files & sample photos', defaultKind: 'product_photo' }) %>
+  </div>
+  <div>
+    <div class="card">
+      <h2>Handling</h2>
+      <form method="post" action="/admin/sourcing/<%= request.id %>">
+        <div class="row">
+          <label>Status <select name="status"><% statuses.forEach(s => { %><option value="<%= s %>" <%= request.status === s ? 'selected' : '' %>><%= fmt.status(s) %></option><% }) %></select></label>
+          <label>Owner <select name="assigned_to"><option value="">—</option><% staff.forEach(s => { %><option value="<%= s.id %>" <%= request.assigned_to === s.id ? 'selected' : '' %>><%= s.full_name || s.email %></option><% }) %></select></label>
+        </div>
+        <label>Internal notes <span class="muted small">— never shown to the client</span><textarea name="internal_notes" rows="5"><%= request.internal_notes || '' %></textarea></label>
+        <button class="btn primary">Save</button>
+      </form>
+    </div>
+    <%- include('../../partials/timeline', { events, created: { at: request.created_at, label: 'request submitted' } }) %>
+  </div>
+</div>
+<%- include('../../partials/foot') %>

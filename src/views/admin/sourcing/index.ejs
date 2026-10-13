@@ -1,0 +1,33 @@
+<%- include('../../partials/head') %>
+<div class="pagehead">
+  <h1>Sourcing</h1>
+  <a class="btn" href="/admin/sourcing?status=<%= status %>&mine=1">Assigned to me</a>
+</div>
+<div class="tabs">
+  <a href="/admin/sourcing?status=open" class="<%= status === 'open' ? 'on' : '' %>">Open <span><%= (byStatus.new||0)+(byStatus.reviewing||0)+(byStatus.quoted||0) %></span></a>
+  <% statuses.forEach(s => { %><a href="/admin/sourcing?status=<%= s %>" class="<%= status === s ? 'on' : '' %>"><%= fmt.status(s) %> <span><%= byStatus[s] || 0 %></span></a><% }) %>
+  <a href="/admin/sourcing?status=all" class="<%= status === 'all' ? 'on' : '' %>">All</a>
+</div>
+<div class="card">
+  <form class="row tight" method="get"><input type="hidden" name="status" value="<%= status %>"><input name="q" value="<%= query.q || '' %>" placeholder="Search title or ref…"><button class="btn">Search</button></form>
+  <table class="tbl">
+    <thead><tr><th>Ref</th><th>Request</th><th>Client</th><th>Qty</th><th>Target</th><th>Needed by</th><th>Quotes</th><th>Owner</th><th>Status</th></tr></thead>
+    <tbody>
+    <% if (!requests.length) { %><tr><td colspan="9" class="muted">Nothing here.</td></tr><% } %>
+    <% requests.forEach(q => { const urgent = q.needed_by && new Date(q.needed_by) < new Date(Date.now() + 21*864e5) && ['new','reviewing'].includes(q.status); %>
+      <tr>
+        <td><a href="/admin/sourcing/<%= q.id %>"><%= q.ref %></a></td>
+        <td><strong><%= q.title %></strong><div class="muted small"><%= fmt.date(q.created_at) %></div></td>
+        <td><a href="/admin/clients/<%= q.organizations?.id %>"><%= q.organizations?.name %></a></td>
+        <td><%= q.quantity ?? '—' %></td>
+        <td><%= q.target_unit_price ? fmt.money(q.target_unit_price, q.target_currency, 4) : '—' %></td>
+        <td class="<%= urgent ? 'bad' : '' %>"><%= fmt.date(q.needed_by) %></td>
+        <td><%= (q.quotes || []).length %><% const sent = (q.quotes||[]).filter(x => x.status === 'sent').length; if (sent) { %> <span class="muted small">(<%= sent %> sent)</span><% } %></td>
+        <td class="small"><%= q.assignee?.full_name || q.assignee?.email || '—' %></td>
+        <td><span class="pill <%= q.status %>"><%= fmt.status(q.status) %></span></td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table>
+</div>
+<%- include('../../partials/foot') %>

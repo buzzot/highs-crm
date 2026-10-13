@@ -1,0 +1,25 @@
+<%- include('../partials/head') %>
+<div class="card narrow auth">
+  <h1>Welcome to Highs<span class="accent">Business</span></h1>
+  <p class="muted">Set your name and password to activate your account.</p>
+  <% if (error) { %><div class="alert err"><%= error %></div><% } %>
+  <form method="post" action="/auth/accept" id="acceptForm">
+    <input type="hidden" name="access_token" id="access_token">
+    <input type="hidden" name="refresh_token" id="refresh_token">
+    <label>Your name <input type="text" name="full_name" required></label>
+    <label>Password <input type="password" name="password" minlength="8" required></label>
+    <button class="btn primary wide">Activate account</button>
+  </form>
+  <p class="muted small" id="tokenNote"></p>
+</div>
+<script>
+  // Supabase puts tokens in the URL fragment; move them into the form.
+  (function () {
+    const h = new URLSearchParams(location.hash.slice(1));
+    const a = h.get('access_token'), r = h.get('refresh_token');
+    if (a) { document.getElementById('access_token').value = a; document.getElementById('refresh_token').value = r || ''; history.replaceState(null, '', location.pathname); }
+    else if (h.get('error_description')) document.getElementById('tokenNote').textContent = h.get('error_description');
+    else if (!document.querySelector('.alert')) document.getElementById('tokenNote').textContent = 'Open this page from the link in your invitation email.';
+  })();
+</script>
+<%- include('../partials/foot') %>

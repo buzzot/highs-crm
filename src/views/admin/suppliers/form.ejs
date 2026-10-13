@@ -1,0 +1,29 @@
+<%- include('../../partials/head') %>
+<div class="card narrow-md">
+  <a class="back" href="<%= s.id ? '/admin/suppliers/' + s.id : '/admin/suppliers' %>">← Back</a>
+  <h1><%= title %></h1>
+  <% if (error) { %><div class="alert err"><%= error %></div><% } %>
+  <form method="post" action="<%= s.id ? '/admin/suppliers/' + s.id : '/admin/suppliers' %>">
+    <label>Company name <input name="name" required value="<%= s.name || '' %>"></label>
+    <div class="row">
+      <label>Country <input name="country" value="<%= s.country || '' %>"></label>
+      <label>City <input name="city" value="<%= s.city || '' %>"></label>
+      <label>Website / 1688 / Alibaba <input name="website" value="<%= s.website || '' %>"></label>
+    </div>
+    <div class="row">
+      <label>Contact person <input name="contact_name" value="<%= s.contact_name || '' %>"></label>
+      <label>Phone <input name="phone" value="<%= s.phone || '' %>"></label>
+      <label>Email <input type="email" name="email" value="<%= s.email || '' %>"></label>
+      <label>WeChat <input name="wechat" value="<%= s.wechat || '' %>"></label>
+    </div>
+    <div class="row">
+      <label>Payment terms <input name="payment_terms" value="<%= s.payment_terms || '' %>" placeholder="30% deposit, 70% before shipment"></label>
+      <label>Lead time (days) <input type="number" name="lead_time_days" min="0" value="<%= s.lead_time_days ?? '' %>"></label>
+      <label>Rating <select name="rating"><option value="">—</option><% [5,4,3,2,1].forEach(n => { %><option value="<%= n %>" <%= String(s.rating) === String(n) ? 'selected' : '' %>><%= '★'.repeat(n) %></option><% }) %></select></label>
+    </div>
+    <label class="check"><input type="checkbox" name="can_export_official" <%= s.can_export_official === true || s.can_export_official === 'on' ? 'checked' : '' %>> Holds export rights — can export officially with a government export declaration</label>
+    <label>Notes <textarea name="notes" rows="4"><%= s.notes || '' %></textarea></label>
+    <div class="actions"><button class="btn primary">Save</button></div>
+  </form>
+</div>
+<%- include('../../partials/foot') %>

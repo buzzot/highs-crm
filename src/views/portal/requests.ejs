@@ -1,0 +1,18 @@
+<%- include('../partials/head') %>
+<div class="pagehead"><h1>My requests</h1><a class="btn primary" href="/portal/requests/new">+ New request</a></div>
+<div class="card">
+<table class="tbl">
+  <thead><tr><th>Ref</th><th>Title</th><th>Qty</th><th>Target</th><th>Needed by</th><th>Status</th><th>Created</th></tr></thead>
+  <tbody>
+  <% if (!requests.length) { %><tr><td colspan="7" class="muted">No requests yet.</td></tr><% } %>
+  <% requests.forEach(r => { %>
+    <tr>
+      <td><a href="/portal/requests/<%= r.id %>"><%= r.ref %></a></td><td><%= r.title %></td>
+      <td><%= r.quantity ?? '—' %></td><td><%= r.target_unit_price ? fmt.money(r.target_unit_price, r.target_currency) : '—' %></td>
+      <td><%= fmt.date(r.needed_by) %></td><td><span class="pill <%= r.status %>"><%= fmt.status(r.status) %></span></td><td class="muted"><%= fmt.date(r.created_at) %></td>
+    </tr>
+  <% }) %>
+  </tbody>
+</table>
+</div>
+<%- include('../partials/foot') %>

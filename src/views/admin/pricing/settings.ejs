@@ -1,0 +1,23 @@
+<%- include('../../partials/head') %>
+<div class="card narrow-md">
+  <a class="back" href="/admin/pricing">← Pricing</a>
+  <h1>Pricing settings</h1>
+  <form method="post" action="/admin/pricing/settings">
+    <h3>Margin rules</h3>
+    <div class="row">
+      <label>Minimum margin % (on product cost) <input type="number" step="0.1" name="min_margin_pct" value="<%= settings.pricing.min_margin_pct %>"></label>
+      <label>Default margin % for new quotes <input type="number" step="0.1" name="default_margin_pct" value="<%= settings.pricing.default_margin_pct %>"></label>
+    </div>
+    <h3>FX rates</h3>
+    <p class="muted small">Pair format FROM_TO, e.g. CNY_USD = USD per 1 CNY. Reverse pairs are derived automatically.</p>
+    <div id="fxrows">
+      <% Object.entries(settings.fx).forEach(([pair, rate]) => { %>
+        <div class="row tight"><input name="pair" value="<%= pair %>" pattern="[A-Z]{3}_[A-Z]{3}"><input type="number" step="0.000001" name="rate" value="<%= rate %>"></div>
+      <% }) %>
+      <div class="row tight"><input name="pair" placeholder="EUR_USD" pattern="[A-Z]{3}_[A-Z]{3}"><input type="number" step="0.000001" name="rate" placeholder="1.08"></div>
+      <div class="row tight"><input name="pair" placeholder="CNY_EUR" pattern="[A-Z]{3}_[A-Z]{3}"><input type="number" step="0.000001" name="rate" placeholder="0.127"></div>
+    </div>
+    <div class="actions"><button class="btn primary">Save settings</button></div>
+  </form>
+</div>
+<%- include('../../partials/foot') %>

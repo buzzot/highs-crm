@@ -1,0 +1,40 @@
+<%- include('../../partials/head') %>
+<div class="pagehead">
+  <h1>Orders</h1>
+  <a class="btn primary" href="/admin/orders/new">+ New order</a>
+</div>
+<div class="tabs">
+  <a href="/admin/orders?status=open" class="<%= status === 'open' ? 'on' : '' %>">Open</a>
+  <% statuses.forEach(s => { %><a href="/admin/orders?status=<%= s %>" class="<%= status === s ? 'on' : '' %>"><%= fmt.status(s) %> <span><%= byStatus[s] || 0 %></span></a><% }) %>
+  <a href="/admin/orders?status=all" class="<%= status === 'all' ? 'on' : '' %>">All</a>
+</div>
+<div class="card">
+  <form class="row tight" method="get">
+    <input type="hidden" name="status" value="<%= status %>">
+    <input name="q" value="<%= query.q || '' %>" placeholder="Order no, client, supplier…">
+    <select name="client"><option value="">All clients</option><% clients.forEach(c => { %><option value="<%= c.id %>" <%= query.client === c.id ? 'selected' : '' %>><%= c.name %></option><% }) %></select>
+    <button class="btn">Filter</button>
+  </form>
+  <table class="tbl">
+    <thead><tr><th>Order</th><th>Client</th><th>Supplier</th><th>Status</th><th class="right">Goods</th><th class="right">Cost</th><th class="right">Freight</th><th class="right">Margin</th><th class="right">Gross profit</th><th>Ship / ETA</th></tr></thead>
+    <tbody>
+    <% if (!orders.length) { %><tr><td colspan="10" class="muted">No orders.</td></tr><% } %>
+    <% let tg = 0, tp = 0; orders.forEach(o => { tg += Number(o.subtotal||0); tp += Number(o.gross_profit||0); %>
+      <tr>
+        <td><a href="/admin/orders/<%= o.id %>"><strong><%= o.order_no %></strong></a><div class="muted small"><%= fmt.date(o.created_at) %></div></td>
+        <td><%= o.client_name %></td>
+        <td class="small"><%= o.supplier_name || '—' %></td>
+        <td><span class="pill <%= o.status %>"><%= fmt.status(o.status) %></span></td>
+        <td class="right"><%= fmt.money(o.subtotal, o.currency, 0) %></td>
+        <td class="right muted"><%= fmt.money(o.cost_total, o.currency, 0) %></td>
+        <td class="right muted"><%= fmt.money(o.freight_total, o.currency, 0) %></td>
+        <td class="right <%= o.margin_pct != null && o.margin_pct < 20 ? 'bad' : '' %>"><%= fmt.pct(o.margin_pct) %></td>
+        <td class="right"><%= fmt.money(o.gross_profit, o.currency, 0) %></td>
+        <td class="small"><%= o.latest_eta ? 'ETA ' + fmt.date(o.latest_eta) : (o.expected_ship_date ? 'ship ' + fmt.date(o.expected_ship_date) : '—') %></td>
+      </tr>
+    <% }) %>
+    <% if (orders.length) { %><tr class="total"><td colspan="4"><%= orders.length %> orders</td><td class="right"><%= fmt.money(tg, 'USD', 0) %></td><td colspan="3"></td><td class="right"><%= fmt.money(tp, 'USD', 0) %></td><td></td></tr><% } %>
+    </tbody>
+  </table>
+</div>
+<%- include('../../partials/foot') %>

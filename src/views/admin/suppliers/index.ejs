@@ -1,0 +1,27 @@
+<%- include('../../partials/head') %>
+<div class="pagehead">
+  <h1>Suppliers</h1>
+  <a class="btn primary" href="/admin/suppliers/new">+ New supplier</a>
+</div>
+<div class="card">
+  <form class="row tight" method="get"><input name="q" value="<%= query.q || '' %>" placeholder="Search name, city, contact…"><button class="btn">Search</button></form>
+  <table class="tbl">
+    <thead><tr><th>Supplier</th><th>Location</th><th>Contact</th><th>Lead time</th><th>Rating</th><th>Export licence</th><th>Products</th><th>Orders</th></tr></thead>
+    <tbody>
+    <% if (!suppliers.length) { %><tr><td colspan="8" class="muted">No suppliers found.</td></tr><% } %>
+    <% suppliers.forEach(s => { %>
+      <tr>
+        <td><a href="/admin/suppliers/<%= s.id %>"><strong><%= s.name %></strong></a></td>
+        <td><%= [s.city, s.country].filter(Boolean).join(', ') %></td>
+        <td><%= s.contact_name || '—' %><% if (s.wechat) { %><div class="muted small">WeChat <%= s.wechat %></div><% } %></td>
+        <td><%= s.lead_time_days ? s.lead_time_days + ' d' : '—' %></td>
+        <td class="stars"><%= s.rating ? '★'.repeat(s.rating) + '☆'.repeat(5 - s.rating) : '—' %></td>
+        <td><%= s.can_export_official ? '✓ official' : '—' %></td>
+        <td><%= s.products?.[0]?.count ?? 0 %></td>
+        <td><%= s.orders?.[0]?.count ?? 0 %></td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table>
+</div>
+<%- include('../../partials/foot') %>

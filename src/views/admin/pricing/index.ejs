@@ -1,0 +1,38 @@
+<%- include('../../partials/head') %>
+<div class="pagehead">
+  <div><h1>Pricing</h1><p class="muted">Margin is on product cost only (min <%= settings.pricing.min_margin_pct %>%). Logistics is added on top to give the landed price.</p></div>
+  <div class="actions"><% if (user.role === 'admin') { %><a class="btn" href="/admin/pricing/settings">FX & margin settings</a><% } %><a class="btn primary" href="/admin/pricing/quotes/new">+ New quote</a></div>
+</div>
+<div class="card">
+  <h2>Calculator</h2>
+  <%- include('_calc', { q: { margin_pct: settings.pricing.default_margin_pct, cost_currency: 'CNY', sell_currency: 'USD', fx_rate: settings.fx.CNY_USD || 1, incoterm: 'FOB', freight_estimate: 0, duties_estimate: 0, other_costs: 0 }, action: '/admin/pricing/quotes', incoterms: ['EXW','FOB','FCA','CFR','CIF','CPT','CIP','DAP','DDP'], submitLabel: 'Save as quote' }) %>
+</div>
+<div class="card">
+  <h2>Quotes
+    <span class="tabs inline">
+      <a href="/admin/pricing" class="<%= !query.status ? 'on' : '' %>">all</a>
+      <% ['draft','sent','accepted','rejected','expired'].forEach(s => { %><a href="/admin/pricing?status=<%= s %>" class="<%= query.status === s ? 'on' : '' %>"><%= s %></a><% }) %>
+    </span>
+  </h2>
+  <table class="tbl">
+    <thead><tr><th>Request</th><th>Client</th><th>Product / supplier</th><th>Qty</th><th class="right">Cost</th><th class="right">Unit price</th><th class="right">Landed</th><th>Margin</th><th>AI</th><th>Status</th></tr></thead>
+    <tbody>
+    <% if (!quotes.length) { %><tr><td colspan="10" class="muted">No quotes.</td></tr><% } %>
+    <% quotes.forEach(q => { %>
+      <tr>
+        <td><a href="/admin/pricing/quotes/<%= q.id %>"><%= q.requests?.ref || 'quote' %></a><div class="muted small"><%= q.requests?.title %></div></td>
+        <td class="small"><%= q.requests?.organizations?.name %></td>
+        <td class="small"><%= q.products?.name || 'custom' %><div class="muted"><%= q.suppliers?.name || '' %></div></td>
+        <td><%= q.quantity %></td>
+        <td class="right muted"><%= fmt.money(q.unit_cost, q.cost_currency, 4) %></td>
+        <td class="right"><%= fmt.money(q.unit_price, q.sell_currency, 4) %></td>
+        <td class="right"><%= fmt.money(q.landed_unit_price, q.sell_currency, 4) %></td>
+        <td class="<%= Number(q.margin_pct) < settings.pricing.min_margin_pct ? 'bad' : '' %>"><%= fmt.pct(q.margin_pct) %></td>
+        <td><% if (q.ai_check) { %><span class="tag <%= q.ai_check.ok ? 'ok' : 'warn' %>"><%= q.ai_check.score %></span><% } else { %>—<% } %></td>
+        <td><span class="pill <%= q.status %>"><%= fmt.status(q.status) %></span></td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table>
+</div>
+<%- include('../../partials/foot') %>

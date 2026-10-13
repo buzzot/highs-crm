@@ -1,0 +1,51 @@
+<%- include('../../partials/head') %>
+<div class="pagehead">
+  <div><a class="back" href="/admin/suppliers">← Suppliers</a><h1><%= s.name %></h1>
+    <p class="muted"><%= [s.city, s.country].filter(Boolean).join(', ') %> <% if (s.rating) { %>· <span class="stars"><%= '★'.repeat(s.rating) %></span><% } %> <% if (s.can_export_official) { %>· <span class="tag ok">official exporter</span><% } %></p></div>
+  <div class="actions"><a class="btn" href="/admin/suppliers/<%= s.id %>/edit">Edit</a><a class="btn primary" href="/admin/products/new?supplier_id=<%= s.id %>">+ Product</a></div>
+</div>
+<div class="kpis">
+  <div class="kpi"><span class="n"><%= products.length %></span><span class="l">Products</span></div>
+  <div class="kpi"><span class="n"><%= orders.length %></span><span class="l">Orders</span></div>
+  <div class="kpi"><span class="n"><%= fmt.money(spend, 'USD', 0) %></span><span class="l">Purchases (cost)</span></div>
+</div>
+<div class="grid2">
+  <div>
+    <div class="card">
+      <h2>Contact</h2>
+      <dl class="dl">
+        <dt>Contact</dt><dd><%= s.contact_name || '—' %></dd>
+        <dt>Phone</dt><dd><%= s.phone || '—' %></dd>
+        <dt>Email</dt><dd><% if (s.email) { %><a href="mailto:<%= s.email %>"><%= s.email %></a><% } else { %>—<% } %></dd>
+        <dt>WeChat</dt><dd><%= s.wechat || '—' %></dd>
+        <dt>Website</dt><dd><% if (s.website) { %><a href="<%= /^https?:/.test(s.website) ? s.website : 'https://' + s.website %>" target="_blank" rel="noopener"><%= s.website %></a><% } else { %>—<% } %></dd>
+        <dt>Payment terms</dt><dd><%= s.payment_terms || '—' %></dd>
+        <dt>Lead time</dt><dd><%= s.lead_time_days ? s.lead_time_days + ' days' : '—' %></dd>
+      </dl>
+      <% if (s.notes) { %><p class="pre"><%= s.notes %></p><% } %>
+    </div>
+    <div class="card">
+      <h2>Products</h2>
+      <% if (!products.length) { %><p class="muted">No products linked yet.</p><% } %>
+      <table class="tbl"><tbody>
+      <% products.forEach(p => { %>
+        <tr><td><a href="/admin/products/<%= p.id %>"><%= p.name %></a><div class="muted small"><%= p.sku || '' %></div></td>
+          <td class="right"><%= fmt.money(p.unit_cost, p.cost_currency, 4) %></td><td>MOQ <%= p.moq ?? '—' %></td><td class="muted small"><%= p.hs_code || '' %></td></tr>
+      <% }) %>
+      </tbody></table>
+    </div>
+    <div class="card">
+      <h2>Orders</h2>
+      <% if (!orders.length) { %><p class="muted">No orders yet.</p><% } %>
+      <table class="tbl"><tbody>
+      <% orders.forEach(o => { %>
+        <tr><td><a href="/admin/orders/<%= o.id %>"><%= o.order_no %></a></td><td><%= o.client_name %></td><td><span class="pill <%= o.status %>"><%= fmt.status(o.status) %></span></td><td class="right"><%= fmt.money(o.cost_total, o.currency) %></td></tr>
+      <% }) %>
+      </tbody></table>
+    </div>
+  </div>
+  <div>
+    <%- include('../../partials/docs', { docs, entityType: 'supplier', entityId: s.id, redirect: '/admin/suppliers/' + s.id, kinds: ['certificate','qc_report','other','product_photo'], heading: 'Licences, certificates & files', defaultKind: 'certificate', defaultVisible: false }) %>
+  </div>
+</div>
+<%- include('../../partials/foot') %>

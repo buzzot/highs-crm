@@ -1,0 +1,52 @@
+<%- include('../partials/head') %>
+<div class="pagehead">
+  <div><a class="back" href="/portal/requests">← Requests</a><h1><%= request.ref %> · <%= request.title %></h1></div>
+  <span class="pill lg <%= request.status %>"><%= fmt.status(request.status) %></span>
+</div>
+<div class="grid2">
+  <div>
+    <div class="card">
+      <h2>Request</h2>
+      <dl class="dl">
+        <dt>Quantity</dt><dd><%= request.quantity ?? '—' %></dd>
+        <dt>Target price</dt><dd><%= request.target_unit_price ? fmt.money(request.target_unit_price, request.target_currency) : '—' %></dd>
+        <dt>Destination</dt><dd><%= [request.destination_city, request.destination_country].filter(Boolean).join(', ') || '—' %></dd>
+        <dt>Needed by</dt><dd><%= fmt.date(request.needed_by) %></dd>
+      </dl>
+      <% if (request.description) { %><p class="pre"><%= request.description %></p><% } %>
+      <% if (docs.length) { %><h3>Files</h3><ul class="files"><% docs.forEach(d => { %><li><a href="/portal/documents/<%= d.id %>/download" target="_blank"><%= d.title %></a></li><% }) %></ul><% } %>
+    </div>
+    <div class="card">
+      <h2>Quotes</h2>
+      <% if (!quotes.length) { %><p class="muted">We're working on it — quotes will appear here.</p><% } %>
+      <% quotes.forEach(q => { %>
+        <div class="quote">
+          <div class="qhead"><strong>Quote</strong> <span class="pill <%= q.status %>"><%= fmt.status(q.status) %></span> <span class="muted">valid until <%= fmt.date(q.valid_until) %></span></div>
+          <dl class="dl">
+            <dt>Quantity</dt><dd><%= q.quantity %></dd>
+            <dt>Unit price (<%= q.incoterm %>)</dt><dd><%= fmt.money(q.unit_price, q.sell_currency, 4) %></dd>
+            <dt>Estimated logistics</dt><dd><%= fmt.money((Number(q.freight_estimate)||0)+(Number(q.duties_estimate)||0)+(Number(q.other_costs)||0), q.sell_currency) %> total</dd>
+            <dt>Landed unit price</dt><dd><strong><%= fmt.money(q.landed_unit_price, q.sell_currency, 4) %></strong></dd>
+            <dt>Goods total</dt><dd><%= fmt.money(q.unit_price * q.quantity, q.sell_currency) %></dd>
+            <dt>Lead time</dt><dd><%= q.lead_time_days ? q.lead_time_days + ' days' : '—' %></dd>
+          </dl>
+          <% if (q.notes) { %><p class="pre"><%= q.notes %></p><% } %>
+          <% if (q.status === 'sent') { %>
+            <div class="actions">
+              <form method="post" action="/portal/quotes/<%= q.id %>/accept"><button class="btn primary">Accept quote</button></form>
+              <form method="post" action="/portal/quotes/<%= q.id %>/reject" onsubmit="return confirm('Reject this quote?')"><button class="btn">Reject</button></form>
+            </div>
+          <% } %>
+        </div>
+      <% }) %>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Timeline</h2>
+    <ul class="timeline">
+      <% events.forEach(e => { %><li><span class="t"><%= fmt.datetime(e.created_at) %></span> <%= fmt.status(e.action) %></li><% }) %>
+      <li><span class="t"><%= fmt.datetime(request.created_at) %></span> submitted</li>
+    </ul>
+  </div>
+</div>
+<%- include('../partials/foot') %>

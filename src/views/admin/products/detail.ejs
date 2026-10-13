@@ -1,0 +1,38 @@
+<%- include('../../partials/head') %>
+<div class="pagehead">
+  <div><a class="back" href="/admin/products">← Products</a><h1><%= p.name %></h1>
+    <p class="muted"><%= [p.sku, p.category, p.hs_code && ('HS ' + p.hs_code)].filter(Boolean).join(' · ') %></p></div>
+  <div class="actions"><a class="btn" href="/admin/products/<%= p.id %>/edit">Edit</a><a class="btn primary" href="/admin/pricing/quotes/new?product_id=<%= p.id %>">Quote this</a></div>
+</div>
+<div class="grid2">
+  <div>
+    <div class="card">
+      <h2>Supply</h2>
+      <dl class="dl">
+        <dt>Supplier</dt><dd><% if (p.suppliers) { %><a href="/admin/suppliers/<%= p.suppliers.id %>"><%= p.suppliers.name %></a><% } else { %>—<% } %></dd>
+        <dt>Unit cost</dt><dd><%= fmt.money(p.unit_cost, p.cost_currency, 4) %></dd>
+        <dt>MOQ</dt><dd><%= p.moq ?? '—' %></dd>
+        <dt>Lead time</dt><dd><%= p.suppliers?.lead_time_days ? p.suppliers.lead_time_days + ' days' : '—' %></dd>
+        <dt>Unit weight</dt><dd><%= p.unit_weight_kg ? fmt.num(p.unit_weight_kg, 3) + ' kg' : '—' %></dd>
+        <dt>Carton</dt><dd><%= p.carton_qty ? `${p.carton_qty} pcs · ${fmt.num(p.carton_cbm, 4)} cbm · ${fmt.num(p.carton_weight_kg, 2)} kg` : '—' %></dd>
+      </dl>
+      <% if (p.description) { %><p class="pre"><%= p.description %></p><% } %>
+      <% if (specText) { %><h3>Specifications</h3><p class="pre"><%= specText %></p><% } %>
+    </div>
+    <div class="card">
+      <h2>Quote history</h2>
+      <% if (!quotes.length) { %><p class="muted">Not quoted yet.</p><% } %>
+      <table class="tbl"><thead><tr><th>Request</th><th>Qty</th><th class="right">Cost</th><th class="right">Price</th><th>Margin</th><th>Status</th></tr></thead><tbody>
+      <% quotes.forEach(q => { %>
+        <tr><td><a href="/admin/pricing/quotes/<%= q.id %>"><%= q.requests?.ref %></a><div class="muted small"><%= q.requests?.organizations?.name %></div></td>
+          <td><%= q.quantity %></td><td class="right"><%= fmt.money(q.unit_cost, q.cost_currency, 4) %></td><td class="right"><%= fmt.money(q.unit_price, q.sell_currency, 4) %></td>
+          <td><%= fmt.pct(q.margin_pct) %></td><td><span class="pill <%= q.status %>"><%= fmt.status(q.status) %></span></td></tr>
+      <% }) %>
+      </tbody></table>
+    </div>
+  </div>
+  <div>
+    <%- include('../../partials/docs', { docs, entityType: 'product', entityId: p.id, redirect: '/admin/products/' + p.id, kinds: ['product_photo','certificate','qc_report','other'], heading: 'Product photos & files', defaultKind: 'product_photo', defaultVisible: true }) %>
+  </div>
+</div>
+<%- include('../../partials/foot') %>

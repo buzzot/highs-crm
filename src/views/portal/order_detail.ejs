@@ -1,0 +1,65 @@
+<%- include('../partials/head') %>
+<% const steps = ['confirmed','deposit_paid','in_production','qc','packed','shipped','in_transit','customs','delivered','closed']; const idx = steps.indexOf(order.status); %>
+<div class="pagehead">
+  <div><a class="back" href="/portal/orders">← Orders</a><h1>Order <%= order.order_no %></h1></div>
+  <span class="pill lg <%= order.status %>"><%= fmt.status(order.status) %></span>
+</div>
+<div class="card">
+  <ol class="steps">
+    <% steps.forEach((s, i) => { %><li class="<%= i < idx ? 'done' : i === idx ? 'now' : '' %>"><%= fmt.status(s) %></li><% }) %>
+  </ol>
+</div>
+<div class="grid2">
+  <div>
+    <div class="card">
+      <h2>Items</h2>
+      <table class="tbl"><thead><tr><th>Description</th><th>Qty</th><th>Unit price</th><th>Total</th></tr></thead><tbody>
+      <% order.order_items.forEach(i => { %><tr><td><%= i.description %></td><td><%= i.quantity %></td><td><%= fmt.money(i.unit_price, order.currency, 4) %></td><td><%= fmt.money(i.quantity * i.unit_price, order.currency) %></td></tr><% }) %>
+      <tr class="total"><td colspan="3">Goods total</td><td><%= fmt.money(order.subtotal, order.currency) %></td></tr>
+      </tbody></table>
+      <% if (order.client_notes) { %><p class="pre"><%= order.client_notes %></p><% } %>
+    </div>
+    <div class="card">
+      <h2>Shipments</h2>
+      <% if (!shipments.length) { %><p class="muted">Not shipped yet.</p><% } %>
+      <% shipments.forEach(s => { %>
+        <div class="quote">
+          <div class="qhead"><strong><%= fmt.status(s.mode).toUpperCase() %></strong> <span class="pill <%= s.status %>"><%= fmt.status(s.status) %></span></div>
+          <dl class="dl">
+            <dt>Route</dt><dd><%= s.origin_port || '—' %> → <%= s.destination_port || '—' %> (<%= s.incoterm %>)</dd>
+            <dt>Tracking / B/L</dt><dd><%= s.tracking_no || s.bl_no || '—' %></dd>
+            <dt>Container</dt><dd><%= s.container_no || '—' %></dd>
+            <dt>ETD / ETA</dt><dd><%= fmt.date(s.etd) %> / <%= fmt.date(s.eta) %></dd>
+            <dt>Export declaration</dt><dd><%= s.export_declaration_no || (s.export_official ? 'pending' : '—') %></dd>
+            <dt>Cargo</dt><dd><%= s.cartons || '—' %> ctns · <%= fmt.num(s.gross_weight_kg,1) %> kg · <%= fmt.num(s.volume_cbm,3) %> cbm</dd>
+          </dl>
+        </div>
+      <% }) %>
+    </div>
+    <% if (packing.length) { %>
+    <div class="card">
+      <h2>Packing list</h2>
+      <table class="tbl"><thead><tr><th>Carton</th><th>Description</th><th>Qty</th><th>Dims (cm)</th><th>GW kg</th><th>CBM</th></tr></thead><tbody>
+      <% packing.forEach(p => { %><tr><td><%= p.carton_no %></td><td><%= p.description %></td><td><%= p.quantity %></td><td><%= p.length_cm %>×<%= p.width_cm %>×<%= p.height_cm %></td><td><%= fmt.num(p.gross_weight_kg,1) %></td><td><%= fmt.num(p.cbm,3) %></td></tr><% }) %>
+      </tbody></table>
+    </div>
+    <% } %>
+  </div>
+  <div>
+    <div class="card">
+      <h2>Documents & photos</h2>
+      <% if (!documents.length) { %><p class="muted">Nothing uploaded yet.</p><% } %>
+      <ul class="files">
+      <% documents.forEach(d => { %><li><span class="tag"><%= fmt.status(d.kind) %></span> <a href="/portal/documents/<%= d.id %>/download" target="_blank"><%= d.title %></a> <span class="muted small"><%= fmt.date(d.created_at) %></span></li><% }) %>
+      </ul>
+    </div>
+    <div class="card">
+      <h2>Timeline</h2>
+      <ul class="timeline">
+        <% events.forEach(e => { %><li><span class="t"><%= fmt.datetime(e.created_at) %></span> <%= fmt.status(e.action) %><% if (e.detail?.note) { %> — <%= e.detail.note %><% } %></li><% }) %>
+        <li><span class="t"><%= fmt.datetime(order.created_at) %></span> order confirmed</li>
+      </ul>
+    </div>
+  </div>
+</div>
+<%- include('../partials/foot') %>

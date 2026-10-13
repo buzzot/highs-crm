@@ -1,0 +1,20 @@
+<%- include('../../partials/head') %>
+<div class="card narrow-md">
+  <a class="back" href="/admin/orders">← Orders</a>
+  <h1>New order</h1>
+  <p class="muted">Most orders are created from an accepted quote on the Sourcing page. Use this for repeat orders or deals agreed offline — add items on the next screen.</p>
+  <form method="post" action="/admin/orders">
+    <div class="row">
+      <label class="grow2">Client <select name="org_id" required><option value="">—</option><% clients.forEach(c => { %><option value="<%= c.id %>" <%= org === c.id ? 'selected' : '' %>><%= c.name %></option><% }) %></select></label>
+      <label>Currency <select name="currency"><% currencies.forEach(c => { %><option><%= c %></option><% }) %></select></label>
+    </div>
+    <div class="row">
+      <label class="grow2">Supplier <select name="supplier_id"><option value="">—</option><% suppliers.forEach(s => { %><option value="<%= s.id %>"><%= s.name %></option><% }) %></select></label>
+      <label>Expected ship date <input type="date" name="expected_ship_date"></label>
+    </div>
+    <label>Note for client <textarea name="client_notes" rows="2"></textarea></label>
+    <label>Internal notes <textarea name="internal_notes" rows="2"></textarea></label>
+    <div class="actions"><button class="btn primary">Create order</button></div>
+  </form>
+</div>
+<%- include('../../partials/foot') %>

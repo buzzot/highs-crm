@@ -1,0 +1,47 @@
+<%- include('../../partials/head') %>
+<div class="card narrow-md">
+  <a class="back" href="<%= s.id ? '/admin/logistics/shipments/' + s.id : '/admin/logistics' %>">← Back</a>
+  <h1><%= title %></h1>
+  <% if (error) { %><div class="alert err"><%= error %></div><% } %>
+  <form method="post" action="<%= s.id ? '/admin/logistics/shipments/' + s.id : '/admin/logistics/shipments' %>">
+    <div class="row">
+      <% if (!s.id) { %>
+      <label class="grow2">Order <select name="order_id" required><option value="">—</option><% orders.forEach(o => { %><option value="<%= o.id %>" <%= s.order_id === o.id ? 'selected' : '' %>><%= o.order_no %> · <%= o.organizations?.name %></option><% }) %></select></label>
+      <% } %>
+      <label class="grow2">Forwarder <select name="forwarder_id"><option value="">—</option><% forwarders.forEach(f => { %><option value="<%= f.id %>" <%= s.forwarder_id === f.id ? 'selected' : '' %>><%= f.name %></option><% }) %></select></label>
+    </div>
+    <div class="row">
+      <label>Mode <select name="mode"><% modes.forEach(m => { %><option value="<%= m %>" <%= s.mode === m ? 'selected' : '' %>><%= fmt.status(m) %></option><% }) %></select></label>
+      <label>Incoterm <select name="incoterm"><% incoterms.forEach(i => { %><option <%= s.incoterm === i ? 'selected' : '' %>><%= i %></option><% }) %></select></label>
+      <label>Status <select name="status"><% statuses.forEach(st => { %><option value="<%= st %>" <%= s.status === st ? 'selected' : '' %>><%= fmt.status(st) %></option><% }) %></select></label>
+    </div>
+    <div class="row">
+      <label>Origin port <input name="origin_port" value="<%= s.origin_port || '' %>" placeholder="Ningbo / Shenzhen / Yantian"></label>
+      <label>Destination port <input name="destination_port" value="<%= s.destination_port || '' %>"></label>
+    </div>
+    <div class="row">
+      <label>B/L / AWB no. <input name="bl_no" value="<%= s.bl_no || '' %>"></label>
+      <label>Container no. <input name="container_no" value="<%= s.container_no || '' %>"></label>
+      <label>Tracking no. <input name="tracking_no" value="<%= s.tracking_no || '' %>"></label>
+    </div>
+    <fieldset>
+      <legend>Export declaration (China customs)</legend>
+      <label class="check"><input type="checkbox" name="export_official" <%= s.export_official === true || s.export_official === 'on' ? 'checked' : '' %>> Official export — goods declared to customs under a government export declaration</label>
+      <label>Export declaration no. (报关单号) <input name="export_declaration_no" value="<%= s.export_declaration_no || '' %>" placeholder="18-digit customs declaration number"></label>
+    </fieldset>
+    <div class="row">
+      <label>ETD <input type="date" name="etd" value="<%= s.etd || '' %>"></label>
+      <label>ETA <input type="date" name="eta" value="<%= s.eta || '' %>"></label>
+      <label>ATD <input type="date" name="atd" value="<%= s.atd || '' %>"></label>
+      <label>ATA <input type="date" name="ata" value="<%= s.ata || '' %>"></label>
+    </div>
+    <div class="row">
+      <label>Cartons <input type="number" name="cartons" value="<%= s.cartons ?? '' %>"></label>
+      <label>Gross weight kg <input type="number" step="0.001" name="gross_weight_kg" value="<%= s.gross_weight_kg ?? '' %>"></label>
+      <label>Volume CBM <input type="number" step="0.0001" name="volume_cbm" value="<%= s.volume_cbm ?? '' %>"></label>
+    </div>
+    <label>Notes <textarea name="notes" rows="2"><%= s.notes || '' %></textarea></label>
+    <div class="actions"><button class="btn primary">Save shipment</button></div>
+  </form>
+</div>
+<%- include('../../partials/foot') %>

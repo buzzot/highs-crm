@@ -1,0 +1,23 @@
+<%- include('../partials/head') %>
+<div class="card narrow-md">
+  <h1>New sourcing request</h1>
+  <p class="muted">Describe the product you need. Photos, links or reference samples help us source faster.</p>
+  <% if (error) { %><div class="alert err"><%= error %></div><% } %>
+  <form method="post" action="/portal/requests" enctype="multipart/form-data">
+    <label>Product / title <input name="title" required value="<%= form.title || '' %>" placeholder="e.g. Stainless steel tumbler 500ml, custom logo"></label>
+    <label>Details <textarea name="description" rows="6" placeholder="Specifications, materials, colours, packaging, certifications, reference links…"><%= form.description || '' %></textarea></label>
+    <div class="row">
+      <label>Quantity <input type="number" name="quantity" min="1" value="<%= form.quantity || '' %>"></label>
+      <label>Target unit price <input type="number" step="0.0001" name="target_unit_price" value="<%= form.target_unit_price || '' %>"></label>
+      <label>Currency <select name="target_currency"><option>USD</option><option>EUR</option><option>GBP</option><option>CNY</option></select></label>
+    </div>
+    <div class="row">
+      <label>Destination country <input name="destination_country" value="<%= form.destination_country || '' %>"></label>
+      <label>Destination city / port <input name="destination_city" value="<%= form.destination_city || '' %>"></label>
+      <label>Needed by <input type="date" name="needed_by" value="<%= form.needed_by || '' %>"></label>
+    </div>
+    <label>Photos / reference files <input type="file" name="files" multiple accept="image/*,.pdf,.xlsx,.docx"></label>
+    <div class="actions"><button class="btn primary">Submit request</button> <a class="btn" href="/portal/requests">Cancel</a></div>
+  </form>
+</div>
+<%- include('../partials/foot') %>

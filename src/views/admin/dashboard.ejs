@@ -1,0 +1,114 @@
+<%- include('../partials/head') %>
+<div class="pagehead">
+  <h1>Dashboard</h1>
+  <div class="actions"><a class="btn" href="/admin/orders/new">+ Order</a><a class="btn" href="/admin/pricing/quotes/new">+ Quote</a><a class="btn primary" href="/admin/clients/new">+ Client</a></div>
+</div>
+
+<div class="kpis six">
+  <a class="kpi" href="/admin/clients"><span class="n"><%= kpi.clients %></span><span class="l">Active clients</span></a>
+  <a class="kpi" href="/admin/sourcing"><span class="n"><%= kpi.openRequests %></span><span class="l">New requests</span></a>
+  <a class="kpi" href="/admin/pricing?status=draft"><span class="n"><%= kpi.draftQuotes %></span><span class="l">Draft quotes</span></a>
+  <a class="kpi" href="/admin/orders"><span class="n"><%= kpi.openOrders %></span><span class="l">Open orders</span></a>
+  <div class="kpi"><span class="n"><%= fmt.money(kpi.revenue30, 'USD', 0) %></span><span class="l">Revenue · 30 days</span></div>
+  <div class="kpi"><span class="n"><%= fmt.money(kpi.profit30, 'USD', 0) %></span><span class="l">Gross profit · 30 days</span></div>
+</div>
+
+<% if (kpi.lowMargin || exportGaps.length) { %>
+<div class="alerts">
+  <% if (kpi.lowMargin) { %><a class="alert warn" href="/admin/orders">⚠ <%= kpi.lowMargin %> open order(s) below the 20% minimum margin</a><% } %>
+  <% if (exportGaps.length) { %><a class="alert warn" href="/admin/logistics">⚠ <%= exportGaps.length %> shipment(s) left China without an export declaration number on file: <%= exportGaps.map(g => g.orders?.order_no).filter(Boolean).join(', ') %></a><% } %>
+</div>
+<% } %>
+
+<div class="grid2">
+  <div class="card">
+    <h2>Open orders by status</h2>
+    <% const steps = ['confirmed','deposit_paid','in_production','qc','packed','shipped','in_transit','customs']; const maxN = Math.max(1, ...steps.map(s => byStatus[s] || 0)); %>
+    <div class="bars">
+      <% steps.forEach(s => { %>
+        <a class="bar" href="/admin/orders?status=<%= s %>">
+          <span class="bl"><%= fmt.status(s) %></span>
+          <span class="bt"><span class="bf" style="width: <%= ((byStatus[s] || 0) / maxN * 100).toFixed(1) %>%"></span></span>
+          <span class="bn"><%= byStatus[s] || 0 %></span>
+        </a>
+      <% }) %>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Revenue & gross profit · 6 months</h2>
+    <% const maxR = Math.max(1, ...months.map(m => m.revenue)); %>
+    <div class="cols">
+      <% months.forEach(m => { %>
+        <div class="col" title="<%= m.label %>: revenue <%= fmt.money(m.revenue,'USD',0) %>, profit <%= fmt.money(m.profit,'USD',0) %>">
+          <div class="stack">
+            <span class="rev" style="height: <%= (m.revenue / maxR * 100).toFixed(1) %>%"></span>
+            <span class="pro" style="height: <%= (Math.max(0, m.profit) / maxR * 100).toFixed(1) %>%"></span>
+          </div>
+          <span class="cl"><%= m.label %></span>
+        </div>
+      <% }) %>
+    </div>
+    <p class="legend small"><span class="sw rev"></span> Revenue <span class="sw pro"></span> Gross profit</p>
+  </div>
+</div>
+
+<div class="grid2">
+  <div class="card">
+    <h2>Orders in progress <a class="more" href="/admin/orders">all →</a></h2>
+    <% if (!orders.length) { %><p class="muted">No open orders.</p><% } %>
+    <table class="tbl"><tbody>
+      <% orders.forEach(o => { %>
+        <tr>
+          <td><a href="/admin/orders/<%= o.id %>"><%= o.order_no %></a></td>
+          <td><%= o.client_name %></td>
+          <td><span class="pill <%= o.status %>"><%= fmt.status(o.status) %></span></td>
+          <td class="right"><%= fmt.money(o.subtotal, o.currency, 0) %></td>
+          <td class="right <%= o.margin_pct != null && o.margin_pct < 20 ? 'bad' : '' %>"><%= fmt.pct(o.margin_pct) %></td>
+        </tr>
+      <% }) %>
+    </tbody></table>
+  </div>
+  <div class="card">
+    <h2>Latest requests <a class="more" href="/admin/sourcing">all →</a></h2>
+    <% if (!requests.length) { %><p class="muted">No requests yet.</p><% } %>
+    <table class="tbl"><tbody>
+      <% requests.forEach(q => { %>
+        <tr>
+          <td><a href="/admin/sourcing/<%= q.id %>"><%= q.ref %></a></td>
+          <td><%= q.title %><div class="muted small"><%= q.organizations?.name %></div></td>
+          <td><span class="pill <%= q.status %>"><%= fmt.status(q.status) %></span></td>
+          <td class="muted small"><%= fmt.date(q.created_at) %></td>
+        </tr>
+      <% }) %>
+    </tbody></table>
+  </div>
+</div>
+
+<div class="grid2">
+  <div class="card">
+    <h2>Shipments on the move <a class="more" href="/admin/logistics">all →</a></h2>
+    <% if (!shipments.length) { %><p class="muted">Nothing in transit.</p><% } %>
+    <table class="tbl"><tbody>
+      <% shipments.forEach(s => { %>
+        <tr>
+          <td><a href="/admin/logistics/shipments/<%= s.id %>"><%= s.orders?.order_no %></a><div class="muted small"><%= s.orders?.organizations?.name %></div></td>
+          <td><%= fmt.status(s.mode).toUpperCase() %></td>
+          <td><span class="pill <%= s.status %>"><%= fmt.status(s.status) %></span></td>
+          <td class="muted small">ETA <%= fmt.date(s.eta) %></td>
+        </tr>
+      <% }) %>
+    </tbody></table>
+  </div>
+  <div class="card">
+    <h2>Recent activity</h2>
+    <ul class="timeline">
+      <% activity.forEach(e => { %>
+        <li><span class="t"><%= fmt.datetime(e.created_at) %></span>
+          <a href="/admin/<%= e.entity_type === 'request' ? 'sourcing' : e.entity_type === 'order' ? 'orders' : e.entity_type === 'shipment' ? 'logistics/shipments' : e.entity_type + 's' %>/<%= e.entity_id %>"><%= e.entity_type %></a>
+          <%= fmt.status(e.action) %><% if (e.detail?.note) { %> — <%= e.detail.note %><% } %>
+          <span class="muted small">· <%= e.profiles?.full_name || e.profiles?.email || 'system' %></span></li>
+      <% }) %>
+    </ul>
+  </div>
+</div>
+<%- include('../partials/foot') %>

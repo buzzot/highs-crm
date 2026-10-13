@@ -1,0 +1,58 @@
+<%- include('../../partials/head') %>
+<% const editable = ['draft','sent'].includes(q.status); const ai = q.ai_check; %>
+<div class="pagehead">
+  <div><a class="back" href="<%= q.request_id ? '/admin/sourcing/' + q.request_id : '/admin/pricing' %>">← <%= q.requests?.ref || 'Pricing' %></a>
+    <h1>Quote · <%= q.products?.name || q.requests?.title || 'custom item' %></h1>
+    <p class="muted"><%= q.requests?.organizations?.name %> · <%= q.suppliers?.name || 'no supplier' %> · created <%= fmt.date(q.created_at) %></p></div>
+  <span class="pill lg <%= q.status %>"><%= fmt.status(q.status) %></span>
+</div>
+
+<div class="grid2 wide-left">
+  <div class="card">
+    <% if (q.status === 'sent') { %><div class="alert warn">This quote is visible to the client. Saving changes moves it back to draft until you send it again.</div><% } %>
+    <%- include('_calc', { q, action: '/admin/pricing/quotes/' + q.id, readonly: !editable, submitLabel: 'Save changes' }) %>
+  </div>
+  <div>
+    <div class="card">
+      <h2>AI verification</h2>
+      <% if (!ai) { %><p class="muted">Not checked yet. The check reviews margin rules, arithmetic, FX, MOQ, freight vs weight/volume, HS code and lead time vs the client's date.</p>
+      <% } else { %>
+        <div class="aiscore <%= ai.ok ? 'ok' : 'warn' %>"><span class="n"><%= ai.score %></span><span><%= ai.ok ? 'Looks good' : 'Needs attention' %></span></div>
+        <% if (ai.summary) { %><p><%= ai.summary %></p><% } %>
+        <ul class="issues">
+          <% (ai.issues || []).forEach(i => { %><li class="<%= i.severity %>"><span class="tag"><%= i.severity %></span> <strong><%= i.field %></strong> — <%= i.message %></li><% }) %>
+        </ul>
+        <p class="muted small"><%= ai.model ? 'Model ' + ai.model : 'Rules only' %> · <%= fmt.datetime(ai.checked_at) %></p>
+      <% } %>
+      <% if (editable) { %><form method="post" action="/admin/pricing/quotes/<%= q.id %>/verify"><button class="btn"><%= ai ? 'Re-run check' : 'Run AI check' %></button></form><% } %>
+    </div>
+
+    <div class="card">
+      <h2>Next step</h2>
+      <% if (q.status === 'draft') { %>
+        <form method="post" action="/admin/pricing/quotes/<%= q.id %>/send">
+          <% if (!calc.meetsMinimum) { %>
+            <div class="alert err">Margin <%= calc.marginPct %>% is below the <%= settings.pricing.min_margin_pct %>% minimum.</div>
+            <% if (user.role === 'admin') { %>
+              <label class="check"><input type="checkbox" name="override"> Admin override</label>
+              <label>Reason <input name="reason" placeholder="e.g. strategic first order"></label>
+            <% } %>
+          <% } %>
+          <% if (!ai) { %><label class="check"><input type="checkbox" name="skip_ai"> Send without AI check</label><% } %>
+          <button class="btn primary wide">Send to client</button>
+        </form>
+      <% } else if (q.status === 'sent') { %>
+        <p>Waiting for the client to accept in their portal.</p>
+        <% if (user.role === 'admin') { %><form method="post" action="/admin/sourcing/quotes/<%= q.id %>/convert"><button class="btn">Client confirmed offline → create order</button></form><% } %>
+      <% } else if (q.status === 'accepted') { %>
+        <% if (order) { %><p>Order <a href="/admin/orders/<%= order.id %>"><%= order.order_no %></a> created.</p>
+        <% } else { %><form method="post" action="/admin/sourcing/quotes/<%= q.id %>/convert"><button class="btn primary wide">Create order</button></form><% } %>
+      <% } else { %><p class="muted">This quote is <%= q.status %>.</p><% } %>
+      <div class="actions">
+        <form method="post" action="/admin/pricing/quotes/<%= q.id %>/duplicate"><button class="btn small">Duplicate</button></form>
+        <% if (editable) { %><form method="post" action="/admin/pricing/quotes/<%= q.id %>/withdraw" onsubmit="return confirm('Withdraw this quote?')"><button class="btn small">Withdraw</button></form><% } %>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include('../../partials/foot') %>

@@ -1,0 +1,81 @@
+<%#
+  Shared pricing calculator / quote form.
+  locals: q (values), action (form url), settings, products, suppliers, requests, incoterms, currencies, [readonly], [submitLabel]
+%>
+<% const ro = typeof readonly !== 'undefined' && readonly; %>
+<form method="post" action="<%= action %>" class="calc" id="calcForm" data-min-margin="<%= settings.pricing.min_margin_pct %>">
+  <script type="application/json" id="pricingData"><%- JSON.stringify({ fx: settings.fx, products, requests: requests.map(r => ({ id: r.id, quantity: r.quantity, target_unit_price: r.target_unit_price, target_currency: r.target_currency })) }).replace(/</g, '\\u003c') %></script>
+  <fieldset <%= ro ? 'disabled' : '' %>>
+  <div class="calcgrid">
+    <div class="inputs">
+      <label>Client request <select name="request_id" id="f_request"><option value="">— none (calculator only) —</option><% requests.forEach(r => { %><option value="<%= r.id %>" <%= q.request_id === r.id ? 'selected' : '' %>><%= r.ref %> · <%= r.title %> · <%= r.organizations?.name || '' %></option><% }) %></select></label>
+      <div class="row">
+        <label class="grow2">Product <select name="product_id" id="f_product"><option value="">— custom —</option><% products.forEach(p => { %><option value="<%= p.id %>" <%= q.product_id === p.id ? 'selected' : '' %>><%= p.name %><%= p.sku ? ' · ' + p.sku : '' %></option><% }) %></select></label>
+        <label class="grow2">Supplier <select name="supplier_id" id="f_supplier"><option value="">—</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" data-lead="<%= s.lead_time_days || '' %>" <%= q.supplier_id === s.id ? 'selected' : '' %>><%= s.name %></option><% }) %></select></label>
+      </div>
+      <h3>Product cost</h3>
+      <div class="row">
+        <label>Quantity <input type="number" min="1" name="quantity" id="f_qty" required value="<%= q.quantity ?? '' %>"><span class="hint" id="moqHint"></span></label>
+        <label>Supplier unit cost <input type="number" step="0.0001" name="unit_cost" id="f_cost" required value="<%= q.unit_cost ?? '' %>"></label>
+        <label>Cost currency <select name="cost_currency" id="f_ccur"><% currencies.forEach(c => { %><option <%= q.cost_currency === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+      </div>
+      <div class="row">
+        <label>Sell currency <select name="sell_currency" id="f_scur"><% currencies.forEach(c => { %><option <%= q.sell_currency === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+        <label>FX rate <input type="number" step="0.000001" name="fx_rate" id="f_fx" required value="<%= q.fx_rate ?? 1 %>"><span class="hint">cost → sell currency</span></label>
+        <label>Margin % on cost <input type="number" step="0.1" name="margin_pct" id="f_margin" required value="<%= q.margin_pct ?? settings.pricing.default_margin_pct %>"><span class="hint">min <%= settings.pricing.min_margin_pct %>%</span></label>
+      </div>
+      <div class="row">
+        <label>Or target unit price → margin <input type="number" step="0.0001" id="f_target" placeholder="solve for margin"></label>
+      </div>
+      <h3>Logistics estimate <span class="muted small">— passed through, not part of margin</span></h3>
+      <details class="helper">
+        <summary class="link small">Freight helper</summary>
+        <div class="row">
+          <label>Mode <select id="h_mode"><option value="cbm">Sea LCL (per cbm)</option><option value="fcl">Sea FCL (per container)</option><option value="kg">Air / express (per kg)</option></select></label>
+          <label>Rate <input type="number" step="0.01" id="h_rate" placeholder="e.g. 85"></label>
+          <label>Duty % <input type="number" step="0.1" id="h_duty" placeholder="destination duty"></label>
+          <button type="button" class="btn small" id="h_apply">Apply</button>
+        </div>
+        <p class="hint" id="h_note">Uses the product's carton size/weight × quantity.</p>
+      </details>
+      <div class="row">
+        <label>Freight total <input type="number" step="0.01" name="freight_estimate" id="f_freight" value="<%= q.freight_estimate ?? 0 %>"></label>
+        <label>Duties & taxes total <input type="number" step="0.01" name="duties_estimate" id="f_duties" value="<%= q.duties_estimate ?? 0 %>"></label>
+        <label>Other total <input type="number" step="0.01" name="other_costs" id="f_other" value="<%= q.other_costs ?? 0 %>"></label>
+      </div>
+      <h3>Terms</h3>
+      <div class="row">
+        <label>Incoterm <select name="incoterm"><% incoterms.forEach(i => { %><option <%= q.incoterm === i ? 'selected' : '' %>><%= i %></option><% }) %></select></label>
+        <label>Lead time days <input type="number" name="lead_time_days" id="f_lead" value="<%= q.lead_time_days ?? '' %>"></label>
+        <label>Valid until <input type="date" name="valid_until" value="<%= q.valid_until || '' %>"></label>
+      </div>
+      <label>Note to client <textarea name="notes" rows="2"><%= q.notes || '' %></textarea></label>
+    </div>
+
+    <div class="results card inset" id="results" aria-live="polite">
+      <div class="big"><span class="l">Unit price ex-logistics</span><span class="n" id="r_unit">—</span></div>
+      <div class="big"><span class="l">Landed unit price</span><span class="n" id="r_landed">—</span></div>
+      <dl class="dl tight">
+        <dt>Unit cost in sell ccy</dt><dd id="r_ucs">—</dd>
+        <dt>Logistics / unit</dt><dd id="r_lpu">—</dd>
+        <dt>Goods total</dt><dd id="r_goods">—</dd>
+        <dt>Product cost total</dt><dd id="r_costtot">—</dd>
+        <dt>Gross profit</dt><dd id="r_profit">—</dd>
+        <dt>Landed total</dt><dd id="r_landedtot">—</dd>
+        <dt>vs client target</dt><dd id="r_target">—</dd>
+      </dl>
+      <div id="r_margin" class="marginbadge">—</div>
+      <ul id="r_warn" class="warnings"></ul>
+      <div id="aiBox" class="ai hidden"></div>
+    </div>
+  </div>
+  </fieldset>
+  <% if (!ro) { %>
+  <div class="actions sticky">
+    <button type="button" class="btn" id="aiCheck">AI check</button>
+    <button class="btn" name="action" value="save"><%= typeof submitLabel !== 'undefined' ? submitLabel : 'Save quote' %></button>
+    <button class="btn primary" name="action" value="verify">Save & AI verify</button>
+  </div>
+  <% } %>
+</form>
+<script type="module" src="/js/calc.js"></script>

@@ -1,0 +1,75 @@
+<%- include('../../partials/head') %>
+<div class="pagehead">
+  <h1>Logistics</h1>
+  <div class="actions"><a class="btn" href="/admin/logistics?status=<%= showAll ? '' : 'all' %>"><%= showAll ? 'Hide delivered' : 'Show delivered' %></a><a class="btn primary" href="/admin/logistics/shipments/new">+ Shipment</a></div>
+</div>
+<div class="kpis">
+  <div class="kpi"><span class="n"><%= kpi.active %></span><span class="l">Active shipments</span></div>
+  <div class="kpi <%= kpi.late ? 'bad' : '' %>"><span class="n"><%= kpi.late %></span><span class="l">Past ETA</span></div>
+  <div class="kpi"><span class="n"><%= fmt.money(kpi.unpaid, 'USD', 0) %></span><span class="l">Unpaid freight</span></div>
+  <div class="kpi <%= kpi.exportMissing ? 'bad' : '' %>"><span class="n"><%= kpi.exportMissing %></span><span class="l">Missing export declaration</span></div>
+</div>
+<div class="card">
+  <table class="tbl">
+    <thead><tr><th>Order</th><th>Mode</th><th>Forwarder</th><th>Route</th><th>Ref</th><th>ETD / ETA</th><th>Export decl.</th><th class="right">Freight</th><th>Status</th></tr></thead>
+    <tbody>
+    <% if (!shipments.length) { %><tr><td colspan="9" class="muted">No shipments.</td></tr><% } %>
+    <% shipments.forEach(s => { const late = s.eta && s.eta < today && s.status !== 'delivered'; %>
+      <tr>
+        <td><a href="/admin/logistics/shipments/<%= s.id %>"><strong><%= s.orders?.order_no %></strong></a><div class="muted small"><%= s.orders?.organizations?.name %></div></td>
+        <td><%= fmt.status(s.mode).toUpperCase() %><div class="muted small"><%= s.incoterm %></div></td>
+        <td class="small"><%= s.forwarders?.name || '—' %></td>
+        <td class="small"><%= s.origin_port || '—' %> → <%= s.destination_port || '—' %></td>
+        <td class="small"><%= s.bl_no || s.tracking_no || s.container_no || '—' %></td>
+        <td class="small <%= late ? 'bad' : '' %>"><%= fmt.date(s.etd) %><br><%= fmt.date(s.eta) %></td>
+        <td class="small"><% if (s.export_declaration_no) { %><%= s.export_declaration_no %><% } else if (s.exportMissing) { %><span class="bad">missing</span><% } else if (s.export_official) { %><span class="muted">pending</span><% } else { %><span class="muted">unofficial</span><% } %></td>
+        <td class="right"><%= fmt.money(s.freight, s.orders?.currency || 'USD', 0) %><% if (s.unpaid > 0) { %><div class="small bad"><%= fmt.money(s.unpaid, s.orders?.currency || 'USD', 0) %> unpaid</div><% } %></td>
+        <td>
+          <form method="post" action="/admin/logistics/shipments/<%= s.id %>/status" class="inline autosubmit">
+            <select name="status" class="pillselect <%= s.status %>"><% ['planned','booked','picked_up','departed','arrived','customs','delivered'].forEach(st => { %><option value="<%= st %>" <%= s.status === st ? 'selected' : '' %>><%= fmt.status(st) %></option><% }) %></select>
+          </form>
+        </td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table>
+</div>
+
+<div class="card" id="forwarders">
+  <h2>Forwarders (3PL)</h2>
+  <table class="tbl">
+    <thead><tr><th>Name</th><th>Contact</th><th>Modes</th><th>Notes</th><th></th></tr></thead>
+    <tbody>
+    <% forwarders.forEach(f => { %>
+      <tr>
+        <td><strong><%= f.name %></strong></td>
+        <td class="small"><%= f.contact_name || '' %> <%= f.email || '' %> <%= f.phone || '' %> <%= f.wechat ? 'WeChat ' + f.wechat : '' %></td>
+        <td><% (f.modes || []).forEach(m => { %><span class="tag"><%= fmt.status(m) %></span> <% }) %></td>
+        <td class="small"><%= f.notes || '' %></td>
+        <td class="right">
+          <details class="inline-edit"><summary class="link small">edit</summary>
+            <form method="post" action="/admin/logistics/forwarders/<%= f.id %>" class="sub">
+              <div class="row"><label>Name <input name="name" value="<%= f.name %>" required></label><label>Contact <input name="contact_name" value="<%= f.contact_name || '' %>"></label></div>
+              <div class="row"><label>Email <input name="email" value="<%= f.email || '' %>"></label><label>Phone <input name="phone" value="<%= f.phone || '' %>"></label><label>WeChat <input name="wechat" value="<%= f.wechat || '' %>"></label></div>
+              <div class="row"><% ['sea_fcl','sea_lcl','air','rail','express'].forEach(m => { %><label class="check"><input type="checkbox" name="modes" value="<%= m %>" <%= (f.modes||[]).includes(m) ? 'checked' : '' %>> <%= fmt.status(m) %></label><% }) %></div>
+              <label>Notes <input name="notes" value="<%= f.notes || '' %>"></label>
+              <button class="btn small primary">Save</button>
+            </form>
+          </details>
+        </td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table>
+  <details>
+    <summary class="btn small">+ Add forwarder</summary>
+    <form method="post" action="/admin/logistics/forwarders" class="sub">
+      <div class="row"><label>Name <input name="name" required></label><label>Contact <input name="contact_name"></label></div>
+      <div class="row"><label>Email <input name="email"></label><label>Phone <input name="phone"></label><label>WeChat <input name="wechat"></label></div>
+      <div class="row"><% ['sea_fcl','sea_lcl','air','rail','express'].forEach(m => { %><label class="check"><input type="checkbox" name="modes" value="<%= m %>"> <%= fmt.status(m) %></label><% }) %></div>
+      <label>Notes <input name="notes"></label>
+      <button class="btn primary">Add</button>
+    </form>
+  </details>
+</div>
+<%- include('../../partials/foot') %>

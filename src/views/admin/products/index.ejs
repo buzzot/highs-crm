@@ -1,0 +1,32 @@
+<%- include('../../partials/head') %>
+<div class="pagehead">
+  <h1>Products</h1>
+  <a class="btn primary" href="/admin/products/new">+ New product</a>
+</div>
+<div class="card">
+  <form class="row tight" method="get">
+    <input name="q" value="<%= query.q || '' %>" placeholder="Search name, SKU, HS code…">
+    <select name="category"><option value="">All categories</option><% categories.forEach(c => { %><option <%= query.category === c ? 'selected' : '' %>><%= c %></option><% }) %></select>
+    <select name="supplier"><option value="">All suppliers</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= query.supplier === s.id ? 'selected' : '' %>><%= s.name %></option><% }) %></select>
+    <button class="btn">Filter</button>
+  </form>
+  <table class="tbl">
+    <thead><tr><th></th><th>Product</th><th>Category</th><th>Supplier</th><th class="right">Unit cost</th><th>MOQ</th><th>HS code</th><th>Carton</th></tr></thead>
+    <tbody>
+    <% if (!products.length) { %><tr><td colspan="8" class="muted">No products found.</td></tr><% } %>
+    <% products.forEach(p => { %>
+      <tr>
+        <td class="thumbcell"><% if (thumb[p.id]) { %><img class="thumb" loading="lazy" src="/admin/documents/<%= thumb[p.id] %>/download" alt=""><% } else { %><span class="thumb empty"></span><% } %></td>
+        <td><a href="/admin/products/<%= p.id %>"><strong><%= p.name %></strong></a><div class="muted small"><%= p.sku || '' %></div></td>
+        <td><%= p.category || '—' %></td>
+        <td><% if (p.suppliers) { %><a href="/admin/suppliers/<%= p.suppliers.id %>"><%= p.suppliers.name %></a><% } else { %>—<% } %></td>
+        <td class="right"><%= fmt.money(p.unit_cost, p.cost_currency, 4) %></td>
+        <td><%= p.moq ?? '—' %></td>
+        <td><%= p.hs_code || '—' %></td>
+        <td class="small"><%= p.carton_qty ? p.carton_qty + ' pcs · ' + fmt.num(p.carton_cbm, 3) + ' cbm' : '—' %></td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table>
+</div>
+<%- include('../../partials/foot') %>

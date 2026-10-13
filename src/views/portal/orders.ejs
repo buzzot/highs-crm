@@ -1,0 +1,19 @@
+<%- include('../partials/head') %>
+<div class="pagehead"><h1>My orders</h1></div>
+<div class="card">
+<table class="tbl">
+  <thead><tr><th>Order</th><th>Status</th><th>Goods total</th><th>Tracking</th><th>ETA</th><th>Created</th></tr></thead>
+  <tbody>
+  <% if (!orders.length) { %><tr><td colspan="6" class="muted">No orders yet.</td></tr><% } %>
+  <% orders.forEach(o => { const sh = (o.shipments||[]).slice().sort((a,b)=>(b.eta||'').localeCompare(a.eta||''))[0]; %>
+    <tr>
+      <td><a href="/portal/orders/<%= o.id %>"><%= o.order_no %></a></td>
+      <td><span class="pill <%= o.status %>"><%= fmt.status(o.status) %></span></td>
+      <td><%= fmt.money(o.subtotal, o.currency) %></td>
+      <td><%= sh?.tracking_no || '—' %></td><td><%= fmt.date(sh?.eta) %></td><td class="muted"><%= fmt.date(o.created_at) %></td>
+    </tr>
+  <% }) %>
+  </tbody>
+</table>
+</div>
+<%- include('../partials/foot') %>

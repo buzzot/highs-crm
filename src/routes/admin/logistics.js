@@ -1,0 +1,171 @@
+import { Router } from '../../lib/router.js';
+import { admin } from '../../lib/supabase.js';
+import { log } from '../../lib/activity.js';
+import { clean, bool, back, notFound, getSettings, fxRate, SHIPMENT_STATUSES, SHIPMENT_MODES, FREIGHT_TYPES, INCOTERMS, CURRENCIES } from '../../lib/util.js';
+import { landed } from '../../lib/landed.js';
+
+const r = Router();
+const SHIP_FIELDS = ['order_id', 'forwarder_id', 'mode', 'incoterm', 'origin_port', 'destination_port', 'container_no', 'tracking_no', 'bl_no',
+  'export_declaration_no', 'etd', 'eta', 'atd', 'ata', 'status', 'gross_weight_kg', 'volume_cbm', 'cartons', 'notes'];
+const shipBody = b => ({ ...clean(b, SHIP_FIELDS), export_official: bool(b.export_official) });
+const PAST_DEPARTURE = ['departed', 'arrived', 'customs', 'delivered'];
+
+r.get('/', async (req, res) => {
+  const showAll = req.query.status === 'all';
+  let q = admin.from('shipments')
+    .select('*, forwarders(name), orders(id, order_no, currency, organizations(name)), freight_costs(amount, fx_to_order, paid)')
+    .order('eta', { ascending: true, nullsFirst: false });
+  if (!showAll) q = q.neq('status', 'delivered');
+  const [{ data: shipments }, { data: forwarders }] = await Promise.all([q, admin.from('forwarders').select('*').order('name')]);
+  const list = (shipments || []).map(s => {
+    const costs = s.freight_costs || [];
+    return {
+      ...s,
+      freight: costs.reduce((t, c) => t + Number(c.amount) * Number(c.fx_to_order || 1), 0),
+      unpaid: costs.filter(c => !c.paid).reduce((t, c) => t + Number(c.amount) * Number(c.fx_to_order || 1), 0),
+      exportMissing: s.export_official && !s.export_declaration_no && PAST_DEPARTURE.includes(s.status),
+    };
+  });
+  const today = new Date().toISOString().slice(0, 10);
+  const kpi = {
+    active: list.filter(s => s.status !== 'delivered').length,
+    late: list.filter(s => s.eta && s.eta < today && s.status !== 'delivered').length,
+    unpaid: list.reduce((t, s) => t + s.unpaid, 0),
+    exportMissing: list.filter(s => s.exportMissing).length,
+  };
+  res.render('admin/logistics/index', { title: 'Logistics', shipments: list, forwarders: forwarders || [], kpi, showAll, today });
+});
+
+// ---- forwarders ----
+r.post('/forwarders', async (req, res) => {
+  const b = clean(req.body, ['name', 'contact_name', 'email', 'phone', 'wechat', 'notes']);
+  b.modes = [].concat(req.body.modes || []).filter(m => SHIPMENT_MODES.includes(m));
+  const { error } = await admin.from('forwarders').insert(b);
+  back(res, '/admin/logistics#forwarders', error ? { err: error.message } : { msg: 'Forwarder added.' });
+});
+r.post('/forwarders/:id', async (req, res) => {
+  const b = clean(req.body, ['name', 'contact_name', 'email', 'phone', 'wechat', 'notes']);
+  b.modes = [].concat(req.body.modes || []).filter(m => SHIPMENT_MODES.includes(m));
+  await admin.from('forwarders').update(b).eq('id', req.params.id);
+  back(res, '/admin/logistics#forwarders', { msg: 'Forwarder saved.' });
+});
+
+// ---- shipments ----
+async function shipForm(res, { s, error = null, title }) {
+  const [{ data: orders }, { data: forwarders }] = await Promise.all([
+    admin.from('orders').select('id, order_no, organizations(name)').not('status', 'in', '("closed","cancelled")').order('created_at', { ascending: false }),
+    admin.from('forwarders').select('id, name').order('name'),
+  ]);
+  res.render('admin/logistics/shipment_form', {
+    title, s, error, orders: orders || [], forwarders: forwarders || [],
+    modes: SHIPMENT_MODES, statuses: SHIPMENT_STATUSES, incoterms: INCOTERMS,
+  });
+}
+
+r.get('/shipments/new', async (req, res) => {
+  const s = { order_id: req.query.order_id, mode: 'sea_lcl', incoterm: 'FOB', status: 'planned', export_official: true };
+  if (req.query.order_id) {
+    // pre-fill cargo totals from the packing list
+    const { data: pk } = await admin.from('packing_lists').select('gross_weight_kg, cbm').eq('order_id', req.query.order_id);
+    if (pk?.length) {
+      s.cartons = pk.length;
+      s.gross_weight_kg = Math.round(pk.reduce((t, p) => t + Number(p.gross_weight_kg || 0), 0) * 1000) / 1000;
+      s.volume_cbm = Math.round(pk.reduce((t, p) => t + Number(p.cbm || 0), 0) * 10000) / 10000;
+    }
+  }
+  await shipForm(res, { s, title: 'New shipment' });
+});
+r.post('/shipments', async (req, res) => {
+  const { data, error } = await admin.from('shipments').insert(shipBody(req.body)).select('id, order_id').single();
+  if (error) return shipForm(res, { s: req.body, error: error.message, title: 'New shipment' });
+  await log({ entityType: 'order', entityId: data.order_id, action: 'shipment_created', actorId: req.user.id, clientVisible: true, detail: { mode: req.body.mode } });
+  res.redirect(`/admin/logistics/shipments/${data.id}`);
+});
+
+r.get('/shipments/:id', async (req, res) => {
+  const id = req.params.id;
+  const [{ data: s }, { data: costs }, { data: docs }, settings] = await Promise.all([
+    admin.from('shipments').select('*, forwarders(*), orders(*, organizations(name))').eq('id', id).single(),
+    admin.from('freight_costs').select('*').eq('shipment_id', id).order('created_at'),
+    admin.from('documents').select('*').eq('entity_type', 'shipment').eq('entity_id', id).order('created_at', { ascending: false }),
+    getSettings(admin),
+  ]);
+  if (!s) return notFound(res, 'Shipment');
+  const { data: items } = await admin.from('order_items').select('*').eq('order_id', s.order_id);
+  const { data: order } = await admin.from('orders').select('*').eq('id', s.order_id).single();
+  const totalCost = (costs || []).reduce((t, c) => t + Number(c.amount) * Number(c.fx_to_order || 1), 0);
+  const byType = {};
+  (costs || []).forEach(c => { byType[c.type] = (byType[c.type] || 0) + Number(c.amount) * Number(c.fx_to_order || 1); });
+  res.render('admin/logistics/shipment', {
+    title: `Shipment · ${s.orders?.order_no}`, s, costs: costs || [], docs: docs || [], totalCost, byType,
+    land: landed(order || {}, items || []), order: order || {},
+    freightTypes: FREIGHT_TYPES, statuses: SHIPMENT_STATUSES, currencies: CURRENCIES,
+    defaultFx: c => fxRate(settings, c, s.orders?.currency || 'USD'),
+    fxTable: settings.fx, msg: req.query.msg, err: req.query.err,
+  });
+});
+
+r.get('/shipments/:id/edit', async (req, res) => {
+  const { data: s } = await admin.from('shipments').select('*').eq('id', req.params.id).single();
+  if (!s) return notFound(res, 'Shipment');
+  await shipForm(res, { s, title: 'Edit shipment' });
+});
+r.post('/shipments/:id', async (req, res) => {
+  const id = req.params.id;
+  const { data: before } = await admin.from('shipments').select('status, order_id, export_declaration_no').eq('id', id).single();
+  if (!before) return notFound(res, 'Shipment');
+  const b = shipBody(req.body);
+  delete b.order_id;
+  const { error } = await admin.from('shipments').update(b).eq('id', id);
+  if (error) return shipForm(res, { s: { ...req.body, id }, error: error.message, title: 'Edit shipment' });
+  if (b.status && b.status !== before.status) {
+    await log({ entityType: 'order', entityId: before.order_id, action: `shipment_${b.status}`, actorId: req.user.id, clientVisible: true, detail: { shipment_id: id } });
+    // keep order status roughly in sync with the shipment
+    const map = { departed: 'shipped', arrived: 'in_transit', customs: 'customs', delivered: 'delivered' };
+    if (map[b.status]) await admin.from('orders').update({ status: map[b.status] }).eq('id', before.order_id).not('status', 'in', '("closed","cancelled")');
+  }
+  if (b.export_declaration_no && b.export_declaration_no !== before.export_declaration_no) {
+    await log({ entityType: 'order', entityId: before.order_id, action: 'export_declared', actorId: req.user.id, clientVisible: true, detail: { note: b.export_declaration_no } });
+  }
+  res.redirect(`/admin/logistics/shipments/${id}`);
+});
+
+// quick status change from the list
+r.post('/shipments/:id/status', async (req, res) => {
+  const to = req.body.status;
+  if (!SHIPMENT_STATUSES.includes(to)) return back(res, '/admin/logistics');
+  const { data: s } = await admin.from('shipments').select('order_id, status').eq('id', req.params.id).single();
+  if (s && s.status !== to) {
+    const patch = { status: to };
+    const today = new Date().toISOString().slice(0, 10);
+    if (to === 'departed') patch.atd = today;
+    if (to === 'arrived') patch.ata = today;
+    await admin.from('shipments').update(patch).eq('id', req.params.id);
+    await log({ entityType: 'order', entityId: s.order_id, action: `shipment_${to}`, actorId: req.user.id, clientVisible: true, detail: { shipment_id: req.params.id } });
+  }
+  back(res, req.body.redirect?.startsWith('/admin') ? req.body.redirect : '/admin/logistics');
+});
+
+// ---- freight costs ----
+r.post('/shipments/:id/costs', async (req, res) => {
+  const b = clean(req.body, ['type', 'description', 'amount', 'currency', 'fx_to_order', 'invoice_ref', 'paid_at']);
+  b.paid = bool(req.body.paid);
+  b.shipment_id = req.params.id;
+  if (!FREIGHT_TYPES.includes(b.type)) b.type = 'other';
+  const { error } = await admin.from('freight_costs').insert(b);
+  back(res, `/admin/logistics/shipments/${req.params.id}#costs`, error ? { err: error.message } : { msg: 'Cost added.' });
+});
+r.post('/costs/:cid/paid', async (req, res) => {
+  const { data: c } = await admin.from('freight_costs').select('shipment_id, paid').eq('id', req.params.cid).single();
+  if (!c) return notFound(res, 'Cost');
+  await admin.from('freight_costs').update({ paid: !c.paid, paid_at: c.paid ? null : new Date().toISOString().slice(0, 10) }).eq('id', req.params.cid);
+  back(res, `/admin/logistics/shipments/${c.shipment_id}#costs`);
+});
+r.post('/costs/:cid/delete', async (req, res) => {
+  const { data: c } = await admin.from('freight_costs').select('shipment_id').eq('id', req.params.cid).single();
+  if (!c) return notFound(res, 'Cost');
+  await admin.from('freight_costs').delete().eq('id', req.params.cid);
+  back(res, `/admin/logistics/shipments/${c.shipment_id}#costs`, { msg: 'Cost removed.' });
+});
+
+export default r;
