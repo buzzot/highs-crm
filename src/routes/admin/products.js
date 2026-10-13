@@ -3,14 +3,21 @@ import { admin } from '../../lib/supabase.js';
 import { clean, notFound } from '../../lib/util.js';
 
 const r = Router();
-const FIELDS = ['sku', 'name', 'category', 'description', 'supplier_id', 'unit_cost', 'cost_currency', 'moq', 'hs_code', 'unit_weight_kg', 'carton_qty', 'carton_cbm', 'carton_weight_kg'];
+const FIELDS = ['sku', 'supplier_sku', 'name', 'category', 'description', 'supplier_id', 'unit_cost', 'cost_currency', 'moq', 'hs_code', 'unit_weight_kg',
+  'unit_length_cm', 'unit_width_cm', 'unit_height_cm', 'carton_qty', 'carton_cbm', 'carton_weight_kg', 'carton_length_cm', 'carton_width_cm', 'carton_height_cm'];
 const like = q => String(q || '').replace(/[,()%]/g, ' ').trim();
 
 // spec is edited as "Key: value" lines and stored as JSON
 const parseSpec = txt => Object.fromEntries(String(txt || '').split('\n').map(l => l.split(':')).filter(p => p.length > 1 && p[0].trim())
   .map(([k, ...v]) => [k.trim(), v.join(':').trim()]));
 const specText = spec => Object.entries(spec || {}).map(([k, v]) => `${k}: ${v}`).join('\n');
-const body = b => ({ ...clean(b, FIELDS), spec: parseSpec(b.spec) });
+const body = b => {
+  const out = { ...clean(b, FIELDS), spec: parseSpec(b.spec) };
+  // carton CBM follows the carton size when all three sides are given
+  const [l, w, h] = ['carton_length_cm', 'carton_width_cm', 'carton_height_cm'].map(k => Number(out[k]));
+  if (l > 0 && w > 0 && h > 0) out.carton_cbm = Math.round(l * w * h / 1e6 * 10000) / 10000;
+  return out;
+};
 
 async function formData() {
   const { data } = await admin.from('suppliers').select('id, name').order('name');
@@ -20,7 +27,7 @@ async function formData() {
 r.get('/', async (req, res) => {
   let q = admin.from('products').select('*, suppliers(id, name)').order('name');
   const s = like(req.query.q);
-  if (s) q = q.or(`name.ilike.%${s}%,sku.ilike.%${s}%,hs_code.ilike.%${s}%`);
+  if (s) q = q.or(`name.ilike.%${s}%,sku.ilike.%${s}%,supplier_sku.ilike.%${s}%,hs_code.ilike.%${s}%`);
   if (req.query.category) q = q.eq('category', req.query.category);
   if (req.query.supplier) q = q.eq('supplier_id', req.query.supplier);
   const [{ data }, { data: cats }, suppliers] = await Promise.all([q, admin.from('products').select('category'), formData()]);

@@ -1,0 +1,65 @@
+<%- include('../../partials/head') %>
+<div class="pagehead">
+  <div><a class="back" href="/admin/products">← Products</a><h1>Import products</h1>
+    <p class="muted">Nothing is saved until you review and confirm. Suppliers are checked for duplicates first.</p></div>
+  <a class="btn" href="/templates/highs-product-import-template.xlsx" download>⇩ Download Excel template</a>
+</div>
+
+<div class="grid2">
+  <div class="card">
+    <h2>Upload a file</h2>
+    <form method="post" action="/admin/products/import" enctype="multipart/form-data" class="dropform" id="importForm">
+      <label class="drop">
+        <input type="file" name="file" required accept=".xlsx,.xlsm,.csv,.pdf,.jpg,.jpeg,.png,.webp">
+        <span class="dicon">⇪</span>
+        <strong>Choose or drop a file</strong>
+        <span class="muted small">Filled template · supplier price list (.xlsx / .csv) · PDF catalogue or quotation · photo of a price list</span>
+        <span class="fname muted small"></span>
+      </label>
+      <button class="btn primary wide" id="importBtn">Read file</button>
+      <p class="muted small" id="importWait" hidden>Reading the file<%= ai ? ' — AI extraction can take up to a minute for long PDFs' : '' %>…</p>
+    </form>
+    <% if (!ai) { %>
+      <div class="alert warn small">AI is not configured, so only Excel/CSV files with recognisable column headers can be read. Set <code>ANTHROPIC_API_KEY</code> in Railway to import PDFs, photos and free-form price lists.</div>
+    <% } %>
+  </div>
+  <div class="card">
+    <h2>How it works</h2>
+    <ol class="howto">
+      <li><strong>Send the template</strong> to the supplier. It has a Supplier sheet (company, address, contact, email, phone/WeChat) and a Products sheet (photo, name, SKU, category, HS code, unit and carton weight/size, pcs per carton, price), in English and Chinese.</li>
+      <li><strong>Upload what comes back</strong> — the template, or any price list / PDF they send instead. <%= ai ? 'AI reads files that are not on the template.' : '' %></li>
+      <li><strong>Review</strong>: confirm the supplier (possible duplicates are flagged — e.g. a typo in the company name), check flagged rows, edit anything inline.</li>
+      <li><strong>Import</strong>: new products are created, existing ones (same supplier SKU) updated, photos attached.</li>
+    </ol>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Recent imports</h2>
+  <table class="tbl">
+    <thead><tr><th>File</th><th>Supplier</th><th>Read by</th><th class="right">Rows</th><th>Status</th><th>Uploaded</th></tr></thead>
+    <tbody>
+    <% if (!imports.length) { %><tr><td colspan="6" class="muted">No imports yet.</td></tr><% } %>
+    <% imports.forEach(im => { %>
+      <tr>
+        <td><a href="/admin/products/import/<%= im.id %>"><%= im.file_name %></a></td>
+        <td><%= im.supplier?.name || '—' %></td>
+        <td><span class="tag"><%= im.method === 'ai' ? 'AI' : im.method === 'template' ? 'Template' : 'Columns' %></span></td>
+        <td class="right"><%= (im.rows || []).length %></td>
+        <td><span class="pill <%= im.status === 'committed' ? 'accepted' : im.status === 'cancelled' ? 'cancelled' : 'reviewing' %>"><%= im.status === 'review' ? 'awaiting review' : im.status %></span>
+          <% if (im.result) { %><span class="muted small"><%= im.result.created %> new · <%= im.result.updated %> updated</span><% } %></td>
+        <td class="muted small"><%= fmt.datetime(im.created_at) %> · <%= im.profiles?.full_name || im.profiles?.email || '' %></td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table>
+</div>
+<script>
+  (function () {
+    const f = document.getElementById('importForm'); if (!f) return;
+    const inp = f.querySelector('input[type=file]'), name = f.querySelector('.fname');
+    inp.addEventListener('change', () => { name.textContent = inp.files[0] ? inp.files[0].name : ''; });
+    f.addEventListener('submit', () => { document.getElementById('importBtn').disabled = true; document.getElementById('importWait').hidden = false; });
+  })();
+</script>
+<%- include('../../partials/foot') %>

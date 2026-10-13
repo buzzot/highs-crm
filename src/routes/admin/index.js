@@ -4,6 +4,7 @@ import { admin } from '../../lib/supabase.js';
 import clients from './clients.js';
 import suppliers from './suppliers.js';
 import products from './products.js';
+import imports from './imports.js';
 import sourcing from './sourcing.js';
 import logistics from './logistics.js';
 import pricing from './pricing.js';
@@ -55,6 +56,7 @@ r.get('/', async (req, res) => {
 
 r.use('/clients', clients);
 r.use('/suppliers', suppliers);
+r.use('/products/import', imports);
 r.use('/products', products);
 r.use('/sourcing', sourcing);
 r.use('/logistics', logistics);

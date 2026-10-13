@@ -1,7 +1,7 @@
 <%- include('../../partials/head') %>
 <div class="pagehead">
   <h1>Products</h1>
-  <a class="btn primary" href="/admin/products/new">+ New product</a>
+  <div class="actions"><a class="btn" href="/admin/products/import">⇪ Import from Excel / PDF</a><a class="btn primary" href="/admin/products/new">+ New product</a></div>
 </div>
 <div class="card">
   <form class="row tight" method="get">
@@ -17,7 +17,7 @@
     <% products.forEach(p => { %>
       <tr>
         <td class="thumbcell"><% if (thumb[p.id]) { %><img class="thumb" loading="lazy" src="/admin/documents/<%= thumb[p.id] %>/download" alt=""><% } else { %><span class="thumb empty"></span><% } %></td>
-        <td><a href="/admin/products/<%= p.id %>"><strong><%= p.name %></strong></a><div class="muted small"><%= p.sku || '' %></div></td>
+        <td><a href="/admin/products/<%= p.id %>"><strong><%= p.name %></strong></a><div class="muted small"><%= [p.sku, p.supplier_sku].filter(Boolean).join(' · ') %></div></td>
         <td><%= p.category || '—' %></td>
         <td><% if (p.suppliers) { %><a href="/admin/suppliers/<%= p.suppliers.id %>"><%= p.suppliers.name %></a><% } else { %>—<% } %></td>
         <td class="right"><%= fmt.money(p.unit_cost, p.cost_currency, 4) %></td>

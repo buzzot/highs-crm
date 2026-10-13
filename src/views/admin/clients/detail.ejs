@@ -28,22 +28,13 @@
   </div>
   <div>
     <div class="card">
-      <h2>Users <span class="muted small">— each client can have several</span></h2>
-      <table class="tbl"><tbody>
-      <% users.forEach(u => { %>
-        <tr class="<%= u.active ? '' : 'dim' %>"><td><%= u.full_name || '—' %><div class="muted small"><%= u.email %></div></td>
-          <td class="right"><form method="post" action="/admin/clients/<%= org.id %>/users/<%= u.id %>/toggle" class="inline"><button class="link small"><%= u.active ? 'Disable' : 'Enable' %></button></form></td></tr>
-      <% }) %>
-      <% invites.forEach(i => { %>
-        <tr class="dim"><td><%= i.email %><div class="muted small">invited <%= fmt.date(i.created_at) %> · pending</div></td><td></td></tr>
-      <% }) %>
-      <% if (!users.length && !invites.length) { %><tr><td class="muted">No users yet.</td></tr><% } %>
-      </tbody></table>
+      <h2>Users <span class="count"><%= members.filter(m => m.state === 'accepted').length %> active<%= members.some(m => m.state === 'pending') ? ' · ' + members.filter(m => m.state === 'pending').length + ' invited' : '' %></span></h2>
+      <%- include('../../partials/members', { members, inviteAction: '/admin/clients/' + org.id + '/invite', cancelAction: '/admin/clients/' + org.id + '/invites/cancel', toggleBase: '/admin/clients/' + org.id + '/users' }) %>
       <form method="post" action="/admin/clients/<%= org.id %>/invite" class="row tight">
         <input type="email" name="email" placeholder="name@org.com" required>
         <button class="btn primary">Send invite</button>
       </form>
-      <p class="muted small">They get an email link to set a password, then land in the client portal.</p>
+      <p class="muted small">They get an email with a link to set their password (valid 14 days), then land in the client portal.</p>
     </div>
     <div class="card">
       <h2>Details</h2>

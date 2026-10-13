@@ -97,3 +97,123 @@ export async function summarizeRequest(request) {
   });
   return msg.content.map(c => (c.type === 'text' ? c.text : '')).join('');
 }
+
+// ---------------------------------------------------------------------------------------------
+// Product import: extraction from PDFs, photos and free-form spreadsheets, and a review pass.
+// Both use forced tool calls so the model always returns structured JSON.
+// ---------------------------------------------------------------------------------------------
+export const aiEnabled = () => !!process.env.ANTHROPIC_API_KEY;
+
+const numOrNull = { type: ['number', 'null'] };
+const strOrNull = { type: ['string', 'null'] };
+const PRODUCT_SCHEMA = {
+  type: 'object',
+  properties: {
+    name: { type: 'string', description: 'Product name / description in English (translate Chinese, keep model numbers)' },
+    supplier_sku: { ...strOrNull, description: "Supplier's item / model / article number" },
+    category: strOrNull,
+    hs_code: { ...strOrNull, description: 'Only if stated in the document; never invent one' },
+    unit_weight_kg: { ...numOrNull, description: 'Weight of ONE piece in kg (convert g → kg)' },
+    unit_length_cm: numOrNull, unit_width_cm: numOrNull, unit_height_cm: numOrNull,
+    carton_qty: { ...numOrNull, description: 'Pieces per export carton' },
+    carton_weight_kg: { ...numOrNull, description: 'Gross weight of one carton, kg' },
+    carton_length_cm: numOrNull, carton_width_cm: numOrNull, carton_height_cm: numOrNull,
+    unit_price: { ...numOrNull, description: 'Unit price as a number, without currency symbol' },
+    currency: { ...strOrNull, description: 'ISO code: CNY (¥/RMB/元), USD ($), EUR (€)' },
+    moq: numOrNull,
+    notes: { ...strOrNull, description: 'Material, certification, packaging, price terms (FOB/EXW), tiers, colours' },
+    source_row: { ...numOrNull, description: 'Spreadsheet row number the product came from (spreadsheets only)' },
+    page: { ...numOrNull, description: 'PDF page the product appears on' },
+  },
+  required: ['name'],
+};
+const EXTRACT_TOOL = {
+  name: 'record_products',
+  description: 'Record the supplier details and every product found in the document.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      supplier: {
+        type: 'object',
+        properties: { name: strOrNull, address: strOrNull, contact_name: strOrNull, email: strOrNull, phone: strOrNull, wechat: strOrNull, website: strOrNull },
+      },
+      products: { type: 'array', items: PRODUCT_SCHEMA },
+      notes: { type: 'string', description: 'Anything the reviewer should know: unclear units, price tiers, missing data, pages skipped' },
+    },
+    required: ['supplier', 'products'],
+  },
+};
+
+async function forcedTool({ tool, content, system, maxTokens = 16000 }) {
+  const client = new Anthropic();
+  const msg = await client.messages.stream({
+    model: MODEL, max_tokens: maxTokens, system,
+    tools: [tool], tool_choice: { type: 'tool', name: tool.name },
+    messages: [{ role: 'user', content }],
+  }).finalMessage();
+  const use = msg.content.find(c => c.type === 'tool_use');
+  if (!use) throw new Error('AI returned no structured result.');
+  return { input: use.input, truncated: msg.stop_reason === 'max_tokens', model: MODEL };
+}
+
+/**
+ * Extract supplier + products from a PDF / image (buffer) or spreadsheet text.
+ * @param {{ pdf?: Buffer, image?: { data: Buffer, mediaType: string }, text?: string, filename: string }} src
+ */
+export async function extractProducts(src) {
+  const system = `You extract product data for a China-sourcing trading company from supplier documents
+(price lists, quotations, catalogues, product forms). Be exact: copy numbers as written, convert units to kg and cm,
+never guess values that are not in the document (use null), translate Chinese product names to English (keep the original in notes if useful).
+One entry per distinct product/variant with its own price or SKU. Ignore example/sample rows marked "EXAMPLE".
+The supplier is the company that ISSUED the document (letterhead, stamp, signature, "From"), not the buyer.`;
+  const content = [];
+  if (src.pdf) content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: src.pdf.toString('base64') } });
+  if (src.image) content.push({ type: 'image', source: { type: 'base64', media_type: src.image.mediaType, data: src.image.data.toString('base64') } });
+  content.push({
+    type: 'text',
+    text: `File: ${src.filename}\n${src.text ? `Spreadsheet contents (row number first, tab-separated cells):\n\n${src.text.slice(0, 180000)}\n\n` : ''}Extract the supplier and all products with record_products. For spreadsheets set source_row to the row number.`,
+  });
+  const { input, truncated, model } = await forcedTool({ tool: EXTRACT_TOOL, content, system });
+  return { supplier: input.supplier || {}, products: input.products || [], notes: [input.notes, truncated ? 'The document was long — the AI may have stopped before the last products. Check the end of the list.' : null].filter(Boolean).join(' '), model };
+}
+
+const REVIEW_TOOL = {
+  name: 'report_issues',
+  description: 'Report problems found in the imported product rows.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      issues: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            row: { type: 'integer', description: 'Index from the list (0-based)' },
+            field: { type: 'string' },
+            severity: { type: 'string', enum: ['high', 'medium', 'low'] },
+            message: { type: 'string' },
+            suggestion: { type: ['string', 'null'], description: 'Suggested corrected value, if confident' },
+          },
+          required: ['row', 'field', 'severity', 'message'],
+        },
+      },
+      summary: { type: 'string' },
+    },
+    required: ['issues'],
+  },
+};
+
+/** Second opinion on imported rows: HS code vs product, implausible weights/sizes/prices, duplicates. */
+export async function reviewProducts({ supplier, products }) {
+  const rows = products.slice(0, 200).map((p, i) => ({ i, ...p, image: undefined, match: undefined, issues: undefined }));
+  const { input } = await forcedTool({
+    tool: REVIEW_TOOL, maxTokens: 8000,
+    system: `You check product data before it is imported into a trading company's catalogue.
+Flag only real problems: HS code that doesn't fit the product (give the likely 6-digit heading as suggestion), weights/sizes
+that are implausible for the product or inconsistent with the carton (units in g/mm instead of kg/cm), carton quantity that
+doesn't fit the carton volume, prices that look like a different currency or unit (per dozen / per set), duplicate rows,
+and missing data that matters for shipping (carton size/weight). Be concise. Don't repeat the same issue for every row — mention it once per row only when it applies.`,
+    content: [{ type: 'text', text: JSON.stringify({ supplier: { name: supplier?.name }, products: rows }) }],
+  });
+  return { issues: input.issues || [], summary: input.summary || '' };
+}

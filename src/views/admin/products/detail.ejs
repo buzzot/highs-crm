@@ -1,7 +1,7 @@
 <%- include('../../partials/head') %>
 <div class="pagehead">
   <div><a class="back" href="/admin/products">← Products</a><h1><%= p.name %></h1>
-    <p class="muted"><%= [p.sku, p.category, p.hs_code && ('HS ' + p.hs_code)].filter(Boolean).join(' · ') %></p></div>
+    <p class="muted"><%= [p.sku, p.supplier_sku && ('supplier SKU ' + p.supplier_sku), p.category, p.hs_code && ('HS ' + p.hs_code)].filter(Boolean).join(' · ') %></p></div>
   <div class="actions"><a class="btn" href="/admin/products/<%= p.id %>/edit">Edit</a><a class="btn primary" href="/admin/pricing/quotes/new?product_id=<%= p.id %>">Quote this</a></div>
 </div>
 <div class="grid2">
@@ -13,8 +13,9 @@
         <dt>Unit cost</dt><dd><%= fmt.money(p.unit_cost, p.cost_currency, 4) %></dd>
         <dt>MOQ</dt><dd><%= p.moq ?? '—' %></dd>
         <dt>Lead time</dt><dd><%= p.suppliers?.lead_time_days ? p.suppliers.lead_time_days + ' days' : '—' %></dd>
-        <dt>Unit weight</dt><dd><%= p.unit_weight_kg ? fmt.num(p.unit_weight_kg, 3) + ' kg' : '—' %></dd>
-        <dt>Carton</dt><dd><%= p.carton_qty ? `${p.carton_qty} pcs · ${fmt.num(p.carton_cbm, 4)} cbm · ${fmt.num(p.carton_weight_kg, 2)} kg` : '—' %></dd>
+        <dt>Supplier SKU</dt><dd><%= p.supplier_sku || '—' %></dd>
+        <dt>Unit</dt><dd><%= [p.unit_weight_kg && fmt.num(p.unit_weight_kg, 3) + ' kg', p.unit_length_cm && `${fmt.num(p.unit_length_cm, 1)} × ${fmt.num(p.unit_width_cm, 1)} × ${fmt.num(p.unit_height_cm, 1)} cm`].filter(Boolean).join(' · ') || '—' %></dd>
+        <dt>Carton</dt><dd><%= p.carton_qty ? [`${p.carton_qty} pcs`, p.carton_weight_kg && fmt.num(p.carton_weight_kg, 2) + ' kg', p.carton_length_cm && `${fmt.num(p.carton_length_cm, 1)} × ${fmt.num(p.carton_width_cm, 1)} × ${fmt.num(p.carton_height_cm, 1)} cm`, p.carton_cbm && fmt.num(p.carton_cbm, 4) + ' cbm'].filter(Boolean).join(' · ') : '—' %></dd>
       </dl>
       <% if (p.description) { %><p class="pre"><%= p.description %></p><% } %>
       <% if (specText) { %><h3>Specifications</h3><p class="pre"><%= specText %></p><% } %>

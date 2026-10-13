@@ -1,0 +1,37 @@
+<%#
+  People + invitation status. locals: members (from memberRows), inviteAction (POST url for (re)sending),
+  [cancelAction] (POST url to cancel an open invite), [toggleBase] (url prefix + /<uid>/toggle), [showRole]
+%>
+<ul class="members">
+  <% if (!members.length) { %><li class="muted small">Nobody yet — send the first invitation below.</li><% } %>
+  <% members.forEach(m => { %>
+    <li class="<%= m.active === false && m.state === 'accepted' ? 'dim' : '' %>">
+      <span class="avatar <%= m.state %>"><%= (m.full_name || m.email || '?').trim().charAt(0).toUpperCase() %></span>
+      <div class="who">
+        <div class="name"><%= m.full_name || m.email %><% if (typeof showRole !== 'undefined' && showRole && m.role) { %> <span class="tag"><%= m.role %></span><% } %></div>
+        <% if (m.full_name) { %><div class="muted small"><%= m.email %></div><% } %>
+        <div class="istate small">
+          <% if (m.state === 'accepted') { %>
+            <% if (m.active === false) { %><span class="badge">Disabled</span><% } else { %><span class="badge ok">✓ Active</span><% } %> <span class="muted">joined <%= fmt.date(m.accepted_at) %></span>
+          <% } else if (m.state === 'pending') { %>
+            <span class="badge info">Invitation sent</span> <span class="muted"><%= fmt.date(m.sent_at) %> · not accepted yet · link valid <%= m.days_left %> more day<%= m.days_left === 1 ? '' : 's' %></span>
+          <% } else if (m.state === 'expired') { %>
+            <span class="badge warn">Invitation expired</span> <span class="muted">sent <%= fmt.date(m.sent_at) %> · not accepted within 14 days</span>
+          <% } else { %>
+            <span class="badge">No invitation</span> <span class="muted">account created manually</span>
+          <% } %>
+        </div>
+      </div>
+      <div class="mact">
+        <% if (m.state === 'pending' || m.state === 'expired') { %>
+          <form method="post" action="<%= inviteAction %>" class="inline"><input type="hidden" name="email" value="<%= m.email %>"><button class="btn small <%= m.state === 'expired' ? 'primary' : '' %>">Resend</button></form>
+          <% if (typeof cancelAction !== 'undefined' && cancelAction) { %>
+          <form method="post" action="<%= cancelAction %>" class="inline" onsubmit="return confirm('Cancel the invitation for <%= m.email %>?')"><input type="hidden" name="email" value="<%= m.email %>"><button class="link small danger">Cancel</button></form>
+          <% } %>
+        <% } else if (m.id && typeof toggleBase !== 'undefined' && toggleBase) { %>
+          <form method="post" action="<%= toggleBase %>/<%= m.id %>/toggle" class="inline"><button class="link small"><%= m.active === false ? 'Enable' : 'Disable' %></button></form>
+        <% } %>
+      </div>
+    </li>
+  <% }) %>
+</ul>

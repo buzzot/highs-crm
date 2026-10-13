@@ -3,7 +3,7 @@ import { admin } from '../../lib/supabase.js';
 import { clean, bool, notFound } from '../../lib/util.js';
 
 const r = Router();
-const FIELDS = ['name', 'country', 'city', 'contact_name', 'phone', 'email', 'wechat', 'website', 'payment_terms', 'lead_time_days', 'rating', 'can_export_official', 'notes'];
+const FIELDS = ['name', 'country', 'city', 'address', 'contact_name', 'phone', 'email', 'wechat', 'website', 'payment_terms', 'lead_time_days', 'rating', 'can_export_official', 'notes'];
 const body = b => ({ ...clean(b, FIELDS), can_export_official: bool(b.can_export_official) });
 const like = q => String(q || '').replace(/[,()%]/g, ' ').trim();
 

@@ -1,0 +1,196 @@
+<%- include('../../partials/head') %>
+<%
+  const done = imp.status !== 'review';
+  const sup = imp.supplier || {};
+  const ms = imp.supplier_match?.status || 'new';
+  const errRows = rows.filter(r => r.checks.some(c => c.level === 'error')).length;
+  const flagged = rows.filter(r => r.checks.length || (r.ai_issues || []).length).length;
+  const methodLabel = { ai: 'Read by AI', template: 'Highs template', spreadsheet: 'Column matching' }[imp.method] || imp.method;
+  const v = x => (x == null ? '' : x);
+%>
+<div class="pagehead">
+  <div><a class="back" href="/admin/products/import">← Imports</a>
+    <h1>Review import · <%= imp.file_name %></h1>
+    <p class="muted"><span class="tag"><%= methodLabel %></span> <%= rows.length %> product<%= rows.length === 1 ? '' : 's' %> found · uploaded <%= fmt.datetime(imp.created_at) %></p></div>
+  <span class="pill lg <%= imp.status === 'committed' ? 'accepted' : imp.status === 'cancelled' ? 'cancelled' : 'reviewing' %>"><%= imp.status === 'review' ? 'Awaiting confirmation' : imp.status %></span>
+</div>
+
+<% if (imp.status === 'committed' && imp.result) { %>
+  <div class="alert ok">Imported <%= fmt.datetime(imp.committed_at) %>: <%= imp.result.created %> new, <%= imp.result.updated %> updated, <%= imp.result.skipped %> skipped, <%= imp.result.photos %> photos. <a href="/admin/suppliers/<%= imp.result.supplier_id %>">Open supplier →</a></div>
+<% } %>
+<% if (imp.ai_notes) { %><div class="alert warn pre small"><%= imp.ai_notes %></div><% } %>
+
+<form method="post" action="/admin/products/import/<%= imp.id %>" id="reviewForm">
+<fieldset <%= done ? 'disabled' : '' %>>
+
+<!-- ============ 1. supplier ============ -->
+<div class="card">
+  <h2><span class="stepno">1</span> Supplier</h2>
+  <div class="supgrid">
+    <div>
+      <p class="muted small">From the file — correct anything that was read wrongly.</p>
+      <div class="row">
+        <label class="grow2">Company name <input name="supplier[name]" value="<%= v(sup.name) %>" required></label>
+      </div>
+      <label>Address <input name="supplier[address]" value="<%= v(sup.address) %>"></label>
+      <div class="row">
+        <label>Contact person <input name="supplier[contact_name]" value="<%= v(sup.contact_name) %>"></label>
+        <label>Email <input name="supplier[email]" value="<%= v(sup.email) %>"></label>
+      </div>
+      <div class="row">
+        <label>Phone <input name="supplier[phone]" value="<%= v(sup.phone) %>"></label>
+        <label>WeChat <input name="supplier[wechat]" value="<%= v(sup.wechat) %>"></label>
+        <label>Website <input name="supplier[website]" value="<%= v(sup.website) %>"></label>
+      </div>
+    </div>
+
+    <div class="matchbox <%= ms %>">
+      <% if (ms === 'match') { %>
+        <div class="mhead ok">✓ Already in your suppliers</div>
+        <p class="small">This file is from a supplier you already have — products will be added to it.</p>
+      <% } else if (ms === 'suspect') { %>
+        <div class="mhead warn">⚠ Possible duplicate supplier</div>
+        <p class="small">The name is very close to an existing supplier — maybe a typo or a different spelling. <strong>Is it the same company?</strong></p>
+      <% } else { %>
+        <div class="mhead">＋ New supplier</div>
+        <p class="small">No similar supplier found (checked names, email, phone, WeChat). A new supplier will be created.</p>
+      <% } %>
+
+      <div class="choices">
+        <% candidates.forEach(c => { %>
+          <label class="choice">
+            <input type="radio" name="supplier_decision" value="<%= c.id %>" <%= decision === c.id ? 'checked' : '' %> required>
+            <span><strong>Same company: <a href="/admin/suppliers/<%= c.id %>" target="_blank"><%= c.name %></a></strong><% if (c.city) { %> <span class="muted">· <%= c.city %></span><% } %>
+              <span class="reasons"><% c.reasons.forEach(rs => { %><span class="badge <%= c.strong ? 'ok' : 'warn' %>"><%= rs %></span> <% }) %></span></span>
+          </label>
+        <% }) %>
+        <label class="choice">
+          <input type="radio" name="supplier_decision" value="new" <%= decision === 'new' ? 'checked' : '' %> required>
+          <span><strong><%= candidates.length ? 'No — it is a different company, create a new supplier' : 'Create new supplier' %></strong></span>
+        </label>
+        <% if (candidates.length) { %>
+          <label class="check small confirmnew"><input type="checkbox" name="confirm_new" <%= sup._confirm_new ? 'checked' : '' %>> I checked — this is really a different company</label>
+        <% } %>
+        <details class="small">
+          <summary class="link small">It's another existing supplier…</summary>
+          <select name="supplier_decision_other" onchange="if(this.value){const r=document.querySelector('input[name=supplier_decision][value=new]');r.value=this.value;r.checked=true;r.nextElementSibling.querySelector('strong').textContent='Existing: '+this.selectedOptions[0].text;}">
+            <option value="">Choose supplier…</option>
+            <% suppliers.forEach(x => { %><option value="<%= x.id %>"><%= x.name %></option><% }) %>
+          </select>
+        </details>
+      </div>
+      <label class="check small"><input type="checkbox" name="update_contacts" <%= sup._update_contacts ? 'checked' : '' %>> When using an existing supplier, overwrite its contact details with the ones above — otherwise only its empty fields are filled</label>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 2. products ============ -->
+<div class="card">
+  <h2><span class="stepno">2</span> Products
+    <span class="count"><%= rows.length %></span>
+    <% if (flagged) { %><span class="badge warn"><%= flagged %> to check</span><% } %>
+    <% if (errRows) { %><span class="badge bad"><%= errRows %> with errors</span><% } %>
+    <span class="more small"><label class="check"><input type="checkbox" id="onlyFlagged"> show only rows to check</label></span>
+  </h2>
+  <p class="muted small">Weights in kg, sizes in cm (L × W × H). Edit any cell. Untick a row to leave it out. "Update" overwrites the existing product with the values here.</p>
+  <div class="tblwrap">
+  <table class="tbl imp">
+    <thead><tr>
+      <th><input type="checkbox" id="checkAll" checked title="Select all"></th>
+      <th>Photo</th><th>Product</th><th>HS code</th><th>Unit kg · L×W×H cm</th><th>Carton pcs · kg · L×W×H cm</th><th>Price</th><th>MOQ</th><th>In catalogue</th>
+    </tr></thead>
+    <tbody>
+    <% rows.forEach(p => {
+         const i = p.i;
+         const issues = [...p.checks.map(c => ({ sev: c.level === 'error' ? 'high' : 'medium', field: c.field, message: c.message, src: 'check' })),
+                         ...(p.ai_issues || []).map(a => ({ sev: a.severity, field: a.field, message: a.message, suggestion: a.suggestion, src: 'AI' }))];
+         const hasErr = p.checks.some(c => c.level === 'error');
+         const badField = f => issues.some(x => x.field === f) ? 'flag' : '';
+         const n = (f, step, w) => `<input class="${badField(f)}" name="rows[${i}][${f}]" value="${v(p[f])}" inputmode="decimal" style="width:${w || 56}px">`;
+    %>
+      <tr class="main <%= hasErr ? 'err' : issues.length ? 'warnrow' : '' %>" data-flag="<%= issues.length ? 1 : 0 %>">
+        <td><input type="checkbox" class="inc" name="rows[<%= i %>][include]" <%= p.include !== false ? 'checked' : '' %>></td>
+        <td><% if (p.image_path) { %><img class="thumb lg" src="/admin/products/import/<%= imp.id %>/image/<%= i %>" alt=""><% } else { %><span class="thumb lg empty" title="No photo"></span><% } %></td>
+        <td class="pcell">
+          <input class="pname <%= badField('name') %>" name="rows[<%= i %>][name]" value="<%= v(p.name) %>" placeholder="Product name">
+          <div class="sub2">
+            <input name="rows[<%= i %>][supplier_sku]" value="<%= v(p.supplier_sku) %>" placeholder="Supplier SKU" style="width:120px">
+            <input name="rows[<%= i %>][category]" value="<%= v(p.category) %>" placeholder="Category" style="width:120px">
+          </div>
+          <input class="notes" name="rows[<%= i %>][notes]" value="<%= v(p.notes) %>" placeholder="Notes">
+          <span class="muted small">#<%= i + 1 %><%= p.source_row ? ' · row ' + p.source_row : '' %><%= p.page ? ' · page ' + p.page : '' %></span>
+        </td>
+        <td><input class="<%= badField('hs_code') %>" name="rows[<%= i %>][hs_code]" value="<%= v(p.hs_code) %>" style="width:96px"></td>
+        <td class="nums">
+          <div><%- n('unit_weight_kg', 0, 64) %> kg</div>
+          <div><%- n('unit_length_cm') %>×<%- n('unit_width_cm') %>×<%- n('unit_height_cm') %></div>
+        </td>
+        <td class="nums">
+          <div><%- n('carton_qty', 0, 56) %> pcs · <%- n('carton_weight_kg', 0, 60) %> kg</div>
+          <div><%- n('carton_length_cm') %>×<%- n('carton_width_cm') %>×<%- n('carton_height_cm') %></div>
+          <% if (p.cbm) { %><div class="muted small"><%= fmt.num(p.cbm, 4) %> cbm<%= p.carton_qty ? ' · ' + fmt.num(p.cbm / p.carton_qty * 1e6, 0) + ' cm³/pc' : '' %></div><% } %>
+        </td>
+        <td class="nums">
+          <div><%- n('unit_price', 0, 70) %></div>
+          <select name="rows[<%= i %>][currency]"><% currencies.forEach(c => { %><option <%= p.currency === c ? 'selected' : '' %>><%= c %></option><% }) %></select>
+        </td>
+        <td><%- n('moq', 0, 64) %></td>
+        <td class="incat">
+          <% if (p.match.status !== 'none') { %>
+            <input type="hidden" name="rows[<%= i %>][match_id]" value="<%= p.match.product.id %>">
+            <input type="hidden" name="rows[<%= i %>][match_supplier_id]" value="<%= p.match.supplier_id %>">
+            <span class="badge <%= p.match.status === 'sku' ? 'info' : 'warn' %>"><%= p.match.status === 'sku' ? 'Same SKU exists' : 'Possible duplicate' %></span>
+            <div class="small"><a href="/admin/products/<%= p.match.product.id %>" target="_blank"><%= p.match.product.name %></a>
+              <% if (p.match.product.unit_cost != null) { %><span class="muted">· now <%= fmt.money(p.match.product.unit_cost, p.match.product.cost_currency || 'CNY') %></span><% } %></div>
+            <select name="rows[<%= i %>][action]">
+              <option value="update" <%= (p.action || 'update') === 'update' ? 'selected' : '' %>>Update existing</option>
+              <option value="new" <%= p.action === 'new' ? 'selected' : '' %>>Add as new product</option>
+              <option value="skip" <%= p.action === 'skip' ? 'selected' : '' %>>Skip</option>
+            </select>
+          <% } else { %>
+            <span class="badge ok">New</span>
+            <input type="hidden" name="rows[<%= i %>][action]" value="new">
+          <% } %>
+        </td>
+      </tr>
+      <% if (issues.length) { %>
+      <tr class="issues-row <%= hasErr ? 'err' : 'warnrow' %>" data-flag="1"><td></td><td colspan="8">
+        <ul class="rowissues">
+          <% issues.forEach(x => { %><li class="<%= x.sev %>"><span class="src"><%= x.src %></span> <%= x.message %><% if (x.suggestion) { %> <button type="button" class="link small apply" data-target="rows[<%= i %>][<%= x.field %>]" data-value="<%= x.suggestion %>">use “<%= x.suggestion %>”</button><% } %></li><% }) %>
+        </ul>
+      </td></tr>
+      <% } %>
+    <% }) %>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<% if (!done) { %>
+<div class="importbar">
+  <span class="small"><strong id="selCount"><%= rows.filter(r => r.include !== false).length %></strong> of <%= rows.length %> products selected</span>
+  <span class="grow"></span>
+  <button class="btn" name="action" value="cancel" formnovalidate onclick="return confirm('Cancel this import? Nothing will be saved.')">Cancel import</button>
+  <button class="btn" name="action" value="save" formnovalidate>Save changes</button>
+  <button class="btn primary" name="action" value="commit">Confirm & import</button>
+</div>
+<% } %>
+</fieldset>
+</form>
+<script>
+  (function () {
+    const f = document.getElementById('reviewForm'); if (!f) return;
+    const incs = [...f.querySelectorAll('input.inc')];
+    const count = () => { const c = document.getElementById('selCount'); if (c) c.textContent = incs.filter(x => x.checked).length; };
+    incs.forEach(x => x.addEventListener('change', () => { x.closest('tr').classList.toggle('off', !x.checked); count(); }));
+    incs.forEach(x => x.closest('tr').classList.toggle('off', !x.checked));
+    const all = document.getElementById('checkAll');
+    all && all.addEventListener('change', () => { incs.forEach(x => { x.checked = all.checked; x.dispatchEvent(new Event('change')); }); });
+    const only = document.getElementById('onlyFlagged');
+    only && only.addEventListener('change', () => f.querySelectorAll('tbody tr').forEach(tr => { tr.hidden = only.checked && tr.dataset.flag !== '1'; }));
+    f.querySelectorAll('button.apply').forEach(b => b.addEventListener('click', () => {
+      const el = f.querySelector(`[name="${b.dataset.target}"]`); if (el) { el.value = b.dataset.value; el.classList.remove('flag'); el.classList.add('fixed'); b.disabled = true; }
+    }));
+  })();
+</script>
+<%- include('../../partials/foot') %>

@@ -1,0 +1,28 @@
+<%- include('../partials/head') %>
+<div class="card narrow auth">
+  <h1>Highs<span class="accent">Business</span></h1>
+  <% if (state === 'valid') { %>
+    <p class="muted">You've been invited<% if (inv.organizations?.name) { %> to the <strong><%= inv.organizations.name %></strong> portal<% } else { %> to the Highs Business team<% } %>.<br>Set your name and password to activate your account.</p>
+    <% if (error) { %><div class="alert err"><%= error %></div><% } %>
+    <form method="post">
+      <label>Email <input type="email" value="<%= inv.email %>" disabled></label>
+      <label>Your name <input type="text" name="full_name" required autofocus value="<%= form.full_name || '' %>"></label>
+      <label>Password <span class="muted small">— at least 8 characters</span><input type="password" name="password" minlength="8" required autocomplete="new-password"></label>
+      <label>Repeat password <input type="password" name="password2" minlength="8" required autocomplete="new-password"></label>
+      <button class="btn primary wide">Activate account</button>
+    </form>
+    <p class="muted small">This invitation link is valid until <%= fmt.date(inv.expires_at) %>.</p>
+  <% } else if (state === 'accepted') { %>
+    <div class="alert ok">This invitation has already been used — your account is active.</div>
+    <a class="btn primary wide" href="/login">Sign in</a>
+    <p class="muted small"><a href="/forgot">Forgot your password?</a></p>
+  <% } else if (state === 'expired') { %>
+    <div class="alert warn">This invitation expired on <%= fmt.date(inv.expires_at) %>. Invitation links are valid for 14 days.</div>
+    <p>Please ask your Highs Business contact to send you a new invitation.</p>
+  <% } else if (state === 'revoked') { %>
+    <div class="alert warn">A newer invitation was sent to <%= inv.email %>. Please use the link in the most recent email.</div>
+  <% } else { %>
+    <div class="alert err">This invitation link is not valid. Check that you copied the whole link from the email.</div>
+  <% } %>
+</div>
+<%- include('../partials/foot') %>

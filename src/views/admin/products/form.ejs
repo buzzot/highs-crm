@@ -6,7 +6,8 @@
   <form method="post" action="<%= p.id ? '/admin/products/' + p.id : '/admin/products' %>">
     <div class="row">
       <label class="grow2">Name <input name="name" required value="<%= p.name || '' %>"></label>
-      <label>SKU <input name="sku" value="<%= p.sku || '' %>"></label>
+      <label>Our SKU <input name="sku" value="<%= p.sku || '' %>"></label>
+      <label>Supplier SKU <input name="supplier_sku" value="<%= p.supplier_sku || '' %>"></label>
       <label>Category <input name="category" value="<%= p.category || '' %>"></label>
     </div>
     <label>Description <textarea name="description" rows="3"><%= p.description || '' %></textarea></label>
@@ -19,13 +20,25 @@
       <label>Currency <select name="cost_currency"><% ['CNY','USD','EUR'].forEach(c => { %><option <%= (p.cost_currency || 'CNY') === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
       <label>MOQ <input type="number" name="moq" value="<%= p.moq ?? '' %>"></label>
     </div>
-    <h3>Customs & packing</h3>
+    <h3>Customs</h3>
     <div class="row">
       <label>HS code <input name="hs_code" value="<%= p.hs_code || '' %>" placeholder="9617.00"></label>
-      <label>Unit weight kg <input type="number" step="0.001" name="unit_weight_kg" value="<%= p.unit_weight_kg ?? '' %>"></label>
+    </div>
+    <h3>Unit (one piece incl. inner packaging)</h3>
+    <div class="row">
+      <label>Weight kg <input type="number" step="0.001" name="unit_weight_kg" value="<%= p.unit_weight_kg ?? '' %>"></label>
+      <label>Length cm <input type="number" step="0.1" name="unit_length_cm" value="<%= p.unit_length_cm ?? '' %>"></label>
+      <label>Width cm <input type="number" step="0.1" name="unit_width_cm" value="<%= p.unit_width_cm ?? '' %>"></label>
+      <label>Height cm <input type="number" step="0.1" name="unit_height_cm" value="<%= p.unit_height_cm ?? '' %>"></label>
+    </div>
+    <h3>Export carton</h3>
+    <div class="row">
       <label>Pcs / carton <input type="number" name="carton_qty" value="<%= p.carton_qty ?? '' %>"></label>
-      <label>Carton CBM <input type="number" step="0.0001" name="carton_cbm" value="<%= p.carton_cbm ?? '' %>"></label>
-      <label>Carton kg <input type="number" step="0.001" name="carton_weight_kg" value="<%= p.carton_weight_kg ?? '' %>"></label>
+      <label>Gross weight kg <input type="number" step="0.01" name="carton_weight_kg" value="<%= p.carton_weight_kg ?? '' %>"></label>
+      <label>Length cm <input type="number" step="0.1" name="carton_length_cm" value="<%= p.carton_length_cm ?? '' %>"></label>
+      <label>Width cm <input type="number" step="0.1" name="carton_width_cm" value="<%= p.carton_width_cm ?? '' %>"></label>
+      <label>Height cm <input type="number" step="0.1" name="carton_height_cm" value="<%= p.carton_height_cm ?? '' %>"></label>
+      <label>CBM <span class="muted small">auto from size</span><input type="number" step="0.0001" name="carton_cbm" value="<%= p.carton_cbm ?? '' %>"></label>
     </div>
     <div class="actions"><button class="btn primary">Save</button></div>
   </form>
