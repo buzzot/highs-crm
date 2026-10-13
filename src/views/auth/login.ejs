@@ -1,16 +1,19 @@
 <%- include('../partials/head') %>
-<div class="card narrow auth">
-  <h1>Highs<span class="accent">Business</span></h1>
-  <p class="muted">Sign in to your account</p>
+<%- include('../partials/auth_start') %>
+  <h1>Welcome back</h1>
+  <p class="lead">Sign in to your Highs Business account.</p>
   <% if (error) { %><div class="alert err"><%= error %></div><% } %>
   <form method="post" action="/login">
     <input type="hidden" name="next" value="<%= next %>">
-    <label>Email <input type="email" name="email" required autofocus></label>
-    <label>Password <input type="password" name="password" required></label>
-    <button class="btn primary wide">Sign in</button>
+    <label>Email <input type="email" name="email" required autofocus autocomplete="email" placeholder="you@company.com"></label>
+    <label class="pwlabel">
+      <span class="lrow">Password <a href="/forgot" class="small">Forgot password?</a></span>
+      <span class="pwfield"><input type="password" name="password" required autocomplete="current-password"><button type="button" class="pwtoggle" aria-label="Show password">Show</button></span>
+    </label>
+    <button class="btn primary wide lg">Continue</button>
   </form>
-  <p class="muted small"><a href="/forgot">Forgot password?</a> · Access is by invitation only.</p>
-</div>
+  <p class="hintline">Next, we'll email you a one-time code to finish signing in.</p>
+<%- include('../partials/auth_end') %>
 <script>
   // Invite / password-reset links that land on "/" (Supabase Site URL fallback) end up here with the
   // tokens in the URL fragment — forward them to the page that sets the password.

@@ -1,25 +1,30 @@
 <%- include('../partials/head') %>
-<div class="card narrow auth">
-  <h1>Welcome to Highs<span class="accent">Business</span></h1>
-  <p class="muted">Set your name and password to activate your account.</p>
+<%- include('../partials/auth_start') %>
+  <%- include('../partials/auth_icon', { icon: 'key' }) %>
+  <h1>Choose a new password</h1>
+  <p class="lead">Use at least 8 characters with letters and a number.</p>
   <% if (error) { %><div class="alert err"><%= error %></div><% } %>
   <form method="post" action="/auth/accept" id="acceptForm">
-    <input type="hidden" name="access_token" id="access_token">
-    <input type="hidden" name="refresh_token" id="refresh_token">
-    <label>Your name <input type="text" name="full_name" required></label>
-    <label>Password <input type="password" name="password" minlength="8" required></label>
-    <button class="btn primary wide">Activate account</button>
+    <input type="hidden" name="access_token" id="access_token" value="<%= typeof at !== 'undefined' ? at : '' %>">
+    <input type="hidden" name="refresh_token" id="refresh_token" value="<%= typeof rt !== 'undefined' ? rt : '' %>">
+    <label id="nameField" hidden>Your name <input type="text" name="full_name" autocomplete="name"></label>
+    <label>New password <span class="pwfield"><input type="password" name="password" minlength="8" required autocomplete="new-password"><button type="button" class="pwtoggle" aria-label="Show password">Show</button></span></label>
+    <label>Repeat new password <input type="password" name="password2" minlength="8" required autocomplete="new-password"></label>
+    <button class="btn primary wide lg">Save password & sign in</button>
   </form>
-  <p class="muted small" id="tokenNote"></p>
-</div>
+  <div class="alert warn small" id="tokenNote" hidden></div>
+<%- include('../partials/auth_end') %>
 <script>
-  // Supabase puts tokens in the URL fragment; move them into the form.
+  // Supabase puts the reset tokens in the URL fragment; move them into the form.
   (function () {
     const h = new URLSearchParams(location.hash.slice(1));
-    const a = h.get('access_token'), r = h.get('refresh_token');
-    if (a) { document.getElementById('access_token').value = a; document.getElementById('refresh_token').value = r || ''; history.replaceState(null, '', location.pathname); }
-    else if (h.get('error_description')) document.getElementById('tokenNote').textContent = h.get('error_description');
-    else if (!document.querySelector('.alert')) document.getElementById('tokenNote').textContent = 'Open this page from the link in your invitation email.';
+    const a = h.get('access_token'), r = h.get('refresh_token'), note = document.getElementById('tokenNote');
+    if (a) {
+      document.getElementById('access_token').value = a; document.getElementById('refresh_token').value = r || '';
+      if (h.get('type') === 'invite') document.getElementById('nameField').hidden = false;
+      history.replaceState(null, '', location.pathname);
+    } else if (h.get('error_description')) { note.hidden = false; note.innerHTML = ''; note.append(h.get('error_description') + ' — '); const l = document.createElement('a'); l.href = '/forgot'; l.textContent = 'request a new link'; note.append(l); }
+    else if (!document.getElementById('access_token').value) { note.hidden = false; note.innerHTML = 'Open this page from the link in your email, or <a href="/forgot">request a new link</a>.'; }
   })();
 </script>
 <%- include('../partials/foot') %>

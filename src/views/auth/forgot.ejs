@@ -1,14 +1,29 @@
 <%- include('../partials/head') %>
-<div class="card narrow auth">
-  <h1>Reset password</h1>
+<%- include('../partials/auth_start') %>
   <% if (sent) { %>
-    <div class="alert ok">If that email has an account, a reset link is on its way.</div>
-    <a class="btn" href="/login">Back to sign in</a>
+    <%- include('../partials/auth_icon', { icon: 'mail' }) %>
+    <h1>Check your inbox</h1>
+    <p class="lead">If <strong><%= email || 'that email' %></strong> has an account, we've sent a link to choose a new password.</p>
+    <ul class="checklist-tips">
+      <li>The link works for <strong>15 minutes</strong> and only once.</li>
+      <li>Not there after a minute? Look in spam or promotions.</li>
+      <li>Asked more than once? Use the newest email.</li>
+    </ul>
+    <a class="btn primary wide lg" href="/login">Back to sign in</a>
+    <form method="post" action="/forgot" class="resend">
+      <input type="hidden" name="email" value="<%= email || '' %>">
+      <span class="muted small">Didn't get it?</span> <button class="link small">Send the link again</button>
+    </form>
   <% } else { %>
-  <form method="post" action="/forgot">
-    <label>Email <input type="email" name="email" required autofocus></label>
-    <button class="btn primary wide">Send reset link</button>
-  </form>
+    <%- include('../partials/auth_icon', { icon: 'key' }) %>
+    <h1>Forgot your password?</h1>
+    <p class="lead">Enter your email and we'll send you a link to choose a new one.</p>
+    <% if (typeof error !== 'undefined' && error) { %><div class="alert err"><%= error %></div><% } %>
+    <form method="post" action="/forgot">
+      <label>Email <input type="email" name="email" required autofocus autocomplete="email" placeholder="you@company.com"></label>
+      <button class="btn primary wide lg">Send reset link</button>
+    </form>
+    <p class="hintline"><a href="/login">← Back to sign in</a></p>
   <% } %>
-</div>
+<%- include('../partials/auth_end') %>
 <%- include('../partials/foot') %>

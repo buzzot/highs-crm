@@ -1,22 +1,18 @@
 <%- include('../partials/head') %>
-<div class="card narrow auth">
-  <h1>Highs<span class="accent">Business</span></h1>
-  <div class="codehead">
-    <span class="mailicon">✉</span>
-    <div><strong>Check your email</strong><br><span class="muted small">We sent a sign-in code to <strong><%= email %></strong>. It expires in 15 minutes.</span></div>
-  </div>
+<%- include('../partials/auth_start') %>
+  <%- include('../partials/auth_icon', { icon: 'lock' }) %>
+  <h1>Enter your code</h1>
+  <p class="lead">We sent a 6-digit code to <strong><%= email %></strong>. It expires in 15 minutes.</p>
   <% if (error) { %><div class="alert err"><%= error %></div><% } %>
   <% if (msg) { %><div class="alert ok"><%= msg %></div><% } %>
   <form method="post" action="/login/verify" autocomplete="off">
-    <label>Code from the email
-      <input class="codeinput" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,12}" maxlength="12" required autofocus placeholder="••••••">
-    </label>
-    <button class="btn primary wide">Verify & sign in</button>
+    <input class="codeinput" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,12}" maxlength="12" required autofocus placeholder="000000" aria-label="Code from the email">
+    <button class="btn primary wide lg">Verify & sign in</button>
   </form>
-  <div class="row between small codefoot">
+  <div class="authlinks">
     <form method="post" action="/login/resend"><button class="link small">Send a new code</button></form>
-    <a href="/login">Use a different account</a>
+    <a class="small" href="/login">Use a different account</a>
   </div>
-  <p class="muted small">Didn't get it? Check spam, and that the email address is right. Codes are only valid once.</p>
-</div>
+  <p class="hintline">Can't find it? Check spam. Each code works once.</p>
+<%- include('../partials/auth_end') %>
 <%- include('../partials/foot') %>

@@ -468,3 +468,60 @@ button.vis.on { background: var(--info-soft); color: var(--info); border-color: 
 .pthumb .pdel { position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; border-radius: 50%; border: 0; background: rgba(22,32,46,.75); color: #fff; font-size: 15px; line-height: 1; cursor: pointer; }
 .pthumb .pcap { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,.9); font-size: 10px; padding: 2px 6px; color: var(--muted); }
 .pthumb.toobig .pcap { color: var(--bad); font-weight: 600; }
+
+/* ---------- sign-in pages (shared layout) ---------- */
+main.page:has(.authwrap) { max-width: none; padding: 0; }
+.authwrap { display: grid; grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.1fr); min-height: 100vh; }
+.authbrand { position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; padding: 40px 48px; color: #dbe7f1;
+  background: radial-gradient(1200px 500px at -10% 110%, rgba(11,138,122,.45), transparent 60%), radial-gradient(700px 400px at 120% -10%, rgba(111,211,196,.18), transparent 60%), linear-gradient(160deg, #0f3d5c, #0a2b42); }
+.authbrand::after { content: ''; position: absolute; inset: 0; background-image: radial-gradient(rgba(255,255,255,.07) 1px, transparent 1px); background-size: 22px 22px; pointer-events: none; }
+.authbrand > * { position: relative; z-index: 1; }
+.ab-logo { font-size: 22px; font-weight: 700; color: #fff !important; letter-spacing: -.01em; text-decoration: none !important; }
+.ab-logo span { color: #6fd3c4; margin-left: 2px; }
+.ab-logo.mobile { display: none; color: var(--brand) !important; }
+.ab-logo.mobile span { color: var(--accent); }
+.ab-mid { max-width: 440px; }
+.ab-route { width: 100%; max-width: 340px; color: #dbe7f1; margin-bottom: 18px; }
+.ab-mid h2 { display: block; font-size: 28px; line-height: 1.2; color: #fff; margin: 0 0 18px; letter-spacing: -.02em; }
+.ab-mid ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.ab-mid li { padding-left: 26px; position: relative; font-size: 14px; }
+.ab-mid li::before { content: ''; position: absolute; left: 0; top: 4px; width: 14px; height: 14px; border-radius: 50%; background: rgba(111,211,196,.25); box-shadow: inset 0 0 0 4px rgba(111,211,196,.9); }
+.ab-foot { font-size: 12px; opacity: .75; margin: 0; }
+.authpanel { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 24px; background: var(--bg); }
+.authcard { width: 100%; max-width: 440px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 36px 36px 28px; box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 12px 32px rgba(16,24,40,.08); }
+.authcard:has(.row) { max-width: 560px; }
+.authcard h1 { font-size: 24px; margin: 0 0 6px; }
+.authcard .lead { color: var(--ink-2); margin: 0 0 20px; font-size: 14px; line-height: 1.55; }
+.authcard label { font-size: 13px; margin-bottom: 14px; }
+.authcard input { padding: 11px 12px; font-size: 15px; border-radius: 9px; }
+.authcard .alert { margin-bottom: 16px; }
+.btn.lg { padding: 12px 18px; font-size: 15px; border-radius: 10px; margin-top: 4px; }
+.authicon { width: 52px; height: 52px; border-radius: 14px; display: flex; align-items: center; justify-content: center; margin-bottom: 18px; background: var(--accent-soft); color: var(--accent); }
+.authicon svg { width: 26px; height: 26px; }
+.authicon.mail, .authicon.lock { background: var(--info-soft); color: var(--info); }
+.authicon.warn { background: var(--warn-soft); color: var(--warn); }
+.authicon.check { background: var(--ok-soft); color: var(--ok); }
+.lrow { display: flex; justify-content: space-between; align-items: baseline; }
+.lrow a { font-weight: 500; }
+.pwfield { position: relative; display: block; }
+.pwfield input { padding-right: 64px; }
+.pwtoggle { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); margin-top: 2px; background: none; border: 0; color: var(--info); font: 600 12px var(--font); cursor: pointer; padding: 6px 8px; border-radius: 6px; }
+.pwtoggle:hover { background: var(--info-soft); }
+.hintline { margin: 16px 0 0; font-size: 12px; color: var(--muted); text-align: center; }
+.authlinks { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; }
+.authlinks form { margin: 0; }
+.resend { margin-top: 14px; text-align: center; }
+.checklist-tips { list-style: none; padding: 14px 16px; margin: 0 0 20px; background: #f7f9fb; border: 1px solid var(--line-2); border-radius: 10px; display: grid; gap: 6px; font-size: 13px; color: var(--ink-2); }
+.checklist-tips li { padding-left: 20px; position: relative; }
+.checklist-tips li::before { content: '✓'; position: absolute; left: 0; color: var(--accent); font-weight: 700; }
+.authcard .codeinput { font: 600 28px var(--mono); letter-spacing: .4em; text-align: center; padding: 14px 10px 14px 22px; margin: 0 0 14px; border-radius: 12px; }
+.authcard .codeinput::placeholder { color: #c9d0d9; }
+.authcard .authsteps { margin-top: 0; }
+.authlegal { margin-top: 18px; font-size: 11px; color: var(--muted); }
+@media (max-width: 860px) {
+  .authwrap { grid-template-columns: 1fr; }
+  .authbrand { display: none; }
+  .ab-logo.mobile { display: block; margin-bottom: 18px; }
+  .authpanel { justify-content: flex-start; padding: 32px 16px; }
+  .authcard { padding: 26px 20px 22px; border-radius: 14px; }
+}

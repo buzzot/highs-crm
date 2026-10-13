@@ -86,18 +86,21 @@ r.post('/logout', (req, res) => { clearSession(res); res.redirect('/login'); });
  * Invite acceptance. Supabase sends the invited user to APP_URL/auth/accept#access_token=...&refresh_token=...
  * The tokens live in the URL fragment, so a tiny script posts them here, then the user sets a password.
  */
-r.get('/auth/accept', (req, res) => res.render('auth/accept', { title: 'Accept invitation', error: null }));
+r.get('/auth/accept', (req, res) => res.render('auth/accept', { title: 'Choose a new password', error: null }));
 
 r.post('/auth/accept', async (req, res) => {
   const { access_token, refresh_token, password, full_name } = req.body;
-  if (!access_token || !password || password.length < 8) {
-    return res.status(400).render('auth/accept', { title: 'Accept invitation', error: 'Password must be at least 8 characters.' });
+  if (!access_token || !password || password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+    return res.status(400).render('auth/accept', { title: 'Choose a new password', error: 'Use at least 8 characters with letters and a number.', at: access_token, rt: refresh_token });
+  }
+  if (req.body.password2 !== undefined && password !== req.body.password2) {
+    return res.status(400).render('auth/accept', { title: 'Choose a new password', error: 'Passwords do not match.', at: access_token, rt: refresh_token });
   }
   const { data, error } = await anon.auth.setSession({ access_token, refresh_token });
-  if (error || !data.session) return res.status(400).render('auth/accept', { title: 'Accept invitation', error: 'Invitation link is invalid or expired. Ask for a new one.' });
+  if (error || !data.session) return res.status(400).render('auth/accept', { title: 'Choose a new password', error: 'This link is invalid or has expired. Request a new one from "Forgot password".' });
 
   const { error: uErr } = await admin.auth.admin.updateUserById(data.user.id, { password, user_metadata: { full_name } });
-  if (uErr) return res.status(400).render('auth/accept', { title: 'Accept invitation', error: uErr.message });
+  if (uErr) return res.status(400).render('auth/accept', { title: 'Choose a new password', error: uErr.message, at: access_token, rt: refresh_token });
   if (full_name) await admin.from('profiles').update({ full_name }).eq('id', data.user.id);
 
   const { data: signed } = await anon.auth.signInWithPassword({ email: data.user.email, password });
@@ -202,10 +205,13 @@ r.post('/invite/:token', async (req, res) => {
   res.redirect(home(inv.role));
 });
 
-r.get('/forgot', (req, res) => res.render('auth/forgot', { title: 'Reset password', sent: false }));
+r.get('/forgot', (req, res) => res.render('auth/forgot', { title: 'Reset password', sent: false, email: null, error: null }));
 r.post('/forgot', async (req, res) => {
-  await anon.auth.resetPasswordForEmail(req.body.email, { redirectTo: `${APP_URL()}/auth/accept` });
-  res.render('auth/forgot', { title: 'Reset password', sent: true });
+  const email = String(req.body.email || '').trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).render('auth/forgot', { title: 'Reset password', sent: false, email, error: 'Enter a valid email address.' });
+  const { error } = await anon.auth.resetPasswordForEmail(email, { redirectTo: `${APP_URL()}/auth/accept` });
+  if (error) console.error(`[forgot] ${email}: ${error.message}`);   // same answer either way: don't reveal which emails exist
+  res.render('auth/forgot', { title: 'Check your inbox', sent: true, email, error: null });
 });
 
 r.get('/account', requireAuth, (req, res) => res.render('auth/account', { title: 'My account', saved: req.query.saved }));

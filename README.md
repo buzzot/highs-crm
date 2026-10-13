@@ -49,7 +49,7 @@ Node.js (Express, server-rendered EJS) on **Supabase** (Postgres, Auth, Storage)
    - Email Templates → "Invite user" / "Reset password": brand them as you like. The link must keep `{{ .ConfirmationURL }}`.
    - For production, set up custom SMTP (Project Settings → Auth → SMTP). The built-in sender is rate-limited.
    - **Email templates** (required for invitations and sign-in codes): paste `supabase/email-templates/invite.html` into
-     "Invite user" and `magic-link.html` into "Magic Link" (subjects are at the top of each file).
+     "Invite user", `magic-link.html` into "Magic Link" and `reset-password.html` into "Reset Password" (subjects are at the top of each file).
    - Providers → Email: **Email OTP Expiration** = 900 seconds, OTP length 6.
    - Every sign-in sends a code by email, so send email through **Resend** (the built-in Supabase sender allows only a few emails per hour):
      1. resend.com → Domains → add your domain, add the DNS records it shows, wait for "Verified".

@@ -17,6 +17,11 @@
     const sync = () => { const fx = s.selectedOptions[0]?.dataset.fx; if (t && fx) t.value = Math.round(Number(fx) * 1e6) / 1e6; };
     s.addEventListener('change', sync); sync();
   });
+  // show / hide password
+  document.querySelectorAll('.pwtoggle').forEach(b => b.addEventListener('click', () => {
+    const i = b.parentNode.querySelector('input'); const show = i.type === 'password';
+    i.type = show ? 'text' : 'password'; b.textContent = show ? 'Hide' : 'Show'; b.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+  }));
   // fade flash messages
   setTimeout(() => document.querySelectorAll('.flash.ok').forEach(f => f.classList.add('gone')), 4000);
 })();

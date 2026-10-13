@@ -1,21 +1,18 @@
 <%- include('../partials/head') %>
-<div class="card narrow auth <%= step === 'profile' ? 'wide-auth' : '' %>">
-  <h1>Highs<span class="accent">Business</span></h1>
+<%- include('../partials/auth_start') %>
   <% if (state === 'valid') { %>
     <ol class="authsteps"><li class="<%= step === 'code' ? 'now' : 'done' %>">Confirm email</li><li class="<%= step === 'profile' ? 'now' : '' %>">Your profile & password</li></ol>
     <% if (error) { %><div class="alert err"><%= error %></div><% } %>
     <% if (msg) { %><div class="alert ok"><%= msg %></div><% } %>
 
     <% if (step === 'code') { %>
-      <p>You've been invited<% if (inv.organizations?.name) { %> to the <strong><%= inv.organizations.name %></strong> portal<% } else { %> to the Highs Business team<% } %>.</p>
-      <p class="muted small">Enter the 6-digit code from the invitation email sent to <strong><%= inv.email %></strong>.</p>
+      <h1>You're invited</h1>
+      <p class="lead">Join<% if (inv.organizations?.name) { %> the <strong><%= inv.organizations.name %></strong> portal<% } else { %> the Highs Business team<% } %>. Enter the 6-digit code from the invitation email sent to <strong><%= inv.email %></strong>.</p>
       <form method="post" action="/invite/<%= inv.token %>/code" autocomplete="off">
-        <label>Confirmation code
-          <input class="codeinput" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,12}" maxlength="12" required autofocus placeholder="••••••">
-        </label>
-        <button class="btn primary wide">Confirm</button>
+        <input class="codeinput" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,12}" maxlength="12" required autofocus placeholder="000000" aria-label="Confirmation code">
+        <button class="btn primary wide lg">Confirm email</button>
       </form>
-      <form method="post" action="/invite/<%= inv.token %>/resend" class="codefoot">
+      <form method="post" action="/invite/<%= inv.token %>/resend" class="resend">
         <span class="muted small">Code expired or not received?</span> <button class="link small">Email me a new code</button>
       </form>
       <form method="post" action="/invite/<%= inv.token %>/session" id="hashForm" hidden><input type="hidden" name="access_token"></form>
@@ -25,7 +22,8 @@
           if (a) { const f = document.getElementById('hashForm'); f.access_token.value = a; history.replaceState(null, '', location.pathname); f.submit(); } })();
       </script>
     <% } else { %>
-      <p class="muted small">Email confirmed ✓ — now tell us who you are and choose a password.</p>
+      <h1>Set up your account</h1>
+      <p class="lead">Email confirmed ✓ — tell us who you are and choose a password.</p>
       <form method="post" action="/invite/<%= inv.token %>">
         <label>Email <input type="email" value="<%= inv.email %>" disabled></label>
         <div class="row">
@@ -37,25 +35,33 @@
           <label>WeChat / WhatsApp <input name="wechat" value="<%= form.wechat || '' %>"></label>
         </div>
         <div class="row">
-          <label>Password <span class="muted small">— 8+ characters, letters and a number</span><input type="password" name="password" minlength="8" required autocomplete="new-password"></label>
+          <label>Password <span class="pwfield"><input type="password" name="password" minlength="8" required autocomplete="new-password"><button type="button" class="pwtoggle" aria-label="Show password">Show</button></span><span class="hint">8+ characters, letters and a number</span></label>
           <label>Repeat password <input type="password" name="password2" minlength="8" required autocomplete="new-password"></label>
         </div>
-        <button class="btn primary wide">Create my account</button>
+        <button class="btn primary wide lg">Create my account</button>
       </form>
-      <p class="muted small">Each time you sign in we'll also email you a one-time code.</p>
+      <p class="hintline">Each time you sign in we'll also email you a one-time code.</p>
     <% } %>
-    <p class="muted small">Invitation valid until <%= fmt.date(inv.expires_at) %>.</p>
+    <p class="hintline">Invitation valid until <%= fmt.date(inv.expires_at) %>.</p>
   <% } else if (state === 'accepted') { %>
-    <div class="alert ok">This invitation has already been used — your account is active.</div>
-    <a class="btn primary wide" href="/login">Sign in</a>
-    <p class="muted small"><a href="/forgot">Forgot your password?</a></p>
+    <%- include('../partials/auth_icon', { icon: 'check' }) %>
+    <h1>You're all set</h1>
+    <p class="lead">This invitation has already been used — your account is active.</p>
+    <a class="btn primary wide lg" href="/login">Sign in</a>
+    <p class="hintline"><a href="/forgot">Forgot your password?</a></p>
   <% } else if (state === 'expired') { %>
-    <div class="alert warn">This invitation expired on <%= fmt.date(inv.expires_at) %>. Invitation links are valid for 14 days.</div>
-    <p>Please ask your Highs Business contact to send you a new invitation.</p>
+    <%- include('../partials/auth_icon', { icon: 'warn' }) %>
+    <h1>This invitation has expired</h1>
+    <p class="lead">It was valid until <%= fmt.date(inv.expires_at) %> (invitations last 14 days). Please ask your Highs Business contact to send a new one.</p>
   <% } else if (state === 'revoked') { %>
-    <div class="alert warn">A newer invitation was sent to <%= inv.email %>. Please use the link in the most recent email.</div>
+    <%- include('../partials/auth_icon', { icon: 'mail' }) %>
+    <h1>There's a newer invitation</h1>
+    <p class="lead">A newer invitation was sent to <strong><%= inv.email %></strong>. Please use the link in the most recent email.</p>
   <% } else { %>
-    <div class="alert err">This invitation link is not valid. Check that you copied the whole link from the email.</div>
+    <%- include('../partials/auth_icon', { icon: 'warn' }) %>
+    <h1>Link not valid</h1>
+    <p class="lead">This invitation link doesn't work. Check that you opened the whole link from the email, or ask for a new invitation.</p>
+    <a class="btn wide lg" href="/login">Go to sign in</a>
   <% } %>
-</div>
+<%- include('../partials/auth_end') %>
 <%- include('../partials/foot') %>

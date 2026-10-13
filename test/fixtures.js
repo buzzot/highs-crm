@@ -118,10 +118,10 @@ export const pages = {
   'portal/order_detail': base(clientUser, '/portal/orders/ord1', { title: overview.order_no, order: { ...overview, order_items: items }, shipments: [shipment], documents: docs, events, packing }),
   // ---- auth ----
   'auth/login': base(null, '/login', { title: 'Sign in', error: null, next: '' }),
-  'auth/accept': base(null, '/auth/accept', { title: 'Accept invitation', error: null }),
+  'auth/accept': base(null, '/auth/accept', { title: 'Choose a new password', error: null }),
   'auth/invite': base(null, '/invite/x', { title: 'Accept invitation', state: 'valid', step: 'profile', msg: null, inv: { email: 'mars4wo@gmail.com', token: 'tok', expires_at: d(13), organizations: { name: 'Acme Retail LLC' } }, error: null, form: {} }),
   'auth/verify': base(null, '/login/verify', { title: 'Enter your code', email: 'ma•••@gmail.com', error: null, msg: null }),
-  'auth/forgot': base(null, '/forgot', { title: 'Reset password', sent: false }),
+  'auth/forgot': base(null, '/forgot', { title: 'Check your inbox', sent: true, email: 'mars4wo@gmail.com', error: null }),
   'auth/account': base({ ...clientUser, job_title: 'Buyer', phone: '+1 555 0100' }, '/account', { title: 'My account', saved: false }),
   error: base(staffUser, '/x', { title: 'Not found', message: 'Page not found.' }),
 };
