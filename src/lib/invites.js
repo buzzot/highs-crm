@@ -17,7 +17,7 @@ export async function inviteUser({ email, role = 'client', orgId = null, invited
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error('Enter a valid email address.');
   if (role === 'client' && !orgId) throw new Error('Client invites need an organization.');
 
-  const { data: existing } = await admin.from('profiles').select('id, role, org_id, accepted_at, organizations(name)').ilike('email', email).maybeSingle();
+  const { data: existing } = await admin.from('profiles').select('id, role, org_id, accepted_at, organizations!profiles_org_id_fkey(name)').ilike('email', email).maybeSingle();
   if (existing?.accepted_at) {
     if (role === 'client' && existing.org_id && existing.org_id !== orgId) {
       throw new Error(`${email} already uses the portal for ${existing.organizations?.name || 'another client'}.`);

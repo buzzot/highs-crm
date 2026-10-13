@@ -4,11 +4,15 @@ const COOKIE = 'hb_session';
 const secure = process.env.NODE_ENV === 'production';
 
 export function setSession(res, session) {
-  res.cookie(COOKIE, JSON.stringify({ a: session.access_token, r: session.refresh_token }), {
-    httpOnly: true, sameSite: 'lax', secure, maxAge: 1000 * 60 * 60 * 24 * 7,
-  });
+  const value = JSON.stringify({ a: session.access_token, r: session.refresh_token });
+  if (value.length > 3800) console.error(`[session] cookie is ${value.length} bytes — browsers may drop it`);
+  res.cookie(COOKIE, value, { httpOnly: true, sameSite: 'lax', secure, maxAge: 1000 * 60 * 60 * 24 * 7 });
+  res.cookie('hb_just', '1', { httpOnly: true, sameSite: 'lax', secure, maxAge: 60e3 }); // lets /login notice a lost cookie
 }
-export function clearSession(res) { res.clearCookie(COOKIE); }
+export function clearSession(res, why) {
+  res.clearCookie(COOKIE);
+  if (why) res.cookie('hb_why', why.slice(0, 300), { httpOnly: true, sameSite: 'lax', secure, maxAge: 5 * 60e3 });
+}
 
 /** Attach req.user (profile) and req.db (RLS-scoped client) when a valid session exists. */
 export async function loadUser(req, res, next) {
@@ -24,8 +28,9 @@ export async function loadUser(req, res, next) {
     // try refresh
     const { data, error: rErr } = await anon.auth.refreshSession({ refresh_token: tokens.r });
     if (rErr || !data?.session) {
-      console.error(`[session] token rejected (${error?.message || 'no user'}); refresh failed (${rErr?.message || 'no session'})`);
-      clearSession(res); return next();
+      const why = `token rejected (${error?.message || 'no user'}); refresh failed (${rErr?.message || 'no session'})`;
+      console.error(`[session] ${why}`);
+      clearSession(res, `Session not accepted: ${why}`); return next();
     }
     setSession(res, data.session);
     tokens = { a: data.session.access_token, r: data.session.refresh_token };
@@ -33,17 +38,18 @@ export async function loadUser(req, res, next) {
   }
 
   let { data: profile, error: pErr } = await admin.from('profiles')
-    .select('*, organizations(id, name, country, details_completed_at)').eq('id', user.id).single();
+    .select('*, organizations!profiles_org_id_fkey(id, name, country, details_completed_at)').eq('id', user.id).single();
   if (pErr && /details_completed_at|column/i.test(pErr.message || '')) {
     // migration 0008 not applied yet: still let people in, skip the company-details gate
     console.error(`[session] ${pErr.message} — run supabase/migrations/0008_company_details.sql`);
     ({ data: profile, error: pErr } = await admin.from('profiles')
-      .select('*, organizations(id, name, country)').eq('id', user.id).single());
+      .select('*, organizations!profiles_org_id_fkey(id, name, country)').eq('id', user.id).single());
     if (profile) profile.detailsGateOff = true;
   }
   if (!profile || !profile.active) {
-    console.error(`[session] ${user.email}: profile ${profile ? 'inactive' : 'not found'}${pErr ? ` (${pErr.message})` : ''}`);
-    clearSession(res); return next();
+    const why = `${user.email}: profile ${profile ? 'inactive' : 'not found'}${pErr ? ` (${pErr.message})` : ''}`;
+    console.error(`[session] ${why}`);
+    clearSession(res, `Signed in, but the account could not be loaded — ${why}`); return next();
   }
 
   req.user = profile;

@@ -17,7 +17,12 @@ const home = role => (role === 'client' ? '/portal' : '/admin');
 
 r.get('/login', (req, res) => {
   if (req.user) return res.redirect(req.user.role === 'client' ? '/portal' : '/admin');
-  res.render('auth/login', { title: 'Sign in', error: null, next: req.query.next || '' });
+  const lost = req.cookies.hb_just && !req.cookies.hb_session
+    ? 'You were signed in, but your browser did not keep the sign-in cookie. Allow cookies for this site (and turn off strict tracking protection), then try again.' : null;
+  if (lost) console.error('[login] session cookie was set but not sent back by the browser');
+  const why = req.cookies.hb_why || lost || (req.query.why === 'step' ? 'This sign-in step was started in another browser or has expired. Enter your email and password again here, then enter the new code in this same browser window.' : null);
+  if (req.cookies.hb_why) res.clearCookie('hb_why');
+  res.render('auth/login', { title: 'Sign in', error: why, next: req.query.next || '' });
 });
 
 r.post('/login', async (req, res) => {
@@ -54,16 +59,20 @@ const verifyView = (res, pending, extra = {}) => res.render('auth/verify', {
 
 r.get('/login/verify', (req, res) => {
   const pending = unseal(req.cookies[PENDING]);
-  if (!pending) return res.redirect('/login');
+  if (!pending) return res.redirect('/login?why=step');
   verifyView(res, pending, { msg: req.query.sent ? 'A new code is on its way.' : null });
 });
 
 r.post('/login/verify', async (req, res) => {
   const pending = unseal(req.cookies[PENDING]);
-  if (!pending) return res.redirect('/login');
+  if (!pending) {
+    console.error(`[login] code entered but no pending sign-in cookie (${req.cookies[PENDING] ? 'unreadable/expired' : 'missing'})`);
+    return res.redirect('/login?why=step');
+  }
   const result = await checkCode(pending.e, 'login', req.body.code);
   if (result !== 'ok') return verifyView(res.status(401), pending, { error: codeError(result) });
   const { data, error } = await anon.auth.refreshSession({ refresh_token: pending.rt });
+  if (error || !data?.session) console.error(`[login] ${pending.e}: refresh after code failed: ${error?.message || 'no session'}`);
   if (error || !data?.session) return res.status(401).render('auth/login', { title: 'Sign in', error: 'Your sign-in expired — please enter your password again.', next: pending.n || '' });
   const { data: profile } = await admin.from('profiles').select('role, active').eq('id', data.user.id).single();
   if (!profile?.active) return res.status(403).render('auth/login', { title: 'Sign in', error: 'Your account is not active.', next: '' });

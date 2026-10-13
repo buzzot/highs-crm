@@ -25,7 +25,7 @@ r.post('/staff/invite', requireAdmin, async (req, res) => {
 
 
 r.get('/', async (req, res) => {
-  const { data } = await admin.from('organizations').select('*, profiles(count), orders(count), requests(count)').order('name');
+  const { data } = await admin.from('organizations').select('*, profiles!profiles_org_id_fkey(count), orders(count), requests(count)').order('name');
   res.render('admin/clients/index', { title: 'Clients', clients: data || [] });
 });
 
