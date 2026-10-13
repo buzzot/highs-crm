@@ -11,4 +11,9 @@
   </form>
   <p class="muted small"><a href="/forgot">Forgot password?</a> · Access is by invitation only.</p>
 </div>
+<script>
+  // Invite / password-reset links that land on "/" (Supabase Site URL fallback) end up here with the
+  // tokens in the URL fragment — forward them to the page that sets the password.
+  if (/access_token=|error_description=/.test(location.hash)) location.replace('/auth/accept' + location.hash);
+</script>
 <%- include('../partials/foot') %>
