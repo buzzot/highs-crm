@@ -19,7 +19,7 @@ Node.js (Express, server-rendered EJS) on **Supabase** (Postgres, Auth, Storage)
 | Orders | All orders with status / client filters, cost, freight, margin, profit. Order page: status updates (optional client-visible note), items, landed price per unit, shipments, packing list (bulk-add cartons), product & packing photos, documents, activity |
 | Clients | Companies, their users, pending invites, "Send invite", requests and orders per client. Staff list and staff invites (admins only) |
 | Suppliers | Contacts (WeChat, phone, email), payment terms, lead time, rating, whether they can export officially, products, order history, purchases, licences and certificates |
-| Products | Catalogue with photos, supplier cost, MOQ, HS code, carton size and weight, specs, quote history |
+| Products | **Import** from the supplier Excel template (`public/templates/highs-product-import-template.xlsx`, rebuilt by `scripts/make_template.py`), supplier price lists, PDFs or photos (AI), with duplicate-supplier detection and a review/confirm step. Catalogue with photos, supplier cost, MOQ, HS code, carton size and weight, specs, quote history |
 | Sourcing | Request pipeline (new → reviewing → quoted → accepted), owner, internal notes, AI sourcing brief, quotes, accepted quote → order |
 | Logistics | Shipments (third-party forwarders), status, ETD/ETA, B/L, container, **export declaration no.**, freight cost ledger by type (multi-currency, paid/unpaid), landed cost & price per unit, shipping documents, forwarder directory |
 | Pricing | Live calculator + quotes register. Margin on **product cost only** (min 20%, configurable), logistics passed through to give the landed price. Target-price → margin solver, freight helper (LCL/FCL/air from carton data), **AI verification**, send-to-client gate (minimum margin enforced, admin override with a reason) |
@@ -42,7 +42,9 @@ Node.js (Express, server-rendered EJS) on **Supabase** (Postgres, Auth, Storage)
    1. `supabase/migrations/0001_schema.sql`
    2. `supabase/migrations/0002_hardening.sql`
    3. `supabase/migrations/0003_grants.sql`
-   4. optional demo data: `supabase/seed.sql`
+   4. `supabase/migrations/0004_invite_tracking.sql`
+   5. `supabase/migrations/0005_product_import.sql`
+   6. optional demo data: `supabase/seed.sql`
 3. **Auth settings** (Authentication):
    - Providers → Email: turn **off** "Allow new users to sign up" (invite-only).
    - URL Configuration: Site URL = your `APP_URL`; add `APP_URL/auth/accept` to Redirect URLs.
