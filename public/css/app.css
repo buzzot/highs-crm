@@ -288,3 +288,31 @@ a.bar:hover .bf { background: var(--brand); }
 }
 .row:not(.tight):not(.between) > label.check { margin-top: 28px; }
 form.inline + form.inline { margin-left: 10px; }
+
+/* ---------- shipment page ---------- */
+.kpis.five { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 24px; }
+.facts > div { display: flex; flex-direction: column; min-width: 0; }
+.facts span { font-size: 12px; color: var(--muted); }
+.facts strong { font-weight: 500; overflow-wrap: anywhere; }
+.facts em { font-style: normal; font-size: 11px; color: var(--muted); }
+.split { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(220px, 1fr); gap: 24px; align-items: start; }
+.breakdown { border-left: 1px solid var(--line-2); padding-left: 20px; }
+.breakdown h3 { margin-top: 0; }
+.breakdown .bar { grid-template-columns: 1fr 70px; grid-template-areas: "l n" "t t"; gap: 2px 8px; margin-bottom: 6px; }
+.breakdown .bar .bl { grid-area: l; } .breakdown .bar .bn { grid-area: n; } .breakdown .bar .bt { grid-area: t; height: 8px; }
+.tblwrap { overflow-x: auto; }
+.tbl.landed td, .tbl.landed th { white-space: nowrap; }
+.tbl.landed td:first-child { white-space: normal; min-width: 180px; }
+.tbl.landed .gcost { background: #f6f8fb; }
+.tbl.landed .gsell { background: #f1f8f6; }
+.tbl.landed tr.group th { text-transform: none; letter-spacing: 0; font-size: 12px; text-align: center; border-bottom: 0; padding-bottom: 2px; color: var(--ink-2); }
+.tbl.landed tfoot td { font-weight: 600; border-top: 1px solid var(--line); }
+.legendline { margin-top: 10px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.sw.gcost { background: #e3e9f2; } .sw.gsell { background: #d6eee8; }
+@media (max-width: 1000px) {
+  .split { grid-template-columns: minmax(0, 1fr); }
+  .breakdown { border-left: 0; padding-left: 0; border-top: 1px solid var(--line-2); padding-top: 14px; }
+}
+@media (max-width: 760px) { .facts { grid-template-columns: 1fr 1fr; gap: 10px 14px; } }
+@media (max-width: 760px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } }

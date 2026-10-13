@@ -66,8 +66,10 @@ app.use('/admin', adminRoutes);
 
 app.use((req, res) => res.status(404).render('error', { title: 'Not found', message: 'Page not found.' }));
 app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
-  console.error(err);
-  res.status(500).render('error', { title: 'Error', message: process.env.NODE_ENV === 'production' ? 'Something went wrong.' : err.message });
+  console.error(`[error] ${req.method} ${req.originalUrl}:`, err);
+  const isStaff = req.user && ['admin', 'staff'].includes(req.user.role);
+  const detail = [err.message, err.code, err.details, err.hint].filter(Boolean).join(' · ');
+  res.status(500).render('error', { title: 'Error', message: process.env.NODE_ENV === 'production' && !isStaff ? 'Something went wrong.' : `Something went wrong: ${detail}` });
 });
 
 export default app;

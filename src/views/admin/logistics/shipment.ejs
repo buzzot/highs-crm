@@ -1,5 +1,14 @@
 <%- include('../../partials/head') %>
-<% const cur = s.orders?.currency || 'USD'; const chg = s.gross_weight_kg || s.volume_cbm ? Math.max(Number(s.gross_weight_kg||0), Number(s.volume_cbm||0) * (s.mode === 'air' || s.mode === 'express' ? 167 : 1000)) : 0; %>
+<%
+  const cur = s.orders?.currency || 'USD';
+  const air = s.mode === 'air' || s.mode === 'express';
+  const chg = s.gross_weight_kg || s.volume_cbm ? Math.max(Number(s.gross_weight_kg || 0), Number(s.volume_cbm || 0) * (air ? 167 : 1000)) : 0;
+  const unpaid = costs.filter(c => !c.paid).reduce((t, c) => t + Number(c.amount) * Number(c.fx_to_order || 1), 0);
+  const orderFreight = Number(order.freight_total || 0);
+  const goods = Number(order.subtotal || 0), cost = Number(order.cost_total || 0);
+  const profitAfter = goods - cost - orderFreight;
+  const logisticsPct = cost > 0 ? orderFreight / cost * 100 : null;
+%>
 <div class="pagehead">
   <div><a class="back" href="/admin/logistics">← Logistics</a>
     <h1><%= fmt.status(s.mode).toUpperCase() %> shipment · <a href="/admin/orders/<%= s.order_id %>"><%= s.orders?.order_no %></a></h1>
@@ -9,85 +18,130 @@
 <% if (s.export_official && !s.export_declaration_no) { %>
   <div class="alert warn">Export declaration number not recorded yet. Ask the forwarder / customs broker for the 报关单 and upload it below.</div>
 <% } %>
-<div class="grid2">
-  <div>
-    <div class="card">
-      <h2>Shipment</h2>
-      <dl class="dl">
-        <dt>B/L / AWB</dt><dd><%= s.bl_no || '—' %></dd>
-        <dt>Container</dt><dd><%= s.container_no || '—' %></dd>
-        <dt>Tracking</dt><dd><%= s.tracking_no || '—' %></dd>
-        <dt>Export declaration</dt><dd><%= s.export_declaration_no || (s.export_official ? 'pending' : 'unofficial export') %></dd>
-        <dt>ETD / ATD</dt><dd><%= fmt.date(s.etd) %> / <%= fmt.date(s.atd) %></dd>
-        <dt>ETA / ATA</dt><dd><%= fmt.date(s.eta) %> / <%= fmt.date(s.ata) %></dd>
-        <dt>Cargo</dt><dd><%= s.cartons || '—' %> ctns · <%= fmt.num(s.gross_weight_kg, 1) %> kg · <%= fmt.num(s.volume_cbm, 3) %> cbm</dd>
-        <dt>Chargeable</dt><dd><%= chg ? fmt.num(chg, 1) + ((s.mode === 'air' || s.mode === 'express') ? ' kg (1 cbm = 167 kg)' : ' kg/W·M (1 cbm = 1 t)') : '—' %></dd>
-      </dl>
-      <% if (s.notes) { %><p class="pre"><%= s.notes %></p><% } %>
-    </div>
 
-    <div class="card" id="costs">
-      <h2>Freight & logistics costs <span class="muted small">in <%= cur %></span></h2>
+<div class="kpis five">
+  <div class="kpi"><span class="n"><%= fmt.money(totalCost, cur, 0) %></span><span class="l">This shipment · logistics</span></div>
+  <div class="kpi <%= unpaid > 0 ? 'bad' : '' %>"><span class="n"><%= fmt.money(unpaid, cur, 0) %></span><span class="l">Unpaid to forwarder</span></div>
+  <div class="kpi"><span class="n"><%= fmt.money(land.freightPerUnit, cur, 2) %></span><span class="l">Logistics per unit (order)</span></div>
+  <div class="kpi"><span class="n"><%= logisticsPct == null ? '—' : fmt.pct(logisticsPct) %></span><span class="l">Logistics vs product cost</span></div>
+  <div class="kpi <%= profitAfter < 0 ? 'bad' : '' %>"><span class="n"><%= fmt.money(profitAfter, cur, 0) %></span><span class="l">Order profit after logistics</span></div>
+</div>
+
+<div class="grid2">
+  <div class="card">
+    <h2>Shipment</h2>
+    <div class="facts">
+      <div><span>B/L / AWB</span><strong><%= s.bl_no || '—' %></strong></div>
+      <div><span>Container</span><strong><%= s.container_no || '—' %></strong></div>
+      <div><span>Tracking</span><strong><%= s.tracking_no || '—' %></strong></div>
+      <div><span>Export declaration</span><strong class="<%= s.export_official && !s.export_declaration_no ? 'bad' : '' %>"><%= s.export_declaration_no || (s.export_official ? 'pending' : 'unofficial export') %></strong></div>
+      <div><span>ETD / ATD</span><strong><%= fmt.date(s.etd) %> / <%= fmt.date(s.atd) %></strong></div>
+      <div><span>ETA / ATA</span><strong><%= fmt.date(s.eta) %> / <%= fmt.date(s.ata) %></strong></div>
+      <div><span>Cargo</span><strong><%= s.cartons || '—' %> ctns · <%= fmt.num(s.gross_weight_kg, 1) %> kg · <%= fmt.num(s.volume_cbm, 3) %> cbm</strong></div>
+      <div><span>Chargeable</span><strong><%= chg ? fmt.num(chg, 1) + (air ? ' kg' : ' kg W/M') : '—' %></strong><em><%= chg ? (air ? '1 cbm = 167 kg' : '1 cbm = 1 t') : '' %></em></div>
+    </div>
+    <% if (s.notes) { %><p class="pre muted"><%= s.notes %></p><% } %>
+  </div>
+  <%- include('../../partials/docs', { docs, entityType: 'shipment', entityId: s.id, redirect: '/admin/logistics/shipments/' + s.id, kinds: ['bill_of_lading','airway_bill','export_declaration','commercial_invoice','packing_list','certificate','packing_photo','other'], heading: 'Shipping documents', defaultKind: s.mode === 'air' || s.mode === 'express' ? 'airway_bill' : 'bill_of_lading' }) %>
+</div>
+
+<div class="card" id="costs">
+  <h2>Freight & logistics costs <span class="muted small">converted to <%= cur %></span></h2>
+  <div class="split">
+    <div>
       <table class="tbl compact">
-        <thead><tr><th>Type</th><th>Description</th><th class="right">Amount</th><th>FX</th><th class="right"><%= cur %></th><th>Invoice</th><th>Paid</th><th></th></tr></thead>
+        <thead><tr><th>Type</th><th>Description</th><th class="right">Amount</th><th class="right">FX</th><th class="right">In <%= cur %></th><th>Invoice</th><th>Paid</th><th></th></tr></thead>
         <tbody>
-        <% if (!costs.length) { %><tr><td colspan="8" class="muted">No costs recorded.</td></tr><% } %>
+        <% if (!costs.length) { %><tr><td colspan="8" class="muted">No costs recorded yet — add forwarder invoices below.</td></tr><% } %>
         <% costs.forEach(c => { %>
           <tr>
             <td><span class="tag"><%= fmt.status(c.type) %></span></td>
             <td class="small"><%= c.description || '' %></td>
-            <td class="right"><%= fmt.money(c.amount, c.currency) %></td>
-            <td class="small"><%= Number(c.fx_to_order) === 1 ? '' : fmt.num(c.fx_to_order, 4) %></td>
-            <td class="right"><%= fmt.money(Number(c.amount) * Number(c.fx_to_order || 1), cur) %></td>
+            <td class="right nowrap"><%= fmt.money(c.amount, c.currency) %></td>
+            <td class="right small muted"><%= Number(c.fx_to_order) === 1 ? '' : fmt.num(c.fx_to_order, 4) %></td>
+            <td class="right nowrap"><strong><%= fmt.money(Number(c.amount) * Number(c.fx_to_order || 1), cur) %></strong></td>
             <td class="small"><%= c.invoice_ref || '' %></td>
             <td><form method="post" action="/admin/logistics/costs/<%= c.id %>/paid" class="inline"><button class="link small <%= c.paid ? 'ok' : 'bad' %>"><%= c.paid ? '✓ ' + fmt.date(c.paid_at) : 'unpaid' %></button></form></td>
-            <td><form method="post" action="/admin/logistics/costs/<%= c.id %>/delete" class="inline" onsubmit="return confirm('Delete this cost?')"><button class="link small danger">×</button></form></td>
+            <td class="right"><form method="post" action="/admin/logistics/costs/<%= c.id %>/delete" class="inline" onsubmit="return confirm('Delete this cost?')"><button class="link small danger" title="Delete">×</button></form></td>
           </tr>
         <% }) %>
-        <tr class="total"><td colspan="4">Total logistics</td><td class="right"><%= fmt.money(totalCost, cur) %></td><td colspan="3"></td></tr>
+        <% if (costs.length) { %><tr class="total"><td colspan="4">Total this shipment</td><td class="right nowrap"><%= fmt.money(totalCost, cur) %></td><td colspan="3"></td></tr><% } %>
         </tbody>
       </table>
-      <form method="post" action="/admin/logistics/shipments/<%= s.id %>/costs" class="sub" id="costForm">
-        <div class="row">
-          <label>Type <select name="type"><% freightTypes.forEach(t => { %><option value="<%= t %>"><%= fmt.status(t) %></option><% }) %></select></label>
-          <label class="grow2">Description <input name="description"></label>
-          <label>Invoice ref <input name="invoice_ref"></label>
-        </div>
-        <div class="row">
-          <label>Amount <input type="number" step="0.01" name="amount" required></label>
-          <label>Currency <select name="currency" data-fx-target="fx_to_order"><% currencies.forEach(c => { %><option value="<%= c %>" data-fx="<%= defaultFx(c) %>" <%= c === cur ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
-          <label>FX → <%= cur %> <input type="number" step="0.000001" name="fx_to_order" id="fx_to_order" value="1"></label>
-          <label class="check"><input type="checkbox" name="paid"> paid</label>
-        </div>
-        <button class="btn primary">Add cost</button>
-      </form>
+      <details <%= costs.length ? '' : 'open' %>>
+        <summary class="btn small">+ Add cost</summary>
+        <form method="post" action="/admin/logistics/shipments/<%= s.id %>/costs" class="sub">
+          <div class="row">
+            <label>Type <select name="type"><% freightTypes.forEach(t => { %><option value="<%= t %>"><%= fmt.status(t) %></option><% }) %></select></label>
+            <label class="grow2">Description <input name="description"></label>
+            <label>Invoice ref <input name="invoice_ref"></label>
+          </div>
+          <div class="row">
+            <label>Amount <input type="number" step="0.01" name="amount" required></label>
+            <label>Currency <select name="currency" data-fx-target="fx_to_order"><% currencies.forEach(c => { %><option value="<%= c %>" data-fx="<%= defaultFx(c) %>" <%= c === cur ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+            <label>FX → <%= cur %> <input type="number" step="0.000001" name="fx_to_order" id="fx_to_order" value="1"></label>
+            <label class="check"><input type="checkbox" name="paid"> paid</label>
+          </div>
+          <button class="btn primary">Add cost</button>
+        </form>
+      </details>
     </div>
-  </div>
-  <div>
-    <div class="card">
-      <h2>Landed price for this order</h2>
-      <p class="muted small">All recorded logistics on the order (every shipment) spread across units by quantity.</p>
-      <table class="tbl compact">
-        <thead><tr><th>Item</th><th>Qty</th><th class="right">Cost</th><th class="right">Landed cost</th><th class="right">Client price</th><th class="right">Landed price</th></tr></thead>
-        <tbody>
-        <% land.items.forEach(i => { %>
-          <tr><td><%= i.description %></td><td><%= i.quantity %></td>
-            <td class="right"><%= fmt.money(i.unit_cost, cur, 4) %></td><td class="right"><strong><%= fmt.money(i.landed_unit_cost, cur, 4) %></strong></td>
-            <td class="right"><%= fmt.money(i.unit_price, cur, 4) %></td><td class="right"><strong><%= fmt.money(i.landed_unit_price, cur, 4) %></strong></td></tr>
-        <% }) %>
-        <tr class="total"><td>Total</td><td><%= land.qty %></td><td></td><td class="right"><%= fmt.money(land.landedCostTotal, cur) %></td><td></td><td class="right"><%= fmt.money(land.landedSellTotal, cur) %></td></tr>
-        </tbody>
-      </table>
-      <% if (Object.keys(byType).length) { %>
-      <h3>This shipment by cost type</h3>
+    <div class="breakdown">
+      <h3>By cost type</h3>
+      <% if (!Object.keys(byType).length) { %><p class="muted small">Nothing yet.</p><% } else { %>
       <div class="bars">
-        <% const mx = Math.max(...Object.values(byType)); Object.entries(byType).sort((a,b)=>b[1]-a[1]).forEach(([t, v]) => { %>
+        <% const mx = Math.max(...Object.values(byType)); Object.entries(byType).sort((a, b) => b[1] - a[1]).forEach(([t, v]) => { %>
           <div class="bar"><span class="bl"><%= fmt.status(t) %></span><span class="bt"><span class="bf" style="width: <%= (v / mx * 100).toFixed(1) %>%"></span></span><span class="bn"><%= fmt.money(v, cur, 0) %></span></div>
         <% }) %>
       </div>
       <% } %>
     </div>
-    <%- include('../../partials/docs', { docs, entityType: 'shipment', entityId: s.id, redirect: '/admin/logistics/shipments/' + s.id, kinds: ['bill_of_lading','airway_bill','export_declaration','commercial_invoice','packing_list','certificate','packing_photo','other'], heading: 'Shipping documents', defaultKind: 'bill_of_lading' }) %>
   </div>
+</div>
+
+<div class="card" id="landed">
+  <h2>Landed price for this order</h2>
+  <p class="muted small">All logistics recorded on order <%= s.orders?.order_no %> (every shipment, <%= fmt.money(orderFreight, cur) %>) spread evenly across <%= land.qty %> units = <strong><%= fmt.money(land.freightPerUnit, cur, 2) %></strong> per unit.</p>
+  <div class="tblwrap">
+  <table class="tbl landed">
+    <thead>
+      <tr class="group"><th></th><th></th><th colspan="3" class="gcost">Our cost per unit</th><th colspan="2" class="gsell">Client per unit</th><th></th></tr>
+      <tr>
+        <th>Item</th><th class="right">Qty</th>
+        <th class="right gcost">Product</th><th class="right gcost">+ Logistics</th><th class="right gcost">= Landed</th>
+        <th class="right gsell">Price</th><th class="right gsell">Landed price</th>
+        <th class="right">Margin after logistics</th>
+      </tr>
+    </thead>
+    <tbody>
+    <% if (!land.items.length) { %><tr><td colspan="8" class="muted">No items on this order yet.</td></tr><% } %>
+    <% land.items.forEach(i => {
+         const lc = i.landed_unit_cost, p = Number(i.unit_price || 0);
+         const m = lc > 0 ? (p - lc) / lc * 100 : null; %>
+      <tr>
+        <td><strong><%= i.description %></strong><% if (i.hs_code) { %><div class="muted small">HS <%= i.hs_code %></div><% } %></td>
+        <td class="right"><%= i.quantity %></td>
+        <td class="right gcost"><%= fmt.money(i.unit_cost, cur, 2) %></td>
+        <td class="right gcost muted"><%= fmt.money(land.freightPerUnit, cur, 2) %></td>
+        <td class="right gcost"><strong><%= fmt.money(lc, cur, 2) %></strong></td>
+        <td class="right gsell"><%= fmt.money(p, cur, 2) %></td>
+        <td class="right gsell"><strong><%= fmt.money(i.landed_unit_price, cur, 2) %></strong></td>
+        <td class="right <%= m != null && m < 0 ? 'bad' : '' %>"><%= m == null ? '—' : fmt.pct(m) %></td>
+      </tr>
+    <% }) %>
+    </tbody>
+    <% if (land.items.length) { %>
+    <tfoot>
+      <tr class="total">
+        <td>Order total</td><td class="right"><%= land.qty %></td>
+        <td class="right gcost"><%= fmt.money(cost, cur) %></td><td class="right gcost"><%= fmt.money(orderFreight, cur) %></td><td class="right gcost"><%= fmt.money(land.landedCostTotal, cur) %></td>
+        <td class="right gsell"><%= fmt.money(goods, cur) %></td><td class="right gsell"><%= fmt.money(land.landedSellTotal, cur) %></td>
+        <td class="right <%= profitAfter < 0 ? 'bad' : '' %>"><%= land.landedCostTotal > 0 ? fmt.pct(profitAfter / land.landedCostTotal * 100) : '—' %></td>
+      </tr>
+    </tfoot>
+    <% } %>
+  </table>
+  </div>
+  <p class="muted small legendline"><span class="sw gcost"></span> what it costs us delivered &nbsp; <span class="sw gsell"></span> what the client pays delivered (logistics passed through)</p>
 </div>
 <%- include('../../partials/foot') %>
