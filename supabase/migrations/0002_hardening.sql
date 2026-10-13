@@ -44,3 +44,14 @@ begin
   if inv.id is not null then update invitations set accepted_at = now() where id = inv.id; end if;
   return new;
 end $$;
+
+-- The order_overview view (costs, margins, profit for ALL clients) is for staff pages only.
+-- Views normally run with the owner's rights and skip row policies, so: obey the caller's
+-- row policies, and take it away from client/anonymous API roles entirely.
+alter view order_overview set (security_invoker = true);
+revoke all on order_overview from anon, authenticated;
+
+-- Helper functions are only meant for row policies, not to be called from the API.
+revoke execute on function current_role_of() from anon;
+revoke execute on function current_org() from anon;
+revoke execute on function is_staff() from anon;
