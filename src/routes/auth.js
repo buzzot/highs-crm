@@ -3,7 +3,7 @@ import { admin, anon } from '../lib/supabase.js';
 import { setSession, clearSession, requireAuth } from '../middleware/auth.js';
 
 const r = Router();
-const APP_URL = () => process.env.APP_URL || 'http://localhost:3000';
+const APP_URL = () => (process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
 
 r.get('/login', (req, res) => {
   if (req.user) return res.redirect(req.user.role === 'client' ? '/portal' : '/admin');

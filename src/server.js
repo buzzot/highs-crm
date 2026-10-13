@@ -32,16 +32,32 @@ app.get('/', (req, res) => {
   res.redirect(req.user.role === 'client' ? '/portal' : '/admin');
 });
 app.get('/health', (req, res) => res.json({ ok: true }));
-// Config self-check (no secrets shown): can the server read the database with its service key?
+// Config self-check (no secrets shown): which project/role each key belongs to, and can the server read the DB?
 app.get('/health/db', async (req, res) => {
   const { admin } = await import('./lib/supabase.js');
-  const { count, error } = await admin.from('profiles').select('id', { count: 'exact', head: true });
+  const tidy = v => String(v ?? '').trim().replace(/^['"]|['"]$/g, '').trim();
+  const describe = raw => {
+    const v = tidy(raw);
+    if (!v) return { type: 'MISSING' };
+    if (/^sb_secret_/.test(v)) return { type: 'new secret key' };
+    if (/^sb_publishable_/.test(v)) return { type: 'new publishable key' };
+    if (/^eyJ/.test(v)) {
+      try {
+        const p = JSON.parse(Buffer.from(v.split('.')[1], 'base64url').toString());
+        return { type: 'legacy JWT', role: p.role, project_ref: p.ref };
+      } catch { return { type: 'JWT (unreadable)' }; }
+    }
+    return { type: 'unrecognised', length: v.length, starts_with: v.slice(0, 4) + '…' };
+  };
+  const { data, error } = await admin.from('profiles').select('id').limit(5);
+  const urlRef = (tidy(process.env.SUPABASE_URL).match(/https?:\/\/([a-z0-9]+)\.supabase\.co/i) || [])[1] || null;
   res.json({
-    supabase_url: (process.env.SUPABASE_URL || '').replace(/^(https?:\/\/[^.]{4})[^.]*/, '$1…'),
-    service_key_type: /^sb_secret_/.test(process.env.SUPABASE_SERVICE_ROLE_KEY || '') ? 'new secret key' : /^eyJ/.test(process.env.SUPABASE_SERVICE_ROLE_KEY || '') ? 'legacy JWT' : 'unknown/missing',
-    anon_key_type: /^sb_publishable_/.test(process.env.SUPABASE_ANON_KEY || '') ? 'new publishable key' : /^eyJ/.test(process.env.SUPABASE_ANON_KEY || '') ? 'legacy JWT' : 'unknown/missing',
-    profiles_readable: !error, profiles_count: count ?? null, error: error?.message || null,
-    secure_cookies: process.env.NODE_ENV === 'production', app_url: process.env.APP_URL || null,
+    url_project_ref: urlRef,
+    service_role_key: describe(process.env.SUPABASE_SERVICE_ROLE_KEY),
+    anon_key: describe(process.env.SUPABASE_ANON_KEY),
+    profiles_readable: !error, profiles_found: data ? data.length : null,
+    error: error ? [error.code, error.message, error.hint].filter(Boolean).join(' · ') || JSON.stringify(error) : null,
+    app_url: process.env.APP_URL || null,
   });
 });
 app.use('/', authRoutes);

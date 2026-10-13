@@ -12,7 +12,7 @@ export async function inviteUser({ email, role = 'client', orgId = null, invited
   const { error: iErr } = await admin.from('invitations').insert({ email, role, org_id: orgId, invited_by: invitedBy });
   if (iErr) throw iErr;
 
-  const redirectTo = `${process.env.APP_URL || 'http://localhost:3000'}/auth/accept`;
+  const redirectTo = `${(process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '')}/auth/accept`;
   const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
     redirectTo,
     data: { role, org_id: orgId },
