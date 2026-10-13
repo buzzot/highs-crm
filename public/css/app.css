@@ -316,3 +316,53 @@ form.inline + form.inline { margin-left: 10px; }
 }
 @media (max-width: 760px) { .facts { grid-template-columns: 1fr 1fr; gap: 10px 14px; } }
 @media (max-width: 760px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } }
+
+/* ---------- shipment page v2 ---------- */
+.kpi .s { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.kpi.good .n { color: var(--ok); }
+.kpi.warn .n { color: var(--warn); }
+.route { display: grid; grid-template-columns: minmax(0, 1fr) minmax(90px, 1.1fr) minmax(0, 1fr); align-items: center; gap: 10px; padding: 4px 0 16px; }
+.route .pt { display: flex; flex-direction: column; min-width: 0; }
+.route .pt.end { text-align: right; }
+.route .city { font-size: 18px; font-weight: 650; letter-spacing: -.01em; overflow-wrap: anywhere; }
+.route .when { font-size: 12px; color: var(--muted); }
+.route .when.bad { color: var(--bad); }
+.route .line { position: relative; display: flex; flex-direction: column; align-items: center; }
+.route .line::before { content: ''; position: absolute; top: 13px; left: 0; right: 0; border-top: 2px dashed var(--line); }
+.route .ic { position: relative; background: var(--surface); padding: 0 8px; font-size: 18px; line-height: 26px; color: var(--accent); }
+.route .mode { font-size: 11px; color: var(--muted); margin-top: 2px; white-space: nowrap; }
+.tracker { list-style: none; display: flex; padding: 0; margin: 0; gap: 4px; }
+.tracker li { flex: 1; min-width: 0; }
+.tracker li > span, .tracker li button { display: block; width: 100%; padding: 7px 4px; border-radius: 6px; font: 500 11px var(--font); text-align: center; text-transform: capitalize; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tracker li.done > span { background: var(--accent-soft); color: var(--accent); }
+.tracker li.now > span { background: var(--brand); color: #fff; font-weight: 600; }
+.tracker li button { background: var(--line-2); color: var(--muted); border: 1px dashed transparent; cursor: pointer; }
+.tracker li button:hover { border-color: var(--accent); color: var(--accent); background: #fff; }
+.tracker form { margin: 0; }
+.tracker + .hint { margin: 6px 0 16px; }
+.facts { border-top: 1px solid var(--line-2); padding-top: 14px; }
+.mono { font-family: var(--mono); font-size: 13px; }
+h2 .count { font-size: 12px; font-weight: 500; color: var(--muted); background: var(--line-2); border-radius: 999px; padding: 0 8px; }
+.checklist { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 12px; }
+.chk { font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
+.chk.yes { background: var(--ok-soft); color: var(--ok); border-color: #bfe3cf; }
+.chk.no { color: var(--muted); border-style: dashed; }
+.doclist { list-style: none; padding: 0; margin: 0 0 4px; }
+.doclist li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line-2); }
+.doclist li:last-child { border-bottom: 0; }
+.ficon { flex: 0 0 38px; height: 44px; border-radius: 6px; background: #eef2f7; color: var(--ink-2); font: 700 10px var(--font); display: flex; align-items: flex-end; justify-content: center; padding-bottom: 6px; border: 1px solid var(--line); }
+.dmain { flex: 1; min-width: 0; }
+.dtitle { display: block; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dmeta { font-size: 12px; color: var(--muted); margin-top: 2px; display: flex; gap: 6px; align-items: center; }
+.dact { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+button.vis { font: 500 11px var(--font); padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); background: #fff; color: var(--muted); cursor: pointer; white-space: nowrap; }
+button.vis.on { background: var(--info-soft); color: var(--info); border-color: #c9d9f3; }
+.iconbtn { background: none; border: 0; width: 26px; height: 26px; border-radius: 6px; font-size: 16px; line-height: 1; cursor: pointer; color: var(--muted); }
+.iconbtn.danger:hover { background: var(--bad-soft); color: var(--bad); }
+.gallery figcaption { align-items: center; }
+.gallery figcaption form { margin-left: auto; }
+@media (max-width: 760px) {
+  .route .city { font-size: 15px; }
+  .tracker { flex-wrap: wrap; }
+  .tracker li { flex: 1 0 30%; }
+}
