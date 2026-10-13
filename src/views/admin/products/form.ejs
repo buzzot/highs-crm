@@ -3,7 +3,7 @@
   <a class="back" href="<%= p.id ? '/admin/products/' + p.id : '/admin/products' %>">← Back</a>
   <h1><%= title %></h1>
   <% if (error) { %><div class="alert err"><%= error %></div><% } %>
-  <form method="post" action="<%= p.id ? '/admin/products/' + p.id : '/admin/products' %>">
+  <form method="post" action="<%= p.id ? '/admin/products/' + p.id : '/admin/products' %>" enctype="multipart/form-data">
     <div class="row">
       <label class="grow2">Name <input name="name" required value="<%= p.name || '' %>"></label>
       <label>Our SKU <input name="sku" value="<%= p.sku || '' %>"></label>
@@ -11,6 +11,26 @@
       <label>Category <input name="category" value="<%= p.category || '' %>"></label>
     </div>
     <label>Description <textarea name="description" rows="3"><%= p.description || '' %></textarea></label>
+    <h3>Photos</h3>
+    <% if (photos.length) { %>
+    <div class="pgrid">
+      <% photos.forEach((ph, k) => { %>
+        <label class="pthumb" title="<%= ph.title %>">
+          <img src="/admin/documents/<%= ph.id %>/download" alt="" loading="lazy">
+          <% if (k === 0) { %><span class="pmain">Main</span><% } %>
+          <span class="prm"><input type="checkbox" name="remove_photo" value="<%= ph.id %>"> remove</span>
+        </label>
+      <% }) %>
+    </div>
+    <% } %>
+    <div class="photodrop" id="photoDrop" tabindex="0">
+      <input type="file" name="photos" id="photoInput" multiple accept="image/jpeg,image/png,image/webp,image/gif">
+      <span class="dicon">🖼</span>
+      <strong>Drag photos here, click to choose, or paste (Ctrl/⌘ V)</strong>
+      <span class="muted small">JPG, PNG, WebP or GIF · up to 12 photos, 10 MB each<%= photos.length ? '' : ' · the first photo becomes the main one' %></span>
+    </div>
+    <div class="pgrid" id="photoPreview"></div>
+
     <label>Specifications <span class="muted small">— one per line, "Key: value"</span>
       <textarea name="spec" rows="4" placeholder="Material: 304 stainless steel&#10;Capacity: 500 ml&#10;Colour: matte black"><%= specText || '' %></textarea></label>
     <h3>Supply</h3>
@@ -43,4 +63,34 @@
     <div class="actions"><button class="btn primary">Save</button></div>
   </form>
 </div>
+<script>
+  // drag & drop / paste photos with previews; files are kept in the file input and uploaded on Save
+  (function () {
+    const drop = document.getElementById('photoDrop'), input = document.getElementById('photoInput'), prev = document.getElementById('photoPreview');
+    if (!drop) return;
+    const OK = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    let files = [];
+    const sync = () => {
+      const dt = new DataTransfer(); files.forEach(f => dt.items.add(f)); input.files = dt.files;
+      prev.innerHTML = '';
+      files.forEach((f, i) => {
+        const card = document.createElement('div'); card.className = 'pthumb new';
+        const img = document.createElement('img'); img.src = URL.createObjectURL(f); img.onload = () => URL.revokeObjectURL(img.src);
+        const x = document.createElement('button'); x.type = 'button'; x.className = 'pdel'; x.title = 'Remove'; x.textContent = '×';
+        x.onclick = () => { files.splice(i, 1); sync(); };
+        const cap = document.createElement('span'); cap.className = 'pcap'; cap.textContent = (f.size / 1048576).toFixed(1) + ' MB';
+        if (f.size > 10 * 1048576) { card.classList.add('toobig'); cap.textContent = 'too large (max 10 MB)'; }
+        card.append(img, x, cap); prev.appendChild(card);
+      });
+      drop.classList.toggle('has', files.length > 0);
+    };
+    const add = list => { for (const f of list) if (OK.includes(f.type) && files.length < 12) files.push(f); sync(); };
+    input.addEventListener('change', () => { const picked = [...input.files]; files = files.filter(f => !picked.includes(f)); add(picked); });
+    ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+    ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+    drop.addEventListener('drop', e => add(e.dataTransfer.files));
+    document.addEventListener('paste', e => { const imgs = [...(e.clipboardData?.files || [])].filter(f => OK.includes(f.type)); if (imgs.length) { e.preventDefault(); add(imgs); } });
+    drop.closest('form').addEventListener('submit', e => { if (files.some(f => f.size > 10 * 1048576)) { e.preventDefault(); alert('Remove photos larger than 10 MB first.'); } });
+  })();
+</script>
 <%- include('../../partials/foot') %>

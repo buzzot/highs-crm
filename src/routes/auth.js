@@ -3,9 +3,17 @@ import { admin, anon } from '../lib/supabase.js';
 import { setSession, clearSession, requireAuth } from '../middleware/auth.js';
 import { findInvite } from '../lib/invites.js';
 import { log } from '../lib/activity.js';
+import { sign, unsign } from '../lib/signed.js';
+import { sendCode, verifyCode, twoFactorOn, tooManyAttempts, maskEmail, CODE_TTL_MIN } from '../lib/otp.js';
 
 const r = Router();
 const APP_URL = () => (process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
+const secure = process.env.NODE_ENV === 'production';
+const cookieOpts = ttl => ({ httpOnly: true, sameSite: 'lax', secure, maxAge: ttl });
+const PENDING = 'hb_2fa';          // password OK, waiting for the emailed code
+const INVITE_OK = 'hb_inv';        // invitation email code confirmed, waiting for profile + password
+const safeNext = n => (n && n.startsWith('/') && !n.startsWith('//') ? n : null);
+const home = role => (role === 'client' ? '/portal' : '/admin');
 
 r.get('/login', (req, res) => {
   if (req.user) return res.redirect(req.user.role === 'client' ? '/portal' : '/admin');
@@ -23,14 +31,53 @@ r.post('/login', async (req, res) => {
       : 'Sign-in failed. Please try again.';
     return res.status(401).render('auth/login', { title: 'Sign in', error: msg, next: next || '' });
   }
-  setSession(res, data.session);
   const { data: profile, error: pErr } = await admin.from('profiles').select('role, active').eq('id', data.user.id).single();
   if (!profile || !profile.active) {
     console.error(`[login] ${data.user.email}: signed in but profile ${profile ? 'inactive' : 'missing'} ${pErr?.message || ''}`);
-    clearSession(res);
     return res.status(403).render('auth/login', { title: 'Sign in', error: 'Your account is not activated yet. Ask an administrator.', next: '' });
   }
-  res.redirect(next && next.startsWith('/') && !next.startsWith('//') ? next : (profile.role === 'client' ? '/portal' : '/admin'));
+  if (!twoFactorOn()) {
+    setSession(res, data.session);
+    return res.redirect(safeNext(next) || home(profile.role));
+  }
+  // Step 2: the password session is thrown away; the real session comes from the emailed code.
+  await admin.auth.admin.signOut(data.session.access_token, 'local').catch(() => {});
+  try { await sendCode(data.user.email); } catch (e) {
+    return res.status(503).render('auth/login', { title: 'Sign in', error: e.message, next: next || '' });
+  }
+  res.cookie(PENDING, sign({ e: data.user.email, n: safeNext(next) }, CODE_TTL_MIN * 60e3), cookieOpts(CODE_TTL_MIN * 60e3));
+  res.redirect('/login/verify');
+});
+
+const verifyView = (res, pending, extra = {}) => res.render('auth/verify', {
+  title: 'Enter your code', email: maskEmail(pending.e), error: null, msg: null, ...extra,
+});
+
+r.get('/login/verify', (req, res) => {
+  const pending = unsign(req.cookies[PENDING]);
+  if (!pending) return res.redirect('/login');
+  verifyView(res, pending, { msg: req.query.sent ? 'A new code is on its way.' : null });
+});
+
+r.post('/login/verify', async (req, res) => {
+  const pending = unsign(req.cookies[PENDING]);
+  if (!pending) return res.redirect('/login');
+  if (tooManyAttempts(pending.e)) return verifyView(res.status(429), pending, { error: 'Too many wrong codes. Wait 15 minutes, then sign in again.' });
+  const ok = await verifyCode(pending.e, req.body.code, ['email', 'magiclink']);
+  if (!ok) return verifyView(res.status(401), pending, { error: 'That code is not correct or has expired. Check the latest email, or send a new code.' });
+  const { data: profile } = await admin.from('profiles').select('role, active').eq('id', ok.user.id).single();
+  if (!profile?.active) return res.status(403).render('auth/login', { title: 'Sign in', error: 'Your account is not active.', next: '' });
+  res.clearCookie(PENDING);
+  setSession(res, ok.session);
+  console.log(`[login] ${pending.e}: signed in with email code`);
+  res.redirect(pending.n || home(profile.role));
+});
+
+r.post('/login/resend', async (req, res) => {
+  const pending = unsign(req.cookies[PENDING]);
+  if (!pending) return res.redirect('/login');
+  try { await sendCode(pending.e); } catch (e) { return verifyView(res.status(429), pending, { error: e.message }); }
+  res.redirect('/login/verify?sent=1');
 });
 
 r.post('/logout', (req, res) => { clearSession(res); res.redirect('/login'); });
@@ -60,47 +107,99 @@ r.post('/auth/accept', async (req, res) => {
 });
 
 /**
- * Invitation link (valid 14 days). The emailed Supabase link redirects here; whether or not Supabase's
- * own one-time code is still valid, our token decides. The person picks a name + password and is signed in.
+ * Invitation (link valid 14 days) — two steps:
+ *   1. confirm the email address with the 6-digit code from the invitation email (or a freshly sent one)
+ *   2. fill in the profile and create a password → signed in
  */
 const inviteView = (res, found, extra = {}) => res.render('auth/invite', {
-  title: 'Accept invitation', state: found.state, inv: found.inv || null, error: null, form: {}, ...extra,
+  title: 'Accept invitation', state: found.state, inv: found.inv || null, step: 'code', error: null, msg: null, form: {}, ...extra,
 });
+const inviteVerified = (req, token) => { const v = unsign(req.cookies[INVITE_OK]); return v && v.t === token; };
+const markVerified = (res, token) => res.cookie(INVITE_OK, sign({ t: token }, 60 * 60e3), cookieOpts(60 * 60e3));
 
 r.get('/invite/:token', async (req, res) => {
   const found = await findInvite(req.params.token);
-  if (req.user && found.state === 'valid' && req.user.email.toLowerCase() !== found.inv.email.toLowerCase()) clearSession(res);
-  inviteView(res, found);
+  if (found.state !== 'valid') return inviteView(res, found);
+  if (req.user && req.user.email.toLowerCase() !== found.inv.email.toLowerCase()) clearSession(res);
+  inviteView(res, found, { step: inviteVerified(req, req.params.token) ? 'profile' : 'code', msg: req.query.sent ? 'A new code is on its way — check your inbox.' : null });
 });
 
+// step 1: code from the email
+r.post('/invite/:token/code', async (req, res) => {
+  const found = await findInvite(req.params.token);
+  if (found.state !== 'valid') return inviteView(res.status(400), found);
+  const email = found.inv.email;
+  if (tooManyAttempts(email)) return inviteView(res.status(429), found, { error: 'Too many wrong codes. Wait 15 minutes, then request a new code.' });
+  const ok = await verifyCode(email, req.body.code, ['invite', 'email', 'magiclink', 'signup']);
+  if (!ok) return inviteView(res.status(401), found, { error: 'That code is not correct or has expired. Use the newest email, or send a new code.' });
+  await admin.from('invitations').update({ verified_at: new Date().toISOString() }).eq('id', found.inv.id);
+  markVerified(res, req.params.token);
+  res.redirect(`/invite/${req.params.token}`);
+});
+
+r.post('/invite/:token/resend', async (req, res) => {
+  const found = await findInvite(req.params.token);
+  if (found.state !== 'valid') return inviteView(res.status(400), found);
+  try { await sendCode(found.inv.email, `/invite/${req.params.token}`); }
+  catch (e) { return inviteView(res.status(429), found, { error: e.message }); }
+  res.redirect(`/invite/${req.params.token}?sent=1`);
+});
+
+// Older email template: the link itself was the confirmation (tokens arrive in the URL fragment)
+r.post('/invite/:token/session', async (req, res) => {
+  const found = await findInvite(req.params.token);
+  if (found.state !== 'valid' || !req.body.access_token) return res.redirect(`/invite/${req.params.token}`);
+  const { data: { user } } = await anon.auth.getUser(req.body.access_token);
+  if (user && user.email?.toLowerCase() === found.inv.email.toLowerCase()) {
+    await admin.from('invitations').update({ verified_at: new Date().toISOString() }).eq('id', found.inv.id);
+    markVerified(res, req.params.token);
+  }
+  res.redirect(`/invite/${req.params.token}`);
+});
+
+// step 2: profile + password
 r.post('/invite/:token', async (req, res) => {
   const found = await findInvite(req.params.token);
   if (found.state !== 'valid') return inviteView(res.status(400), found);
+  if (!inviteVerified(req, req.params.token)) return inviteView(res.status(401), found, { error: 'Please confirm the code from your email first.' });
   const { inv } = found;
-  const full_name = String(req.body.full_name || '').trim();
+  const form = {
+    full_name: String(req.body.full_name || '').trim(),
+    job_title: String(req.body.job_title || '').trim(),
+    phone: String(req.body.phone || '').trim(),
+    wechat: String(req.body.wechat || '').trim(),
+  };
   const password = String(req.body.password || '');
-  if (password.length < 8) return inviteView(res.status(400), found, { error: 'Password must be at least 8 characters.', form: { full_name } });
-  if (password !== req.body.password2) return inviteView(res.status(400), found, { error: 'Passwords do not match.', form: { full_name } });
+  const again = (error) => inviteView(res.status(400), found, { step: 'profile', error, form });
+  if (!form.full_name) return again('Please enter your name.');
+  if (password.length < 8) return again('Password must be at least 8 characters.');
+  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) return again('Use letters and at least one number in the password.');
+  if (password !== req.body.password2) return again('Passwords do not match.');
 
-  // Find the login created when the invite was sent; create it if the email step never got that far.
+  // the login was created when the invitation was sent; create it if that step never completed
   let { data: profile } = await admin.from('profiles').select('id').ilike('email', inv.email).maybeSingle();
   let userId = profile?.id;
   if (userId) {
-    const { error } = await admin.auth.admin.updateUserById(userId, { password, email_confirm: true, user_metadata: { full_name } });
-    if (error) return inviteView(res.status(400), found, { error: error.message, form: { full_name } });
+    const { error } = await admin.auth.admin.updateUserById(userId, { password, email_confirm: true, user_metadata: { full_name: form.full_name } });
+    if (error) return again(error.message);
   } else {
-    const { data, error } = await admin.auth.admin.createUser({ email: inv.email, password, email_confirm: true, user_metadata: { full_name } });
-    if (error) return inviteView(res.status(400), found, { error: error.message, form: { full_name } });
+    const { data, error } = await admin.auth.admin.createUser({ email: inv.email, password, email_confirm: true, user_metadata: { full_name: form.full_name } });
+    if (error) return again(error.message);
     userId = data.user.id;
   }
   const now = new Date().toISOString();
-  await admin.from('profiles').update({ full_name: full_name || null, role: inv.role, org_id: inv.org_id, active: true, accepted_at: now }).eq('id', userId);
+  await admin.from('profiles').update({
+    full_name: form.full_name, job_title: form.job_title || null, phone: form.phone || null, wechat: form.wechat || null,
+    role: inv.role, org_id: inv.org_id, active: true, accepted_at: now,
+  }).eq('id', userId);
   await admin.from('invitations').update({ accepted_at: now }).eq('id', inv.id);
   if (inv.org_id) await log({ entityType: 'organization', entityId: inv.org_id, action: 'invite_accepted', actorId: userId, detail: { note: inv.email } });
 
+  // the email code already proved ownership of the address → sign straight in
   const { data: signed } = await anon.auth.signInWithPassword({ email: inv.email, password });
   if (signed?.session) setSession(res, signed.session);
-  res.redirect(inv.role === 'client' ? '/portal' : '/admin');
+  res.clearCookie(INVITE_OK);
+  res.redirect(home(inv.role));
 });
 
 r.get('/forgot', (req, res) => res.render('auth/forgot', { title: 'Reset password', sent: false }));
@@ -112,7 +211,11 @@ r.post('/forgot', async (req, res) => {
 r.get('/account', requireAuth, (req, res) => res.render('auth/account', { title: 'My account', saved: req.query.saved }));
 r.post('/account', requireAuth, async (req, res) => {
   const { full_name, password } = req.body;
-  if (full_name) await admin.from('profiles').update({ full_name }).eq('id', req.user.id);
+  const patch = {};
+  for (const k of ['full_name', 'job_title', 'phone', 'wechat']) if (k in req.body) patch[k] = String(req.body[k] || '').trim() || null;
+  if (patch.full_name === null) delete patch.full_name;
+  if (Object.keys(patch).length) await admin.from('profiles').update(patch).eq('id', req.user.id);
+  if (password && (password.length < 8 || password !== req.body.password2)) return res.redirect('/account?err=' + encodeURIComponent('Password not changed: at least 8 characters, typed twice the same.'));
   if (password && password.length >= 8) await admin.auth.admin.updateUserById(req.user.id, { password });
   res.redirect('/account?saved=1');
 });

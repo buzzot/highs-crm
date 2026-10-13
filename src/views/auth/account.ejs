@@ -1,12 +1,24 @@
 <%- include('../partials/head') %>
-<div class="card narrow">
+<div class="card narrow wide-auth">
   <h1>My account</h1>
   <% if (saved) { %><div class="alert ok">Saved.</div><% } %>
   <form method="post" action="/account">
     <label>Email <input type="email" value="<%= user.email %>" disabled></label>
-    <label>Name <input type="text" name="full_name" value="<%= user.full_name || '' %>"></label>
-    <label>New password <input type="password" name="password" minlength="8" placeholder="leave blank to keep"></label>
+    <div class="row">
+      <label>Full name <input type="text" name="full_name" value="<%= user.full_name || '' %>" required></label>
+      <label>Job title <input type="text" name="job_title" value="<%= user.job_title || '' %>"></label>
+    </div>
+    <div class="row">
+      <label>Phone <input type="text" name="phone" value="<%= user.phone || '' %>"></label>
+      <label>WeChat / WhatsApp <input type="text" name="wechat" value="<%= user.wechat || '' %>"></label>
+    </div>
+    <h3>Change password</h3>
+    <div class="row">
+      <label>New password <input type="password" name="password" minlength="8" placeholder="leave blank to keep" autocomplete="new-password"></label>
+      <label>Repeat new password <input type="password" name="password2" minlength="8" autocomplete="new-password"></label>
+    </div>
     <button class="btn primary">Save</button>
   </form>
+  <p class="muted small">Sign-in is protected by a one-time code emailed to <%= user.email %>.</p>
 </div>
 <%- include('../partials/foot') %>

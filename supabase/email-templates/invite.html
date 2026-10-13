@@ -1,0 +1,13 @@
+<!-- Supabase → Authentication → Email Templates → "Invite user"
+     Subject:  You're invited to Highs Business -->
+<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto;color:#16202e">
+  <h2 style="color:#0f3d5c;margin:0 0 4px">Highs Business</h2>
+  <p>You've been invited to the Highs Business portal, where you can send sourcing requests and follow your orders.</p>
+  <p style="margin:24px 0">
+    <a href="{{ .RedirectTo }}" style="background:#0b8a7a;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">Accept invitation</a>
+  </p>
+  <p>On the next page, enter this confirmation code:</p>
+  <p style="font-size:30px;font-weight:bold;letter-spacing:6px;font-family:monospace;background:#f4f5f7;padding:12px 16px;border-radius:8px;display:inline-block">{{ .Token }}</p>
+  <p style="color:#7a8494;font-size:12px">The invitation link works for 14 days. If the code has expired, the page lets you request a new one.
+  If you didn't expect this invitation, you can ignore this email.</p>
+</div>

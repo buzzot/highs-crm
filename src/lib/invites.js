@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { admin } from './supabase.js';
+import { sendCode } from './otp.js';
 
 import { INVITE_DAYS } from './members.js';
 export { INVITE_DAYS, memberRows } from './members.js';
@@ -49,8 +50,12 @@ export async function inviteUser({ email, role = 'client', orgId = null, invited
     const patch = { role, org_id: orgId, active: true, invited_at: new Date().toISOString() };
     await admin.from('profiles').update(patch).eq('id', existing.id);
   }
-  const { error: rErr } = await admin.auth.resetPasswordForEmail(email, { redirectTo });
-  if (rErr) throw rErr;
+  // email them a fresh code; the button in that email opens the same invitation page
+  try { await sendCode(email, `/invite/${token}`); }
+  catch (e) {
+    const { error: rErr } = await admin.auth.resetPasswordForEmail(email, { redirectTo });
+    if (rErr) throw new Error(e.message);
+  }
   return { resent: true, expiresAt };
 }
 

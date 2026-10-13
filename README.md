@@ -19,7 +19,7 @@ Node.js (Express, server-rendered EJS) on **Supabase** (Postgres, Auth, Storage)
 | Orders | All orders with status / client filters, cost, freight, margin, profit. Order page: status updates (optional client-visible note), items, landed price per unit, shipments, packing list (bulk-add cartons), product & packing photos, documents, activity |
 | Clients | Companies, their users, pending invites, "Send invite", requests and orders per client. Staff list and staff invites (admins only) |
 | Suppliers | Contacts (WeChat, phone, email), payment terms, lead time, rating, whether they can export officially, products, order history, purchases, licences and certificates |
-| Products | **Import** from the supplier Excel template (`public/templates/highs-product-import-template.xlsx`, rebuilt by `scripts/make_template.py`), supplier price lists, PDFs or photos (AI), with duplicate-supplier detection and a review/confirm step. Catalogue with photos, supplier cost, MOQ, HS code, carton size and weight, specs, quote history |
+| Products | Catalogue with photos, supplier cost, MOQ, HS code, carton size and weight, specs, quote history |
 | Sourcing | Request pipeline (new → reviewing → quoted → accepted), owner, internal notes, AI sourcing brief, quotes, accepted quote → order |
 | Logistics | Shipments (third-party forwarders), status, ETD/ETA, B/L, container, **export declaration no.**, freight cost ledger by type (multi-currency, paid/unpaid), landed cost & price per unit, shipping documents, forwarder directory |
 | Pricing | Live calculator + quotes register. Margin on **product cost only** (min 20%, configurable), logistics passed through to give the landed price. Target-price → margin solver, freight helper (LCL/FCL/air from carton data), **AI verification**, send-to-client gate (minimum margin enforced, admin override with a reason) |
@@ -42,14 +42,23 @@ Node.js (Express, server-rendered EJS) on **Supabase** (Postgres, Auth, Storage)
    1. `supabase/migrations/0001_schema.sql`
    2. `supabase/migrations/0002_hardening.sql`
    3. `supabase/migrations/0003_grants.sql`
-   4. `supabase/migrations/0004_invite_tracking.sql`
-   5. `supabase/migrations/0005_product_import.sql`
-   6. optional demo data: `supabase/seed.sql`
+   4. optional demo data: `supabase/seed.sql`
 3. **Auth settings** (Authentication):
    - Providers → Email: turn **off** "Allow new users to sign up" (invite-only).
    - URL Configuration: Site URL = your `APP_URL`; add `APP_URL/auth/accept` to Redirect URLs.
    - Email Templates → "Invite user" / "Reset password": brand them as you like. The link must keep `{{ .ConfirmationURL }}`.
    - For production, set up custom SMTP (Project Settings → Auth → SMTP). The built-in sender is rate-limited.
+   - **Email templates** (required for invitations and sign-in codes): paste `supabase/email-templates/invite.html` into
+     "Invite user" and `magic-link.html` into "Magic Link" (subjects are at the top of each file).
+   - Providers → Email: **Email OTP Expiration** = 900 seconds, OTP length 6.
+   - Every sign-in sends a code by email, so send email through **Resend** (the built-in Supabase sender allows only a few emails per hour):
+     1. resend.com → Domains → add your domain, add the DNS records it shows, wait for "Verified".
+     2. resend.com → API Keys → create a key with "Sending access".
+     3. Supabase → Project Settings → Authentication → SMTP Settings → enable custom SMTP:
+        host `smtp.resend.com`, port `465`, username `resend`, password = the Resend API key,
+        sender email e.g. `no-reply@yourdomain.com`, sender name `Highs Business`.
+     4. Supabase → Authentication → Rate Limits → raise "emails sent per hour" (e.g. 100).
+     Emergency switch: set `LOGIN_2FA=off` in Railway to sign in with password only until email works again.
 4. **First admin**: edit the email in `supabase/bootstrap_admin.sql` and run it, then invite that email from Authentication → Users → Invite user. Open the email link and set a password.
 5. **App**:
    ```bash

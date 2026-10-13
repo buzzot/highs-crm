@@ -1,17 +1,50 @@
 <%- include('../partials/head') %>
-<div class="card narrow auth">
+<div class="card narrow auth <%= step === 'profile' ? 'wide-auth' : '' %>">
   <h1>Highs<span class="accent">Business</span></h1>
   <% if (state === 'valid') { %>
-    <p class="muted">You've been invited<% if (inv.organizations?.name) { %> to the <strong><%= inv.organizations.name %></strong> portal<% } else { %> to the Highs Business team<% } %>.<br>Set your name and password to activate your account.</p>
+    <ol class="authsteps"><li class="<%= step === 'code' ? 'now' : 'done' %>">Confirm email</li><li class="<%= step === 'profile' ? 'now' : '' %>">Your profile & password</li></ol>
     <% if (error) { %><div class="alert err"><%= error %></div><% } %>
-    <form method="post">
-      <label>Email <input type="email" value="<%= inv.email %>" disabled></label>
-      <label>Your name <input type="text" name="full_name" required autofocus value="<%= form.full_name || '' %>"></label>
-      <label>Password <span class="muted small">— at least 8 characters</span><input type="password" name="password" minlength="8" required autocomplete="new-password"></label>
-      <label>Repeat password <input type="password" name="password2" minlength="8" required autocomplete="new-password"></label>
-      <button class="btn primary wide">Activate account</button>
-    </form>
-    <p class="muted small">This invitation link is valid until <%= fmt.date(inv.expires_at) %>.</p>
+    <% if (msg) { %><div class="alert ok"><%= msg %></div><% } %>
+
+    <% if (step === 'code') { %>
+      <p>You've been invited<% if (inv.organizations?.name) { %> to the <strong><%= inv.organizations.name %></strong> portal<% } else { %> to the Highs Business team<% } %>.</p>
+      <p class="muted small">Enter the 6-digit code from the invitation email sent to <strong><%= inv.email %></strong>.</p>
+      <form method="post" action="/invite/<%= inv.token %>/code" autocomplete="off">
+        <label>Confirmation code
+          <input class="codeinput" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,12}" maxlength="12" required autofocus placeholder="••••••">
+        </label>
+        <button class="btn primary wide">Confirm</button>
+      </form>
+      <form method="post" action="/invite/<%= inv.token %>/resend" class="codefoot">
+        <span class="muted small">Code expired or not received?</span> <button class="link small">Email me a new code</button>
+      </form>
+      <form method="post" action="/invite/<%= inv.token %>/session" id="hashForm" hidden><input type="hidden" name="access_token"></form>
+      <script>
+        // older invitation emails confirm via the link itself — the tokens arrive in the URL fragment
+        (function () { const h = new URLSearchParams(location.hash.slice(1)); const a = h.get('access_token');
+          if (a) { const f = document.getElementById('hashForm'); f.access_token.value = a; history.replaceState(null, '', location.pathname); f.submit(); } })();
+      </script>
+    <% } else { %>
+      <p class="muted small">Email confirmed ✓ — now tell us who you are and choose a password.</p>
+      <form method="post" action="/invite/<%= inv.token %>">
+        <label>Email <input type="email" value="<%= inv.email %>" disabled></label>
+        <div class="row">
+          <label>Full name <input name="full_name" required autofocus value="<%= form.full_name || '' %>"></label>
+          <label>Job title <input name="job_title" value="<%= form.job_title || '' %>" placeholder="e.g. Purchasing manager"></label>
+        </div>
+        <div class="row">
+          <label>Phone <input name="phone" value="<%= form.phone || '' %>" placeholder="+1 555 123 4567"></label>
+          <label>WeChat / WhatsApp <input name="wechat" value="<%= form.wechat || '' %>"></label>
+        </div>
+        <div class="row">
+          <label>Password <span class="muted small">— 8+ characters, letters and a number</span><input type="password" name="password" minlength="8" required autocomplete="new-password"></label>
+          <label>Repeat password <input type="password" name="password2" minlength="8" required autocomplete="new-password"></label>
+        </div>
+        <button class="btn primary wide">Create my account</button>
+      </form>
+      <p class="muted small">Each time you sign in we'll also email you a one-time code.</p>
+    <% } %>
+    <p class="muted small">Invitation valid until <%= fmt.date(inv.expires_at) %>.</p>
   <% } else if (state === 'accepted') { %>
     <div class="alert ok">This invitation has already been used — your account is active.</div>
     <a class="btn primary wide" href="/login">Sign in</a>

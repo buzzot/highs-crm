@@ -1,6 +1,33 @@
 import { Router } from '../../lib/router.js';
 import { admin } from '../../lib/supabase.js';
+import multer from 'multer';
 import { clean, notFound } from '../../lib/util.js';
+import { uploadDocument, deleteDocument } from '../../lib/storage.js';
+
+// product photos: up to 12 images per save, 10 MB each, stored in Supabase Storage (bucket "documents")
+const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const photos = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 12 },
+  fileFilter: (req, file, cb) => cb(null, PHOTO_TYPES.includes(file.mimetype)),
+}).array('photos', 12);
+const withPhotos = (req, res, next) => photos(req, res, err => {
+  if (err) req.photoError = err.code === 'LIMIT_FILE_SIZE' ? 'A photo is larger than 10 MB.' : err.code === 'LIMIT_FILE_COUNT' ? 'Up to 12 photos at a time.' : err.message;
+  next();
+});
+async function savePhotos(req, productId) {
+  let n = 0;
+  for (const file of req.files || []) {
+    await uploadDocument({ file, entityType: 'product', entityId: productId, kind: 'product_photo', title: file.originalname, clientVisible: true, uploadedBy: req.user.id });
+    n++;
+  }
+  return n;
+}
+async function productPhotos(id) {
+  if (!id) return [];
+  const { data } = await admin.from('documents').select('id, title, created_at').eq('entity_type', 'product').eq('entity_id', id).eq('kind', 'product_photo').order('created_at');
+  return data || [];
+}
 
 const r = Router();
 const FIELDS = ['sku', 'supplier_sku', 'name', 'category', 'description', 'supplier_id', 'unit_cost', 'cost_currency', 'moq', 'hs_code', 'unit_weight_kg',
@@ -43,12 +70,16 @@ r.get('/', async (req, res) => {
 });
 
 r.get('/new', async (req, res) => res.render('admin/products/form', {
-  title: 'New product', p: { cost_currency: 'CNY', supplier_id: req.query.supplier_id }, specText: '', suppliers: await formData(), error: null,
+  title: 'New product', p: { cost_currency: 'CNY', supplier_id: req.query.supplier_id }, specText: '', suppliers: await formData(), photos: [], error: null,
 }));
-r.post('/', async (req, res) => {
+r.post('/', withPhotos, async (req, res) => {
+  const again = async error => res.status(400).render('admin/products/form', { title: 'New product', p: req.body, specText: req.body.spec, suppliers: await formData(), photos: [],
+    error: `${error}${req.files?.length ? ' Please add the photos again.' : ''}` });
+  if (req.photoError) return again(req.photoError);
   const { data, error } = await admin.from('products').insert(body(req.body)).select('id').single();
-  if (error) return res.render('admin/products/form', { title: 'New product', p: req.body, specText: req.body.spec, suppliers: await formData(), error: error.message });
-  res.redirect(`/admin/products/${data.id}`);
+  if (error) return again(error.message);
+  const n = await savePhotos(req, data.id);
+  res.redirect(`/admin/products/${data.id}` + (n ? `?msg=${encodeURIComponent(`Product created with ${n} photo${n === 1 ? '' : 's'}.`)}` : ''));
 });
 
 r.get('/:id', async (req, res) => {
@@ -66,12 +97,23 @@ r.get('/:id', async (req, res) => {
 r.get('/:id/edit', async (req, res) => {
   const { data: p } = await admin.from('products').select('*').eq('id', req.params.id).single();
   if (!p) return notFound(res, 'Product');
-  res.render('admin/products/form', { title: 'Edit product', p, specText: specText(p.spec), suppliers: await formData(), error: null });
+  res.render('admin/products/form', { title: 'Edit product', p, specText: specText(p.spec), suppliers: await formData(), photos: await productPhotos(p.id), error: null });
 });
-r.post('/:id', async (req, res) => {
-  const { error } = await admin.from('products').update(body(req.body)).eq('id', req.params.id);
-  if (error) return res.render('admin/products/form', { title: 'Edit product', p: { ...req.body, id: req.params.id }, specText: req.body.spec, suppliers: await formData(), error: error.message });
-  res.redirect(`/admin/products/${req.params.id}`);
+r.post('/:id', withPhotos, async (req, res) => {
+  const id = req.params.id;
+  const again = async error => res.status(400).render('admin/products/form', { title: 'Edit product', p: { ...req.body, id }, specText: req.body.spec, suppliers: await formData(),
+    photos: await productPhotos(id), error: `${error}${req.files?.length ? ' Please add the new photos again.' : ''}` });
+  if (req.photoError) return again(req.photoError);
+  const { error } = await admin.from('products').update(body(req.body)).eq('id', id);
+  if (error) return again(error.message);
+  // photos ticked for removal (only this product's photos)
+  const remove = [].concat(req.body.remove_photo || []);
+  if (remove.length) {
+    const { data: own } = await admin.from('documents').select('id').eq('entity_type', 'product').eq('entity_id', id).in('id', remove);
+    for (const d of own || []) await deleteDocument(d.id);
+  }
+  await savePhotos(req, id);
+  res.redirect(`/admin/products/${id}`);
 });
 
 export default r;

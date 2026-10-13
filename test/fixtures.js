@@ -86,7 +86,7 @@ export const pages = {
   'admin/suppliers/form': base(staffUser, '/admin/suppliers/new', { title: 'New supplier', s: { country: 'China' }, error: null }),
   'admin/suppliers/detail': base(staffUser, '/admin/suppliers/s1', { title: sup.name, s: sup, products: [prod], orders: ordersList, docs: [{ id: 'd9', kind: 'certificate', title: 'BSCI-2025.pdf', mime_type: 'application/pdf', client_visible: false, created_at: d(-60) }], spend: 18436 }),
   'admin/products/index': base(staffUser, '/admin/products', { title: 'Products', products: [{ ...prod, suppliers: { id: 's1', name: sup.name } }, { ...prod2, suppliers: null }], categories: ['Houseware', 'Lighting'], suppliers: lists.suppliers, thumb: { p1: 'doc1' } }),
-  'admin/products/form': base(staffUser, '/admin/products/new', { title: 'New product', p: { cost_currency: 'CNY' }, specText: '', suppliers: lists.suppliers, error: null }),
+  'admin/products/form': base(staffUser, '/admin/products/new', { title: 'New product', p: { cost_currency: 'CNY' }, specText: '', suppliers: lists.suppliers, photos: [{ id: 'doc1', title: 'front.jpg' }, { id: 'doc2', title: 'box.jpg' }], error: null }),
   'admin/products/detail': base(staffUser, '/admin/products/p1', { title: prod.name, p: { ...prod, suppliers: sup }, docs, quotes: [{ ...quote, requests: { id: 'r1', ref: request.ref, organizations: { name: 'Acme Retail LLC' } } }], specText: 'Power: 10 W\nMaterial: Aluminium' }),
   'admin/sourcing/index': base(staffUser, '/admin/sourcing', { title: 'Sourcing', requests, byStatus: { new: 2, reviewing: 3, quoted: 1, accepted: 9 }, statuses: ['new', 'reviewing', 'quoted', 'accepted', 'declined', 'cancelled'], status: 'open' }),
   'admin/sourcing/detail': base(staffUser, '/admin/sourcing/r1', { title: request.ref, request: { ...request, organizations: org, creator: { full_name: 'Tom Baker' } }, quotes: [{ ...quote, products: { id: 'p1', name: prod.name }, suppliers: { id: 's1', name: sup.name } }, { ...quote, id: 'q2', status: 'accepted', margin_pct: 18, ai_check: null, products: null, suppliers: null }], docs: docs.slice(0, 1), events, staff: [staffUser], orders: [], statuses: ['new', 'reviewing', 'quoted', 'accepted', 'declined', 'cancelled'] }),
@@ -119,8 +119,9 @@ export const pages = {
   // ---- auth ----
   'auth/login': base(null, '/login', { title: 'Sign in', error: null, next: '' }),
   'auth/accept': base(null, '/auth/accept', { title: 'Accept invitation', error: null }),
-  'auth/invite': base(null, '/invite/x', { title: 'Accept invitation', state: 'valid', inv: { email: 'mars4wo@gmail.com', expires_at: d(13), organizations: { name: 'Acme Retail LLC' } }, error: null, form: {} }),
+  'auth/invite': base(null, '/invite/x', { title: 'Accept invitation', state: 'valid', step: 'profile', msg: null, inv: { email: 'mars4wo@gmail.com', token: 'tok', expires_at: d(13), organizations: { name: 'Acme Retail LLC' } }, error: null, form: {} }),
+  'auth/verify': base(null, '/login/verify', { title: 'Enter your code', email: 'ma•••@gmail.com', error: null, msg: null }),
   'auth/forgot': base(null, '/forgot', { title: 'Reset password', sent: false }),
-  'auth/account': base(clientUser, '/account', { title: 'My account', saved: false }),
+  'auth/account': base({ ...clientUser, job_title: 'Buyer', phone: '+1 555 0100' }, '/account', { title: 'My account', saved: false }),
   error: base(staffUser, '/x', { title: 'Not found', message: 'Page not found.' }),
 };
