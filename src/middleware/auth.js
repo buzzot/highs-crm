@@ -32,8 +32,15 @@ export async function loadUser(req, res, next) {
     user = data.session.user;
   }
 
-  const { data: profile, error: pErr } = await admin.from('profiles')
+  let { data: profile, error: pErr } = await admin.from('profiles')
     .select('*, organizations(id, name, country, details_completed_at)').eq('id', user.id).single();
+  if (pErr && /details_completed_at|column/i.test(pErr.message || '')) {
+    // migration 0008 not applied yet: still let people in, skip the company-details gate
+    console.error(`[session] ${pErr.message} — run supabase/migrations/0008_company_details.sql`);
+    ({ data: profile, error: pErr } = await admin.from('profiles')
+      .select('*, organizations(id, name, country)').eq('id', user.id).single());
+    if (profile) profile.detailsGateOff = true;
+  }
   if (!profile || !profile.active) {
     console.error(`[session] ${user.email}: profile ${profile ? 'inactive' : 'not found'}${pErr ? ` (${pErr.message})` : ''}`);
     clearSession(res); return next();
@@ -66,6 +73,6 @@ export function requireClient(req, res, next) {
   if (!req.user) return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl));
   if (req.user.role !== 'client' || !req.user.org_id) return res.redirect('/admin');
   // first sign-in for this company: details must be completed before anything else
-  if (!req.user.organizations?.details_completed_at && !req.path.startsWith('/company')) return res.redirect('/portal/company?first=1');
+  if (!req.user.detailsGateOff && !req.user.organizations?.details_completed_at && !req.path.startsWith('/company')) return res.redirect('/portal/company?first=1');
   next();
 }
