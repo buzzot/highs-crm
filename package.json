@@ -5,7 +5,7 @@
   "description": "Highs Business — order tracking & CRM (client portal + admin) on Node.js + Supabase",
   "main": "src/server.js",
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": { "node": ">=22" },
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",

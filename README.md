@@ -55,7 +55,7 @@ Node.js (Express, server-rendered EJS) on **Supabase** (Postgres, Auth, Storage)
    npm start                # http://localhost:3000
    npm test                 # pricing, util and render tests for every page
    ```
-6. **Deploy**: any Node 20+ host (Render, Railway, Fly.io, a VPS). Set the same env vars and `NODE_ENV=production` (secure cookies).
+6. **Deploy**: any Node 22+ host (Render, Railway, Fly.io, a VPS). Set the same env vars and `NODE_ENV=production` (secure cookies).
 
 ### Day-to-day flow
 1. Admin → Clients → New client → **Send invite** to each person at that company.
