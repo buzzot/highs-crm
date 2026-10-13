@@ -25,7 +25,15 @@ function compile(src, file) {
   catch (err) { throw new Error(`Compile error in ${file}: ${err.message}`); }
 }
 
+// Names real EJS reads from the data object as *options* (Express passes locals straight in).
+// Using one as a template variable silently changes how the template compiles.
+const RESERVED = ['client', 'scope', 'context', 'debug', 'compileDebug', 'strict', '_with', 'localsName', 'delimiter',
+  'openDelimiter', 'closeDelimiter', 'filename', 'async', 'rmWhitespace', 'escape', 'cache', 'root', 'views',
+  'outputFunctionName', 'destructuredLocals', 'includer'];
+
 export function render(file, locals) {
+  const bad = Object.keys(locals).filter(k => RESERVED.includes(k));
+  if (bad.length) throw new Error(`${path.basename(file)}: local name(s) ${bad.join(', ')} clash with EJS options`);
   const src = fs.readFileSync(file, 'utf8');
   const fn = compile(src, file);
   const include = (p, data) => render(path.resolve(path.dirname(file), p.endsWith('.ejs') ? p : p + '.ejs'), { ...locals, ...(data || {}) });

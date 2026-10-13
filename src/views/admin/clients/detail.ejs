@@ -1,8 +1,8 @@
 <%- include('../../partials/head') %>
 <div class="pagehead">
-  <div><a class="back" href="/admin/clients">← Clients</a><h1><%= client.name %></h1>
-    <p class="muted"><%= [client.country, client.tax_id && ('Tax ID ' + client.tax_id), client.default_currency].filter(Boolean).join(' · ') %></p></div>
-  <div class="actions"><a class="btn" href="/admin/clients/<%= client.id %>/edit">Edit</a><a class="btn primary" href="/admin/orders/new?org_id=<%= client.id %>">+ Order</a></div>
+  <div><a class="back" href="/admin/clients">← Clients</a><h1><%= org.name %></h1>
+    <p class="muted"><%= [org.country, org.tax_id && ('Tax ID ' + org.tax_id), org.default_currency].filter(Boolean).join(' · ') %></p></div>
+  <div class="actions"><a class="btn" href="/admin/clients/<%= org.id %>/edit">Edit</a><a class="btn primary" href="/admin/orders/new?org_id=<%= org.id %>">+ Order</a></div>
 </div>
 <div class="grid2">
   <div>
@@ -32,15 +32,15 @@
       <table class="tbl"><tbody>
       <% users.forEach(u => { %>
         <tr class="<%= u.active ? '' : 'dim' %>"><td><%= u.full_name || '—' %><div class="muted small"><%= u.email %></div></td>
-          <td class="right"><form method="post" action="/admin/clients/<%= client.id %>/users/<%= u.id %>/toggle" class="inline"><button class="link small"><%= u.active ? 'Disable' : 'Enable' %></button></form></td></tr>
+          <td class="right"><form method="post" action="/admin/clients/<%= org.id %>/users/<%= u.id %>/toggle" class="inline"><button class="link small"><%= u.active ? 'Disable' : 'Enable' %></button></form></td></tr>
       <% }) %>
       <% invites.forEach(i => { %>
         <tr class="dim"><td><%= i.email %><div class="muted small">invited <%= fmt.date(i.created_at) %> · pending</div></td><td></td></tr>
       <% }) %>
       <% if (!users.length && !invites.length) { %><tr><td class="muted">No users yet.</td></tr><% } %>
       </tbody></table>
-      <form method="post" action="/admin/clients/<%= client.id %>/invite" class="row tight">
-        <input type="email" name="email" placeholder="name@client.com" required>
+      <form method="post" action="/admin/clients/<%= org.id %>/invite" class="row tight">
+        <input type="email" name="email" placeholder="name@org.com" required>
         <button class="btn primary">Send invite</button>
       </form>
       <p class="muted small">They get an email link to set a password, then land in the client portal.</p>
@@ -48,9 +48,9 @@
     <div class="card">
       <h2>Details</h2>
       <dl class="dl">
-        <dt>Address</dt><dd class="pre"><%= client.address || '—' %></dd>
-        <dt>Notes</dt><dd class="pre"><%= client.notes || '—' %></dd>
-        <dt>Since</dt><dd><%= fmt.date(client.created_at) %></dd>
+        <dt>Address</dt><dd class="pre"><%= org.address || '—' %></dd>
+        <dt>Notes</dt><dd class="pre"><%= org.notes || '—' %></dd>
+        <dt>Since</dt><dd><%= fmt.date(org.created_at) %></dd>
       </dl>
     </div>
   </div>

@@ -1,19 +1,19 @@
 <%- include('../../partials/head') %>
 <div class="card narrow-md">
-  <a class="back" href="<%= client.id ? '/admin/clients/' + client.id : '/admin/clients' %>">← Back</a>
+  <a class="back" href="<%= org.id ? '/admin/clients/' + org.id : '/admin/clients' %>">← Back</a>
   <h1><%= title %></h1>
   <% if (error) { %><div class="alert err"><%= error %></div><% } %>
-  <form method="post" action="<%= client.id ? '/admin/clients/' + client.id : '/admin/clients' %>">
-    <label>Company name <input name="name" required value="<%= client.name || '' %>"></label>
+  <form method="post" action="<%= org.id ? '/admin/clients/' + org.id : '/admin/clients' %>">
+    <label>Company name <input name="name" required value="<%= org.name || '' %>"></label>
     <div class="row">
-      <label>Country <input name="country" value="<%= client.country || '' %>"></label>
-      <label>Tax / VAT ID <input name="tax_id" value="<%= client.tax_id || '' %>"></label>
-      <label>Default currency <select name="default_currency"><% ['USD','EUR','GBP','CNY'].forEach(c => { %><option <%= (client.default_currency || 'USD') === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+      <label>Country <input name="country" value="<%= org.country || '' %>"></label>
+      <label>Tax / VAT ID <input name="tax_id" value="<%= org.tax_id || '' %>"></label>
+      <label>Default currency <select name="default_currency"><% ['USD','EUR','GBP','CNY'].forEach(c => { %><option <%= (org.default_currency || 'USD') === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
     </div>
-    <label>Address <textarea name="address" rows="2"><%= client.address || '' %></textarea></label>
-    <label>Notes <textarea name="notes" rows="3"><%= client.notes || '' %></textarea></label>
-    <% if (client.id) { %>
-      <label>Status <select name="active"><option value="true" <%= client.active !== false && client.active !== 'false' ? 'selected' : '' %>>Active</option><option value="false" <%= client.active === false || client.active === 'false' ? 'selected' : '' %>>Inactive</option></select></label>
+    <label>Address <textarea name="address" rows="2"><%= org.address || '' %></textarea></label>
+    <label>Notes <textarea name="notes" rows="3"><%= org.notes || '' %></textarea></label>
+    <% if (org.id) { %>
+      <label>Status <select name="active"><option value="true" <%= org.active !== false && org.active !== 'false' ? 'selected' : '' %>>Active</option><option value="false" <%= org.active === false || org.active === 'false' ? 'selected' : '' %>>Inactive</option></select></label>
     <% } %>
     <div class="actions"><button class="btn primary">Save</button></div>
   </form>

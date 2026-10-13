@@ -24,10 +24,10 @@ r.get('/', async (req, res) => {
   res.render('admin/clients/index', { title: 'Clients', clients: data || [] });
 });
 
-r.get('/new', (req, res) => res.render('admin/clients/form', { title: 'New client', client: {}, error: null }));
+r.get('/new', (req, res) => res.render('admin/clients/form', { title: 'New client', org: {}, error: null }));
 r.post('/', async (req, res) => {
   const { data, error } = await admin.from('organizations').insert(clean(req.body)).select().single();
-  if (error) return res.render('admin/clients/form', { title: 'New client', client: req.body, error: error.message });
+  if (error) return res.render('admin/clients/form', { title: 'New client', org: req.body, error: error.message });
   res.redirect(`/admin/clients/${data.id}`);
 });
 
@@ -40,16 +40,16 @@ r.get('/:id', async (req, res) => {
     admin.from('order_overview').select('*').eq('org_id', req.params.id).order('created_at', { ascending: false }),
   ]);
   if (!client) return res.status(404).render('error', { title: 'Not found', message: 'Client not found.' });
-  res.render('admin/clients/detail', { title: client.name, client, users: users || [], invites: invites || [], requests: requests || [], orders: orders || [], msg: req.query.msg, err: req.query.err });
+  res.render('admin/clients/detail', { title: client.name, org: client, users: users || [], invites: invites || [], requests: requests || [], orders: orders || [], msg: req.query.msg, err: req.query.err });
 });
 
 r.get('/:id/edit', async (req, res) => {
   const { data: client } = await admin.from('organizations').select('*').eq('id', req.params.id).single();
-  res.render('admin/clients/form', { title: 'Edit client', client, error: null });
+  res.render('admin/clients/form', { title: 'Edit client', org: client, error: null });
 });
 r.post('/:id', async (req, res) => {
   const { error } = await admin.from('organizations').update(clean(req.body)).eq('id', req.params.id);
-  if (error) return res.render('admin/clients/form', { title: 'Edit client', client: { ...req.body, id: req.params.id }, error: error.message });
+  if (error) return res.render('admin/clients/form', { title: 'Edit client', org: { ...req.body, id: req.params.id }, error: error.message });
   res.redirect(`/admin/clients/${req.params.id}`);
 });
 
