@@ -41,7 +41,8 @@ Node.js (Express, server-rendered EJS) on **Supabase** (Postgres, Auth, Storage)
 2. **Database**: in the SQL editor, run in order:
    1. `supabase/migrations/0001_schema.sql`
    2. `supabase/migrations/0002_hardening.sql`
-   3. optional demo data: `supabase/seed.sql`
+   3. `supabase/migrations/0003_grants.sql`
+   4. optional demo data: `supabase/seed.sql`
 3. **Auth settings** (Authentication):
    - Providers → Email: turn **off** "Allow new users to sign up" (invite-only).
    - URL Configuration: Site URL = your `APP_URL`; add `APP_URL/auth/accept` to Redirect URLs.
