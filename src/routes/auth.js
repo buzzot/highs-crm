@@ -208,9 +208,10 @@ r.post('/forgot', async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).render('auth/forgot', { title: 'Reset password', sent: false, email, error: 'Enter a valid email address.' });
   // only people who finished their invitation can reset; the answer is the same either way
-  const { data: p } = await admin.from('profiles').select('id, active, accepted_at').ilike('email', email).maybeSingle();
-  if (p?.active && p.accepted_at) {
-    try { await sendReset(email); } catch (e) { console.error(`[forgot] ${email}: ${e.message}`); }
+  const { data: p, error: pErr } = await admin.from('profiles').select('id, active').ilike('email', email).maybeSingle();
+  if (pErr) console.error(`[forgot] ${email}: profile lookup failed: ${pErr.message}`);
+  if (p?.active) {
+    try { await sendReset(email); console.log(`[forgot] ${email}: reset email sent`); } catch (e) { console.error(`[forgot] ${email}: ${e.message}`); }
   } else console.log(`[forgot] ${email}: no active account — no email sent`);
   res.render('auth/forgot', { title: 'Check your inbox', sent: true, email, error: null, minutes: RESET_TTL_MIN });
 });

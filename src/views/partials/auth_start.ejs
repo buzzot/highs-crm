@@ -1,7 +1,15 @@
 <%# Shared layout for sign-in / invitation / password pages. Close with partials/auth_end. %>
+<%
+  const letters = (word, cls, start) => [...word].map((ch, k) => `<span class="ch" style="--i:${start + k}">${ch}</span>`).join('');
+  const morph = (extra) => `<a class="ab-logo morph ${extra}" href="/login" aria-label="Lumi Trade">
+      <span class="m-from" aria-hidden="true"><span class="w1">${letters('Highs', 'w1', 0)}</span><span class="w2">${letters('Business', 'w2', 5)}</span></span>
+      <span class="m-to" aria-hidden="true"><span class="w1">${letters('Lumi', 'w1', 0)}</span><span class="w2">${letters('Trade', 'w2', 4)}</span></span>
+    </a>`;
+%>
+
 <div class="authwrap">
   <aside class="authbrand" aria-hidden="true">
-    <a class="ab-logo" href="/login">Highs<span>Business</span></a>
+    <%- morph('') %>
     <div class="ab-mid">
       <svg class="ab-route" viewBox="0 0 320 120" fill="none">
         <path d="M14 96 C 90 10, 230 10, 306 70" stroke="currentColor" stroke-width="2" stroke-dasharray="5 7" opacity=".55"/>
@@ -19,5 +27,5 @@
     <p class="ab-foot">🔒 Protected sign-in · one-time code by email</p>
   </aside>
   <section class="authpanel">
-    <a class="ab-logo mobile" href="/login">Highs<span>Business</span></a>
+    <%- morph('mobile') %>
     <div class="authcard">

@@ -109,6 +109,11 @@ export const pages = {
       supplier: { name: 'Shenzhen Brigthway Electronic Co., Ltd.', address: "Bao'an District, Shenzhen", contact_name: 'Li Wei', email: 'sales@brightway-led.com', phone: '+86 138 0013 8000', wechat: 'liwei_bw' },
       supplier_match: { status: 'suspect', candidates: [{ id: 's1', name: sup.name, city: 'Shenzhen', score: 0.9, strong: false, reasons: ['similar name (90% alike)', 'same contact person'] }] } },
     rows: impRows, suppliers: lists.suppliers, decision: '', candidates: [{ id: 's1', name: sup.name, city: 'Shenzhen', score: 0.9, strong: false, reasons: ['similar name (90% alike)', 'same contact person'] }] }),
+  'admin/email_check': base(staffUser, '/admin/email-check', { title: 'Email check', appUrl: 'https://highs-crm-production.up.railway.app', twoFa: true,
+    diag: { key: 'set (re_…a1b2)', keyOk: true, from: 'Highs Business <no-reply@highs.example>', fromOk: true, fromDomain: 'highs.example', replyTo: null, domains: [{ name: 'highs.example', status: 'pending', region: 'us-east-1' }], domainsError: null },
+    tables: { 'auth_codes table (migration 0007)': 'ok', 'profile columns (migrations 0004/0006)': 'column profiles.job_title does not exist', 'invitation columns (migrations 0004/0006)': 'ok' },
+    recent: [{ email: 'mars4wo@gmail.com', purpose: 'reset', created_at: d(0), used_at: null, attempts: 0 }],
+    test: { ok: false, to: 'anna@highs.example', error: 'Email could not be sent: the domain in EMAIL_FROM is not verified in Resend (The highs.example domain is not verified).' } }),
   // ---- client portal ----
   'portal/dashboard': base(clientUser, '/portal', { title: 'Overview', requests, orders: [{ ...overview, shipments: [{ eta: day(48), status: 'booked' }] }], openCount: 1 }),
   'portal/requests': base(clientUser, '/portal/requests', { title: 'My requests', requests }),

@@ -1,0 +1,72 @@
+<%- include('../partials/head') %>
+<%
+  const ok = b => b ? '<span class="badge ok">✓ OK</span>' : '<span class="badge bad">✗ Fix</span>';
+  const fromDomainStatus = diag.domains ? (diag.domains.find(d => d.name === diag.fromDomain) || null) : null;
+%>
+<div class="pagehead"><div><h1>Email check</h1><p class="muted">Invitations, sign-in codes and password resets are sent by the app through Resend. Work down this list until the test email arrives.</p></div></div>
+
+<div class="grid2">
+  <div>
+    <div class="card">
+      <h2>1. Railway variables</h2>
+      <table class="tbl"><tbody>
+        <tr><td><code>RESEND_API_KEY</code></td><td><%= diag.key %></td><td class="right"><%- ok(diag.keyOk) %></td></tr>
+        <tr><td><code>EMAIL_FROM</code></td><td><%= diag.from %><% if (!diag.fromOk && diag.from !== 'MISSING') { %><div class="small bad">Format: <code>Highs Business &lt;no-reply@yourdomain.com&gt;</code></div><% } %></td><td class="right"><%- ok(diag.fromOk) %></td></tr>
+        <tr><td><code>EMAIL_REPLY_TO</code></td><td><%= diag.replyTo || '— (optional)' %></td><td></td></tr>
+        <tr><td><code>APP_URL</code></td><td><%= appUrl || 'MISSING' %></td><td class="right"><%- ok(appUrl && /^https:\/\//.test(appUrl) && !/localhost/.test(appUrl)) %></td></tr>
+        <tr><td><code>LOGIN_2FA</code></td><td><%= twoFa ? 'on — sign-in needs an emailed code' : 'off — password only' %></td><td></td></tr>
+      </tbody></table>
+      <p class="muted small">Change these in Railway → your service → Variables, then click <strong>Deploy / Apply changes</strong>.</p>
+    </div>
+
+    <div class="card">
+      <h2>2. Resend domain</h2>
+      <% if (diag.domains) { %>
+        <% if (!diag.domains.length) { %><p class="bad">No domains in this Resend account yet. Add <strong><%= diag.fromDomain || 'your domain' %></strong> under Resend → Domains.</p><% } %>
+        <table class="tbl"><tbody>
+          <% diag.domains.forEach(d => { %>
+            <tr><td><strong><%= d.name %></strong><%= d.name === diag.fromDomain ? ' (used by EMAIL_FROM)' : '' %></td><td><span class="badge <%= d.status === 'verified' ? 'ok' : 'warn' %>"><%= d.status %></span></td><td class="muted small"><%= d.region %></td></tr>
+          <% }) %>
+        </tbody></table>
+        <% if (diag.fromDomain && !fromDomainStatus) { %><p class="bad small">EMAIL_FROM uses <strong><%= diag.fromDomain %></strong>, which is not in this Resend account.</p><% } %>
+        <% if (fromDomainStatus && fromDomainStatus.status !== 'verified') { %><p class="bad small"><strong><%= diag.fromDomain %></strong> is not verified yet — add the DNS records Resend shows, then click Verify in Resend.</p><% } %>
+      <% } else if (diag.domainsError) { %>
+        <p class="small"><%= diag.domainsError %></p>
+      <% } else { %><p class="muted small">Add a valid API key first.</p><% } %>
+    </div>
+
+    <div class="card">
+      <h2>3. Database</h2>
+      <table class="tbl"><tbody>
+        <% Object.entries(tables).forEach(([k, v]) => { %>
+          <tr><td><%= k %></td><td class="small <%= v === 'ok' ? '' : 'bad' %>"><%= v === 'ok' ? '' : v %></td><td class="right"><%- ok(v === 'ok') %></td></tr>
+        <% }) %>
+      </tbody></table>
+      <p class="muted small">If something says Fix: run the migration named on the left in Supabase → SQL Editor.</p>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2>4. Send a test email</h2>
+      <% if (typeof test !== 'undefined' && test) { %>
+        <% if (test.ok) { %><div class="alert ok">Sent to <strong><%= test.to %></strong> (Resend id <%= test.id %>). Check the inbox and spam folder.</div>
+        <% } else { %><div class="alert err"><strong>Not sent.</strong> <%= test.error %></div><% } %>
+      <% } %>
+      <form method="post" action="/admin/email-check/test" class="row tight">
+        <input type="email" name="to" value="<%= user.email %>" required>
+        <button class="btn primary">Send test</button>
+      </form>
+      <p class="muted small">Until your domain is verified, Resend only allows sending to the email address you signed up to Resend with.</p>
+    </div>
+    <div class="card">
+      <h2>Latest codes created</h2>
+      <p class="muted small">Every invitation, sign-in code and reset link creates a row here — if a row appears but no email arrives, the problem is sending (1–2); if no row appears, the request never got that far.</p>
+      <table class="tbl compact"><tbody>
+        <% if (!recent.length) { %><tr><td class="muted">None yet.</td></tr><% } %>
+        <% recent.forEach(c => { %><tr><td><%= c.email %></td><td><span class="tag"><%= c.purpose %></span></td><td class="small muted"><%= fmt.datetime(c.created_at) %></td><td class="small"><%= c.used_at ? 'used' : c.attempts ? c.attempts + ' wrong tries' : '' %></td></tr><% }) %>
+      </tbody></table>
+    </div>
+  </div>
+</div>
+<%- include('../partials/foot') %>

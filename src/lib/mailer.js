@@ -22,9 +22,38 @@ export async function sendEmail({ to, subject, html, text }) {
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     console.error(`[mail] ${res.status} to ${to}: ${body.message || JSON.stringify(body)}`);
-    throw new Error(res.status === 403 || /domain/i.test(body.message || '')
-      ? 'Email could not be sent: the sending domain is not verified in Resend yet.'
-      : 'Email could not be sent. Please try again in a minute.');
+    const why = body.message || `HTTP ${res.status}`;
+    const err = new Error(/domain/i.test(why) && /verif/i.test(why)
+      ? `Email could not be sent: the domain in EMAIL_FROM is not verified in Resend (${why}).`
+      : `Email could not be sent: ${why}`);
+    err.status = res.status;
+    throw err;
   }
   return body;
+}
+
+/** Diagnostics for the admin "Email check" page — never returns the key itself. */
+export async function emailDiagnostics() {
+  const key = process.env.RESEND_API_KEY || '';
+  const from = process.env.EMAIL_FROM || '';
+  const fromEmail = (from.match(/<([^>]+)>/) || [null, from])[1].trim();
+  const fromDomain = (fromEmail.split('@')[1] || '').toLowerCase();
+  const out = {
+    key: key ? (key.startsWith('re_') ? `set (re_…${key.slice(-4)})` : 'set, but does not start with re_ — wrong value?') : 'MISSING',
+    keyOk: key.startsWith('re_'),
+    from: from || 'MISSING', fromOk: /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(fromEmail), fromDomain,
+    replyTo: process.env.EMAIL_REPLY_TO || null,
+    domains: null, domainsError: null,
+  };
+  if (out.keyOk) {
+    try {
+      const r = await fetch('https://api.resend.com/domains', { headers: { Authorization: `Bearer ${key}` } });
+      const b = await r.json().catch(() => ({}));
+      if (r.ok) out.domains = (b.data || []).map(d => ({ name: d.name, status: d.status, region: d.region }));
+      else out.domainsError = r.status === 401 && /restricted/i.test(b.message || b.name || '')
+        ? 'This key is "Sending access" only, so the domain list can\'t be read — that\'s fine; use the test email below.'
+        : (b.message || `HTTP ${r.status}`);
+    } catch (e) { out.domainsError = e.message; }
+  }
+  return out;
 }

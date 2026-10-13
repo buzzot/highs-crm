@@ -525,3 +525,36 @@ main.page:has(.authwrap) { max-width: none; padding: 0; }
   .authpanel { justify-content: flex-start; padding: 32px 16px; }
   .authcard { padding: 26px 20px 22px; border-radius: 14px; }
 }
+
+/* ---------- logo animation: Highs Business → Lumi Trade (plays once) ---------- */
+.ab-logo.morph { position: relative; display: inline-grid; white-space: nowrap; line-height: 1.15; }
+.ab-logo.morph > span { grid-area: 1 / 1; display: inline-flex; gap: .28em; }
+.ab-logo.morph .w2 { color: #6fd3c4; }
+.ab-logo.morph.mobile .w1 { color: var(--brand); } .ab-logo.morph.mobile .w2 { color: var(--accent); }
+.ab-logo.morph .ch { display: inline-block; will-change: transform, opacity, filter; }
+.ab-logo.morph .m-from .ch { animation: lt-out .55s cubic-bezier(.55,0,.75,.3) both; animation-delay: calc(1.1s + var(--i) * 45ms); }
+.ab-logo.morph .m-to .ch { opacity: 0; animation: lt-in .7s cubic-bezier(.2,.8,.25,1) both; animation-delay: calc(1.75s + var(--i) * 60ms); }
+.ab-logo.morph .m-to { pointer-events: none; }
+.ab-logo.morph .m-to .w2 .ch:last-child { animation-name: lt-in-glow; animation-duration: 1.4s; }
+@keyframes lt-out {
+  to { opacity: 0; transform: translateY(-.55em) rotate(-6deg); filter: blur(6px); }
+}
+@keyframes lt-in {
+  from { opacity: 0; transform: translateY(.6em) scale(.9); filter: blur(8px); }
+  to   { opacity: 1; transform: none; filter: none; }
+}
+@keyframes lt-in-glow {
+  0%   { opacity: 0; transform: translateY(.6em) scale(.9); filter: blur(8px); text-shadow: none; }
+  45%  { opacity: 1; transform: none; filter: none; text-shadow: 0 0 18px rgba(111,211,196,.9); }
+  100% { opacity: 1; transform: none; filter: none; text-shadow: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ab-logo.morph .m-from { display: none; }
+  .ab-logo.morph .m-to .ch { animation: none; opacity: 1; }
+}
+.ab-logo.morph span { margin-left: 0; color: inherit; }
+.ab-logo.morph > span { gap: .22em; }
+.ab-logo.morph .w1 { color: #fff; }
+.ab-logo.morph .w2 { color: #6fd3c4; }
+.ab-logo.morph.mobile .w1 { color: var(--brand); }
+.ab-logo.morph.mobile .w2 { color: var(--accent); }

@@ -1,4 +1,7 @@
 import { Router } from '../../lib/router.js';
+import { requireAdmin } from '../../middleware/auth.js';
+import { sendEmail, emailDiagnostics } from '../../lib/mailer.js';
+import { codeEmail } from '../../lib/email-templates.js';
 import { requireStaff } from '../../middleware/auth.js';
 import { admin } from '../../lib/supabase.js';
 import clients from './clients.js';
@@ -52,6 +55,31 @@ r.get('/', async (req, res) => {
     if (m) { m.revenue += Number(o.subtotal || 0); m.profit += Number(o.gross_profit || 0); }
   });
   res.render('admin/dashboard', { title: 'Dashboard', kpi, byStatus, requests: reqs.data || [], shipments: shipments.data || [], activity: activity.data || [], orders: open.slice(0, 8), months, exportGaps: exportGaps.data || [] });
+});
+
+// ---- Email check (admin): settings, Resend domain, database, test email ----
+async function emailCheck(req, res, extra = {}) {
+  const diag = await emailDiagnostics();
+  const tables = {};
+  for (const [name, q] of Object.entries({
+    'auth_codes table (migration 0007)': admin.from('auth_codes').select('id', { head: true, count: 'exact' }),
+    'profile columns (migrations 0004/0006)': admin.from('profiles').select('accepted_at, invited_at, job_title').limit(1),
+    'invitation columns (migrations 0004/0006)': admin.from('invitations').select('token, expires_at, verified_at').limit(1),
+  })) { const { error } = await q; tables[name] = error ? error.message : 'ok'; }
+  const { data: recent } = await admin.from('auth_codes').select('email, purpose, created_at, used_at, attempts').order('created_at', { ascending: false }).limit(8);
+  res.render('admin/email_check', { title: 'Email check', diag, tables, recent: recent || [], appUrl: process.env.APP_URL || null,
+    twoFa: !/^(off|false|0|no)$/i.test(process.env.LOGIN_2FA || ''), ...extra });
+}
+r.get('/email-check', requireAdmin, (req, res) => emailCheck(req, res));
+r.post('/email-check/test', requireAdmin, async (req, res) => {
+  const to = String(req.body.to || req.user.email).trim();
+  try {
+    const m = codeEmail({ url: `${(process.env.APP_URL || '').replace(/\/+$/, '')}/login`, code: '123456', minutes: 15 });
+    const r2 = await sendEmail({ to, ...m, subject: 'Highs Business — test email' });
+    await emailCheck(req, res, { test: { ok: true, to, id: r2.id } });
+  } catch (e) {
+    await emailCheck(req, res, { test: { ok: false, to, error: e.message } });
+  }
 });
 
 r.use('/clients', clients);
