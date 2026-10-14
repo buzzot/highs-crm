@@ -153,10 +153,10 @@ export function rfqEmail({ order, info = {}, rows, t, message, senderName, forwa
     <tr><td style="padding:8px;font-weight:700;font-size:13px;">TOTAL</td><td></td><td style="padding:8px;text-align:right;font-weight:700;font-size:13px;">${n(t.cartons)}</td><td></td><td></td><td style="padding:8px;text-align:right;font-weight:700;font-size:13px;">${n(t.gross)} kg</td><td style="padding:8px;text-align:right;font-weight:700;font-size:13px;">${t.cbm}</td></tr>
   </table>
   <p style="font-size:15px;line-height:1.6;color:#2f3a4a;margin-top:20px;">Please include: freight, local charges at origin and destination, transit time and validity. Reply to this email with your offer.</p>
-  <p style="font-size:15px;color:#2f3a4a;">Best regards,<br>${esc(senderName || 'Lumi Trade logistics')}<br>Lumi Trade</p>
+  <p style="font-size:15px;color:#2f3a4a;">Best regards,<br><span style="color:#6b7686;">Logistics Department</span><br><strong style="font-weight:600;color:#0f3a5c;">Lumi Trade</strong></p>
 </td></tr>
 <tr><td style="padding:14px 30px 24px;font-family:${F};font-size:12px;color:#7a8494;border-top:1px solid #eef0f3;">Lumi Trade · Sourcing, orders and shipments in one place</td></tr>
 </table></td></tr></table></body></html>`;
-  const text = [`Freight quote request — ${order.order_no}`, ...facts.map(([k, v]) => `${k}: ${v}`), '', message || '', 'Packing list attached (Excel).', '', senderName || 'Lumi Trade'].join('\n');
+  const text = [`Freight quote request — ${order.order_no}`, ...facts.map(([k, v]) => `${k}: ${v}`), '', message || '', 'Packing list attached (Excel).', '', 'Best regards,', 'Logistics Department', 'Lumi Trade'].join('\n');
   return { subject: `Freight quote request · ${order.order_no}${info.mode ? ' · ' + info.mode : ''}${info.pol && info.pod ? ` · ${info.pol} → ${info.pod}` : ''}`, html, text };
 }

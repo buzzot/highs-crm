@@ -1,5 +1,6 @@
 // Freight quote requests: reply addresses, reading inbound reply emails, matching them to a request.
 // No database access here — easy to test.
+import { createHmac, timingSafeEqual } from 'node:crypto';
 
 /** Where forwarders' replies should go. With QUOTE_REPLY_ADDRESS = quotes@in.lumitrade.cc → quotes+<token>@in.lumitrade.cc */
 export function replyAddress(token, fallback) {
@@ -53,4 +54,15 @@ export function stripQuoted(text) {
     out.push(l);
   }
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, 20000);
+}
+
+/** Mailgun signs each forwarded message: HMAC-SHA256(signing key, timestamp + token) = signature. */
+export function mailgunSignatureOk(body, key, now = Date.now()) {
+  const sig = body?.signature && typeof body.signature === 'object' ? body.signature : body || {};
+  const { timestamp, token, signature } = sig;
+  if (!key || !timestamp || !token || !signature) return false;
+  if (Math.abs(now / 1000 - Number(timestamp)) > 86400) return false; // older than a day → replay
+  const want = createHmac('sha256', key).update(String(timestamp) + String(token)).digest('hex');
+  const a = Buffer.from(want), b = Buffer.from(String(signature));
+  return a.length === b.length && timingSafeEqual(a, b);
 }

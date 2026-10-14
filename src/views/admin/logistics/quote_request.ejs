@@ -73,7 +73,7 @@
 
   <div class="card">
     <h2>Add a response</h2>
-    <p class="muted small"><% if (inboundOn) { %>Email replies arrive here automatically. Paste WeChat messages (or anything else) below.<% } else { %>Email replies go to your inbox for now — paste them (or WeChat messages) below. Automatic capture: see “Inbound email” in the README.<% } %> AI reads the price, transit time and validity.</p>
+    <p class="muted small"><% if (inboundOn) { %>Email replies arrive here automatically. Paste WeChat messages (or anything else) below.<% } else { %>Email replies go to your inbox for now — paste them (or WeChat messages) below. Automatic capture: set up Mailgun — see “Inbound email” in the README.<% } %> AI reads the price, transit time and validity.</p>
     <form method="post" action="/admin/logistics/quotes/<%= fr.id %>/response">
       <div class="row">
         <label>From <select name="rfq_id" required><% rfqs.forEach(r => { %><option value="<%= r.id %>"><%= r.forwarders?.name || r.sent_to %></option><% }) %></select></label>

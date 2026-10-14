@@ -42,3 +42,19 @@ test('quote request email lists the cargo and stays on brand', () => {
   assert.match(m.html, /280 kg/);
   assert.doesNotMatch(m.html + m.text, /supabase|Highs/i);
 });
+
+test('mailgun signature', async () => {
+  const { mailgunSignatureOk } = await import('../src/lib/freight.js');
+  const { createHmac } = await import('node:crypto');
+  const key = 'k-123', timestamp = String(Math.floor(Date.now() / 1000)), token = 'abc';
+  const signature = createHmac('sha256', key).update(timestamp + token).digest('hex');
+  assert.equal(mailgunSignatureOk({ timestamp, token, signature }, key), true);
+  assert.equal(mailgunSignatureOk({ timestamp, token, signature }, 'other'), false);
+  assert.equal(mailgunSignatureOk({ timestamp: '1000', token, signature }, key), false);
+  assert.equal(mailgunSignatureOk({}, key), false);
+  // Mailgun form fields → normalised mail
+  const { normalizeInbound, matchKeys } = await import('../src/lib/freight.js');
+  const m = normalizeInbound({ sender: 'amy@ocean.example', recipient: 'quotes+ab12cd34ef@in.lumitrade.cc', subject: 'Re: Freight quote [FQ-2610-0042 #ab12cd34ef]', 'body-plain': 'USD 1850' });
+  assert.equal(m.from, 'amy@ocean.example'); assert.equal(m.text, 'USD 1850');
+  assert.deepEqual(matchKeys(m), { token: 'ab12cd34ef' });
+});

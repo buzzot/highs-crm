@@ -87,15 +87,23 @@ Node.js (Express, server-rendered EJS) on **Supabase** (Postgres, Auth, Storage)
   Click the number to see the timeline and the AI-read offers (price, transit days, validity, breakdown, questions).
 - WeChat or phone replies: paste them on the request page — AI reads them the same way.
 
-#### Inbound email (automatic capture of forwarders' replies) — optional
+#### Inbound email (automatic capture of forwarders' replies) — optional, via Mailgun
 Without this, replies arrive in the sender's own inbox (Reply-To) and you paste them in.
-1. Pick an inbound-email service that POSTs JSON to a webhook (Postmark Inbound, Mailgun Routes, SendGrid Inbound Parse,
-   a Cloudflare Email Worker, or Resend inbound if your plan includes it). Point a subdomain at it, e.g. `in.lumitrade.cc`.
-2. Railway → Variables:
-   - `QUOTE_REPLY_ADDRESS=quotes@in.lumitrade.cc` — replies go to `quotes+<token>@in.lumitrade.cc`
-   - `INBOUND_EMAIL_SECRET=` a long random string
-3. Webhook URL: `https://lumitrade.cc/hooks/inbound-email?key=<INBOUND_EMAIL_SECRET>` (or send the secret in an
-   `x-inbound-secret` header). Replies are matched by the address token or the `[FQ-… #token]` subject tag.
+Sending stays on Resend; Mailgun only receives, on its own subdomain, so the two never clash.
+1. mailgun.com → Sending → Domains → **Add domain** `in.lumitrade.cc` (US region). Add only its **MX** records
+   (`mxa.mailgun.org`, `mxb.mailgun.org`, priority 10) and the TXT/SPF records at your DNS host; wait for "Verified".
+2. Receiving → **Create route**: expression type *Match recipient*, `quotes.*@in.lumitrade.cc`
+   (regex: `match_recipient("^quotes.*@in\.lumitrade\.cc$")`), action **Forward** to
+   `https://lumitrade.cc/hooks/inbound-email`, tick **Stop**, priority 0.
+3. Settings → **Webhook signing key** → copy it.
+4. Railway → Variables:
+   - `QUOTE_REPLY_ADDRESS=quotes@in.lumitrade.cc` — each forwarder replies to `quotes+<token>@in.lumitrade.cc`
+   - `MAILGUN_WEBHOOK_SIGNING_KEY=` the key from step 3 (proves the post comes from Mailgun)
+5. Test: send a quote request to your own address, reply to it, and the reply appears on the request page within a minute.
+   Railway logs show `[inbound] …` lines.
+
+Other providers (Postmark, SendGrid, Cloudflare Email Worker) work too: set `INBOUND_EMAIL_SECRET` and post to
+`https://lumitrade.cc/hooks/inbound-email?key=<INBOUND_EMAIL_SECRET>`.
 
 ## Project layout
 ```
