@@ -17,7 +17,10 @@ const quoteFiles = multer({ storage: multer.memoryStorage(), limits: { fileSize:
 const r = Router();
 const SHIP_FIELDS = ['order_id', 'forwarder_id', 'mode', 'incoterm', 'origin_port', 'destination_port', 'container_no', 'tracking_no', 'bl_no',
   'export_declaration_no', 'etd', 'eta', 'atd', 'ata', 'status', 'gross_weight_kg', 'volume_cbm', 'cartons', 'notes'];
-const shipBody = b => ({ ...clean(b, SHIP_FIELDS), export_official: bool(b.export_official) });
+const shipBody = b => ({ ...clean(b, SHIP_FIELDS), export_official: bool(b.export_official), partial: bool(b.partial) });
+const GONE = ['shipped', 'in_transit', 'customs', 'delivered', 'closed', 'cancelled'];
+/** An order can take a (new) shipment unless it already shipped/closed/cancelled — partly shipped orders stay open until the last shipment. */
+const shippable = (o, ships = []) => !GONE.includes(o.status) || (['shipped', 'in_transit', 'customs'].includes(o.status) && ships.some(x => x.partial));
 const PAST_DEPARTURE = ['departed', 'arrived', 'customs', 'delivered'];
 
 r.get('/', async (req, res) => {
@@ -180,11 +183,11 @@ r.post('/forwarders/:id', async (req, res) => {
 // ---- shipments ----
 async function shipForm(res, { s, error = null, title }) {
   const [{ data: orders }, { data: forwarders }] = await Promise.all([
-    admin.from('orders').select('id, order_no, organizations(name)').not('status', 'in', '("closed","cancelled")').order('created_at', { ascending: false }),
+    admin.from('orders').select('id, order_no, status, organizations(name), shipments(partial)').order('created_at', { ascending: false }).limit(300),
     admin.from('forwarders').select('id, name').order('name'),
   ]);
   res.render('admin/logistics/shipment_form', {
-    title, s, error, orders: orders || [], forwarders: forwarders || [],
+    title, s, error, orders: (orders || []).filter(o => o.id === s.order_id || shippable(o, o.shipments)).map(o => ({ ...o, part: (o.shipments || []).length })), forwarders: forwarders || [],
     modes: SHIPMENT_MODES, statuses: SHIPMENT_STATUSES, incoterms: INCOTERMS,
   });
 }
@@ -203,7 +206,13 @@ r.get('/shipments/new', async (req, res) => {
   }
   await shipForm(res, { s, title: 'New shipment' });
 });
+async function orderOk(orderId, currentId) {
+  if (!orderId || orderId === currentId) return true;
+  const { data: o } = await admin.from('orders').select('status, shipments(partial)').eq('id', orderId).maybeSingle();
+  return !!o && shippable(o, o.shipments);
+}
 r.post('/shipments', async (req, res) => {
+  if (!(await orderOk(req.body.order_id))) return shipForm(res, { s: req.body, error: 'That order has already shipped (or is closed/cancelled). Tick "Partial shipment" on its earlier shipment if more goods are still to go.', title: 'New shipment' });
   const { data, error } = await admin.from('shipments').insert(shipBody(req.body)).select('id, order_id').single();
   if (error) return shipForm(res, { s: req.body, error: error.message, title: 'New shipment' });
   await log({ entityType: 'order', entityId: data.order_id, action: 'shipment_created', actorId: req.user.id, clientVisible: true, detail: { mode: req.body.mode } });
@@ -243,14 +252,25 @@ r.post('/shipments/:id', async (req, res) => {
   const { data: before } = await admin.from('shipments').select('status, order_id, export_declaration_no').eq('id', id).single();
   if (!before) return notFound(res, 'Shipment');
   const b = shipBody(req.body);
-  delete b.order_id;
+  if (!b.order_id) delete b.order_id;
+  if (!(await orderOk(b.order_id, before.order_id))) return shipForm(res, { s: { ...req.body, id }, error: 'That order has already shipped (or is closed/cancelled), so it can’t be selected.', title: 'Edit shipment' });
   const { error } = await admin.from('shipments').update(b).eq('id', id);
   if (error) return shipForm(res, { s: { ...req.body, id }, error: error.message, title: 'Edit shipment' });
+  if (b.order_id && b.order_id !== before.order_id) {
+    // moved to another order: re-total freight on both
+    for (const oid of [before.order_id, b.order_id]) {
+      const { data: cs } = await admin.from('freight_costs').select('amount, fx_to_order, shipments!inner(order_id)').eq('shipments.order_id', oid);
+      const total = (cs || []).reduce((t, c) => t + Number(c.amount) * Number(c.fx_to_order || 1), 0);
+      await admin.from('orders').update({ freight_total: total }).eq('id', oid);
+    }
+    await log({ entityType: 'order', entityId: b.order_id, action: 'shipment_linked', actorId: req.user.id, clientVisible: true, detail: { shipment_id: id } });
+    before.order_id = b.order_id;
+  }
   if (b.status && b.status !== before.status) {
     await log({ entityType: 'order', entityId: before.order_id, action: `shipment_${b.status}`, actorId: req.user.id, clientVisible: true, detail: { shipment_id: id } });
     // keep order status roughly in sync with the shipment
     const map = { departed: 'shipped', arrived: 'in_transit', customs: 'customs', delivered: 'delivered' };
-    if (map[b.status]) await admin.from('orders').update({ status: map[b.status] }).eq('id', before.order_id).not('status', 'in', '("closed","cancelled")');
+    if (map[b.status] && !b.partial) await admin.from('orders').update({ status: map[b.status] }).eq('id', before.order_id).not('status', 'in', '("closed","cancelled")');
   }
   if (b.export_declaration_no && b.export_declaration_no !== before.export_declaration_no) {
     await log({ entityType: 'order', entityId: before.order_id, action: 'export_declared', actorId: req.user.id, clientVisible: true, detail: { note: b.export_declaration_no } });
