@@ -50,13 +50,10 @@
           <form method="post" action="/admin/logistics/quotes/<%= fr.id %>/rfq/<%= r.id %>/status" class="autosubmit inline">
             <select name="status" class="pillselect" aria-label="Status"><% Object.entries(RFQ).forEach(([k, l]) => { %><option value="<%= k %>" <%= r.status === k ? 'selected' : '' %>><%= l %></option><% }) %></select>
           </form>
-          <% if (r.status === 'accepted' && r.shipment_id) { %>
-            <div class="small"><a href="/admin/logistics/shipments/<%= r.shipment_id %>">Shipment →</a></div>
-            <% if (r.channel === 'email') { %><form method="post" action="/admin/logistics/quotes/<%= fr.id %>/rfq/<%= r.id %>/accept" class="inline" onsubmit="return confirm('Send the booking confirmation to <%= r.sent_to %> again?')"><button class="btn small">✉ Resend confirmation</button></form><% } %>
-          <% } else if (r.quote_amount != null) { %>
-            <form method="post" action="/admin/logistics/quotes/<%= fr.id %>/rfq/<%= r.id %>/accept" class="inline" onsubmit="return confirm('Accept this quote, create the shipment<%= r.channel === 'email' ? ' and email ' + r.sent_to + ' to confirm the booking' : '' %>?')"><button class="btn primary small">✓ Accept &amp; confirm booking</button></form>
+          <% if (r.status === 'accepted' && r.quote_amount != null) { %>
+            <button type="button" class="btn primary small" data-book="book-<%= r.id %>"><%= r.booking_sent_at ? 'Resend booking' : 'Book' %></button>
+            <% if (r.shipment_id) { %><a class="small" href="/admin/logistics/shipments/<%= r.shipment_id %>">Shipment →</a><% } %>
           <% } %>
-          <a class="small" href="/admin/logistics/quotes/<%= fr.id %>/rfq/<%= r.id %>/form.xlsx" title="Quotation form + packing list for this forwarder (e.g. to send by WeChat)">⇩ Form</a>
         </td>
       </tr>
     <% }) %>
@@ -64,6 +61,32 @@
   </table>
 </div>
 
+<% rfqs.filter(r => r.status === 'accepted' && r.quote_amount != null).forEach(r => {
+  const q = quoteOf(r.id) || {};
+  const etd = /^\d{4}-\d{2}-\d{2}$/.test(q.etd || '') ? q.etd : '';
+  const eta = etd && r.transit_days ? new Date(Date.parse(etd) + Number(r.transit_days) * 864e5).toISOString().slice(0, 10) : '';
+%>
+<dialog id="book-<%= r.id %>" class="bookdlg">
+  <form method="post" action="/admin/logistics/quotes/<%= fr.id %>/rfq/<%= r.id %>/book">
+    <h2>Book shipment</h2>
+    <dl class="bookfacts">
+      <dt>Forwarder</dt><dd><%= r.forwarders?.name || q.company || r.sent_to %><% if (r.channel === 'email') { %><span class="muted small"> · <%= r.sent_to %></span><% } %></dd>
+      <dt>Route</dt><dd><%= i.pol || '—' %> → <%= i.pod || '—' %></dd>
+      <dt>Shipping date (ETD)</dt><dd><input type="date" name="etd" value="<%= etd %>"></dd>
+      <dt>ETA</dt><dd><input type="date" name="eta" value="<%= eta %>"></dd>
+      <dt>Weight / volume</dt><dd><%= tt.gross_kg ?? '—' %> kg · <%= tt.cbm ?? '—' %> cbm · <%= tt.cartons ?? '—' %> ctns</dd>
+      <dt>Amount</dt><dd><strong class="okamount"><%= fmt.money(r.quote_amount, r.quote_currency || 'USD') %></strong></dd>
+    </dl>
+    <p class="muted small"><%= r.channel === 'email' ? 'Submit creates the shipment and emails ' + r.sent_to + ' a booking confirmation, asking for the loading port, direct or transshipment, and the latest date to receive the goods.' : 'Submit creates the shipment. This forwarder was contacted by WeChat, so the booking text will be shown on this page to copy.' %></p>
+    <div class="actions"><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Submit</button></div>
+  </form>
+</dialog>
+<% }) %>
+<script>
+  document.querySelectorAll('[data-book]').forEach(b => b.addEventListener('click', () => document.getElementById(b.dataset.book)?.showModal()));
+  document.querySelectorAll('dialog [data-close]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
+  document.querySelectorAll('dialog.bookdlg').forEach(d => d.addEventListener('click', e => { if (e.target === d) d.close(); }));
+</script>
 <% Object.entries(bookingText || {}).forEach(([id, txt]) => { const r = rfqs.find(x => x.id === id); %>
 <div class="card"><h2>Booking confirmation for <%= r?.forwarders?.name || 'forwarder' %> <span class="muted small">— send by WeChat</span></h2>
   <textarea class="wechat" rows="9" readonly onclick="this.select()"><%= txt %></textarea></div>

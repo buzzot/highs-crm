@@ -1018,3 +1018,11 @@ textarea.wechat { font-size: 12.5px; background: #fafbfc; font-variant-numeric: 
 .actlist .qcharges { margin: 6px 0; } .actlist .qcharges td, .actlist .qcharges th { padding: 4px 8px; font-size: 12.5px; }
 .actlist .qcharges tfoot td { font-weight: 600; border-top: 1px solid var(--line); }
 .offers td { vertical-align: top; } .offers td .small a { white-space: nowrap; }
+dialog.bookdlg { border: 0; border-radius: 16px; padding: 24px 26px; width: min(520px, calc(100vw - 32px)); box-shadow: 0 24px 70px rgba(15, 30, 50, .35); color: var(--ink); }
+dialog.bookdlg::backdrop { background: rgba(15, 30, 50, .45); }
+dialog.bookdlg h2 { margin: 0 0 14px; }
+.bookfacts { display: grid; grid-template-columns: 150px 1fr; gap: 10px 14px; align-items: center; margin: 0 0 14px; }
+.bookfacts dt { color: var(--muted); } .bookfacts dd { margin: 0; }
+.bookfacts input[type=date] { width: auto; }
+dialog.bookdlg .actions { justify-content: flex-end; margin-top: 8px; }
+.okamount { color: var(--ok, #1b7f5c); font-size: 1.15em; }

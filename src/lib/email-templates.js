@@ -167,11 +167,11 @@ export function rfqEmail({ order, info = {}, rows, t, message, senderName, forwa
 }
 
 // ---- booking confirmation to the forwarder whose quote we accepted ----
-export function bookingEmail({ order, info = {}, t, ref, quoteSummary, forwarderName, message }) {
+export function bookingEmail({ order, info = {}, t, ref, quoteSummary, amount, etd, eta, forwarderName, message }) {
   const F = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
   const route = [info.pol, info.pod].filter(Boolean).join(' → ');
   const facts = [['Request', ref], ['Order', order.order_no], ['Mode', info.mode], ['Route', route], ['Incoterm', info.incoterm],
-    ['Cargo', `${t.cartons} ctns · ${t.gross} kg · ${t.cbm} cbm`], ['Accepted quote', quoteSummary]].filter(([, v]) => v);
+    ['Cargo', `${t.cartons} ctns · ${t.gross} kg · ${t.cbm} cbm`], ['Shipping date (ETD)', etd], ['ETA', eta], ['Agreed amount', amount], ['Your quote', quoteSummary]].filter(([, v]) => v);
   const asks = [
     ['Loading port / terminal', '装货港/码头'],
     ['Direct or transshipment (if transshipment, where)', '直达还是中转（如中转请注明中转港）'],
