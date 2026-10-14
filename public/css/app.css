@@ -794,3 +794,9 @@ label.flabel { margin-bottom: 6px; }
 .modeTabs svg, .btn svg.ic { width: 16px; height: 16px; }
 .actions .btn svg { width: 16px; height: 16px; vertical-align: -3px; margin-right: 4px; }
 .portalcard .inviteform { margin-top: 12px; max-width: 560px; } .portalcard .inviteform input { flex: 1; }
+
+/* one page width everywhere: use the full screen (with side padding) on every page */
+.page, .page.cpage { max-width: none; width: 100%; margin: 0; }
+.page { padding: 28px 40px 60px; }
+.card.narrow-md, .companywrap, .rqform { max-width: none; margin-left: 0; margin-right: 0; }
+@media (max-width: 760px) { .page, .page.cpage { padding: 16px; } }
