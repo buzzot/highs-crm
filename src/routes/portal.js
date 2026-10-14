@@ -3,6 +3,7 @@ import multer from 'multer';
 import { requireClient } from '../middleware/auth.js';
 import { admin } from '../lib/supabase.js';
 import { log } from '../lib/activity.js';
+import { aiEnabled, extractProductInfo } from '../lib/ai.js';
 import { uploadDocument, signedUrl } from '../lib/storage.js';
 import { parseItems, validateItems, requestTitle, splitFiles, UNITS } from '../lib/request-items.js';
 import { EDITABLE, DELIVERY, snapshot, buildRevision, diff } from '../lib/request-revisions.js';
@@ -25,6 +26,7 @@ const ITEM = 'id, description, quantity, unit_price, hs_code';
 const SHIP = 'id, order_id, mode, incoterm, origin_port, destination_port, container_no, tracking_no, bl_no, export_declaration_no, export_official, etd, eta, atd, ata, status, gross_weight_kg, volume_cbm, cartons, created_at';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 40 } });
 r.use(requireClient);
+r.use((req, res, next) => { res.locals.aiOn = aiEnabled(); next(); });
 
 // Everything here uses req.db (the user's token) so Supabase RLS enforces org scoping.
 
@@ -88,6 +90,18 @@ r.get('/requests', async (req, res) => {
 const newForm = (res, extra = {}) => res.render('portal/request_form', { title: 'New request', error: null, form: {}, items: [{}], units: UNITS, ...extra });
 r.get('/requests/new', (req, res) => newForm(res));
 
+// optional: read a product's photo / PDF with AI and suggest name, SKU and details (nothing is saved here)
+r.post('/requests/ai-fill', upload.array('files', 4), async (req, res) => {
+  if (!aiEnabled()) return res.status(503).json({ error: 'AI fill is not switched on.' });
+  const IMG = /^image\/(png|jpe?g|gif|webp)$/i;
+  const files = (req.files || []).flatMap(f => (f.mimetype === 'application/pdf' || /\.pdf$/i.test(f.originalname) ? [{ pdf: f.buffer }] : IMG.test(f.mimetype) ? [{ data: f.buffer, mediaType: f.mimetype.replace('jpg', 'jpeg') }] : []));
+  if (!files.length) return res.status(400).json({ error: 'Add a photo or a PDF of the product first.' });
+  try {
+    const out = await extractProductInfo({ files, name: String(req.body.name || '').slice(0, 300), description: String(req.body.description || '').slice(0, 3000) }, { type: 'organization', id: req.user.org_id });
+    res.json({ name: out.name, sku: out.sku, description: out.description });
+  } catch (e) { res.status(502).json({ error: `AI could not read the files: ${e.message}` }); }
+});
+
 r.post('/requests', upload.any(), async (req, res) => {
   const f = req.body;
   const items = parseItems(f);
@@ -107,7 +121,7 @@ r.post('/requests', upload.any(), async (req, res) => {
   if (error) return again(error.message);
 
   const { data: saved, error: iErr } = await admin.from('request_items')
-    .insert(items.map((it, i) => ({ request_id: data.id, position: i, name: it.name, description: it.description, quantity: it.quantity, unit: it.unit, target_unit_price: it.target_unit_price })))
+    .insert(items.map((it, i) => ({ request_id: data.id, position: i, name: it.name, sku: it.sku, description: it.description, quantity: it.quantity, unit: it.unit, target_unit_price: it.target_unit_price })))
     .select('id, position');
   if (iErr) console.error(`[request] ${data.id}: products not saved: ${iErr.message}`);
   const idByKey = {};

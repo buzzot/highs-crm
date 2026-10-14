@@ -11,7 +11,7 @@
     <div class="rqrow">
       <span class="rqn"><%= k + 1 %></span>
       <div>
-        <div class="rqname"><%= it.name %></div>
+        <div class="rqname"><%= it.name %><% if (it.sku) { %> <span class="rqsku"><%= it.sku %></span><% } %></div>
         <div class="rqfacts">
           <span>Qty <b><%= it.quantity != null ? Number(it.quantity).toLocaleString('en-US') + ' ' + (it.unit || 'pcs') : '—' %></b></span>
           <span>Target <b><%= it.target_unit_price != null ? fmt.money(it.target_unit_price, request.target_currency, 4) : '—' %></b></span>

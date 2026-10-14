@@ -1029,3 +1029,10 @@ dialog.bookdlg .actions { justify-content: flex-end; margin-top: 8px; }
 
 .rowact{display:flex;align-items:center;gap:10px;flex-wrap:nowrap;white-space:nowrap}
 .rowact form{margin:0}
+
+.rqnamerow { align-items: flex-end; }
+.rqnamerow .grow3 { flex: 3 1 0; }
+.rqnamerow label:not(.grow3) { flex: 1 1 0; }
+.rqsku { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: var(--bg, #f1f3f5); border: 1px solid var(--line, #e3e6ea); font-size: 12px; font-weight: 500; color: var(--muted, #667); vertical-align: 1px; }
+.aifill { margin-top: 10px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.aifill[hidden] { display: none; }

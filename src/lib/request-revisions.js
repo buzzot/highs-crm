@@ -15,7 +15,7 @@ const HEADER = [
   ['target_currency', 'Price currency'],
   ['description', 'General notes'],
 ];
-const ITEM = [['name', 'Name'], ['description', 'Details'], ['quantity', 'Quantity'], ['unit', 'Unit'], ['target_unit_price', 'Target price']];
+const ITEM = [['name', 'Name'], ['sku', 'SKU / part no.'], ['description', 'Details'], ['quantity', 'Quantity'], ['unit', 'Unit'], ['target_unit_price', 'Target price']];
 // header changes that make every open quote outdated
 const AFFECTS_ALL = ['destination_country', 'destination_city', 'needed_by', 'delivery_mode', 'target_currency'];
 
@@ -35,7 +35,7 @@ export function snapshot(request, items) {
     destination_country: request.destination_country ?? null, destination_city: request.destination_city ?? null,
     needed_by: request.needed_by ?? null, delivery_mode: request.delivery_mode ?? null, target_currency: request.target_currency || 'USD',
     items: (items || []).slice().sort((a, b) => (a.position ?? 0) - (b.position ?? 0)).map(i => ({
-      id: i.id, name: i.name, description: i.description ?? null, quantity: i.quantity ?? null, unit: i.unit || 'pcs', target_unit_price: i.target_unit_price ?? null,
+      id: i.id, name: i.name, sku: i.sku ?? null, description: i.description ?? null, quantity: i.quantity ?? null, unit: i.unit || 'pcs', target_unit_price: i.target_unit_price ?? null,
     })),
     new_docs: [], remove_doc_ids: [],
   };
@@ -50,7 +50,7 @@ export function snapshot(request, items) {
 export function buildRevision(header, parsed, currentIds) {
   const known = new Set(currentIds);
   const items = parsed.map(p => {
-    const row = { name: p.name, description: p.description, quantity: p.quantity, unit: p.unit, target_unit_price: p.target_unit_price, key: p.key };
+    const row = { name: p.name, sku: p.sku, description: p.description, quantity: p.quantity, unit: p.unit, target_unit_price: p.target_unit_price, key: p.key };
     if (p.id && known.has(p.id)) row.id = p.id;
     else row.tmp = /^[0-9a-f-]{36}$/.test(p.tmp || '') ? p.tmp : randomUUID();
     return row;

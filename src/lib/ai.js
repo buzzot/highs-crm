@@ -249,6 +249,37 @@ The supplier is the company that ISSUED the document (letterhead, stamp, signatu
   return { supplier: input.supplier || {}, products: input.products || [], notes: [input.notes, truncated ? 'The document was long — the AI may have stopped before the last products. Check the end of the list.' : null].filter(Boolean).join(' '), model, usage };
 }
 
+const PRODUCT_INFO_TOOL = {
+  name: 'record_product_info',
+  description: 'Record what the attached files say about ONE product the client wants to buy.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      name: { ...strOrNull, description: 'Short product name in English (type + key attribute, e.g. "Stainless steel tumbler 500 ml")' },
+      sku: { ...strOrNull, description: 'Model / SKU / part / article number exactly as printed, or null' },
+      description: { ...strOrNull, description: 'Specifications as short lines: material, size, colour, capacity, power, packaging, certifications, any links. Only what is visible.' },
+    },
+    required: ['name', 'sku', 'description'],
+  },
+};
+
+/** Read photos / a PDF the client attached to one product line and suggest name, SKU and details. */
+export async function extractProductInfo({ files = [], name = '', description = '' }, entity = null) {
+  const system = `You help a sourcing company understand what a client wants to buy. Look at the attached photo(s) / PDF of ONE product
+(catalogue page, competitor listing, screenshot, product photo, label) and fill in name, SKU/model number and details.
+Never invent facts that are not visible; use null when unknown. Translate Chinese to English. Keep the details concise (short lines).
+If the client already typed a name or details, keep their meaning and only improve or complete it with what the files show.`;
+  const content = [];
+  for (const f of files.slice(0, 4)) {
+    if (f.pdf) content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: f.pdf.toString('base64') } });
+    else content.push({ type: 'image', source: { type: 'base64', media_type: f.mediaType, data: f.data.toString('base64') } });
+  }
+  content.push({ type: 'text', text: `Client typed so far — name: ${name || '(empty)'}; details: ${description || '(empty)'}.\nCall record_product_info.` });
+  const { input, usage } = await forcedTool({ tool: PRODUCT_INFO_TOOL, content, system, maxTokens: 2000, feature: 'request_product_fill', entity });
+  const s = v => (typeof v === 'string' && v.trim() ? v.trim() : null);
+  return { name: s(input.name), sku: s(input.sku), description: s(input.description), usage };
+}
+
 const REVIEW_TOOL = {
   name: 'report_issues',
   description: 'Report problems found in the imported product rows.',

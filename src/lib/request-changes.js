@@ -46,7 +46,7 @@ export async function applyRevision(rev, actorId, note) {
   // products: update / insert / delete
   const refToId = {};
   for (const [pos, it] of data.items.entries()) {
-    const row = { name: it.name, description: it.description ?? null, quantity: it.quantity ?? null, unit: it.unit || 'pcs', target_unit_price: it.target_unit_price ?? null, position: pos };
+    const row = { name: it.name, sku: it.sku ?? null, description: it.description ?? null, quantity: it.quantity ?? null, unit: it.unit || 'pcs', target_unit_price: it.target_unit_price ?? null, position: pos };
     if (it.id && items.some(x => x.id === it.id)) {
       await admin.from('request_items').update(row).eq('id', it.id);
       refToId[it.id] = it.id;

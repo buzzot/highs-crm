@@ -5,7 +5,10 @@
     <button type="button" class="rqdel" aria-label="Remove this product" title="Remove this product">&times;</button>
   </div>
   <% if (it.id) { %><input type="hidden" name="items[<%= i %>][id]" value="<%= it.id %>"><% } else if (it.tmp) { %><input type="hidden" name="items[<%= i %>][tmp]" value="<%= it.tmp %>"><% } %>
-  <label>Product name <input name="items[<%= i %>][name]" required value="<%= it.name || '' %>" placeholder="e.g. Stainless steel tumbler 500 ml, custom logo"></label>
+  <div class="row rqnamerow">
+    <label class="grow3">Product name <input name="items[<%= i %>][name]" required value="<%= it.name || '' %>" placeholder="e.g. Stainless steel tumbler 500 ml, custom logo"></label>
+    <label>SKU / part no. <span class="muted small">optional</span><input name="items[<%= i %>][sku]" maxlength="80" value="<%= it.sku || '' %>" placeholder="Model or article number"></label>
+  </div>
   <label>Details <textarea name="items[<%= i %>][description]" rows="3" placeholder="Specifications, materials, colours, packaging, certifications, reference links…"><%= it.description || '' %></textarea></label>
   <div class="row">
     <label>Quantity <input type="number" min="1" name="items[<%= i %>][quantity]" value="<%= it.quantity ?? '' %>"></label>
@@ -21,5 +24,11 @@
       <span class="muted small dsub">Photos, PDF, Excel or Word · up to 10 files, 20 MB each · paste a screenshot with ⌘/Ctrl V</span>
     </div>
     <div class="fgrid" data-drop-list></div>
+    <% if (typeof aiOn !== 'undefined' && aiOn) { %>
+    <div class="aifill" hidden>
+      <button type="button" class="btn small" data-aifill>✨ Fill name, SKU and details from the photo / PDF with AI</button>
+      <span class="muted small aistat" aria-live="polite"></span>
+    </div>
+    <% } %>
   </div>
 </div>

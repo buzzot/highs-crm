@@ -94,6 +94,30 @@
     if (filled && !block.classList.contains('confirm')) { block.classList.add('confirm'); del.textContent = 'Click again to remove'; setTimeout(() => { block.classList.remove('confirm'); del.innerHTML = '&times;'; }, 3000); return; }
     block.remove(); renumber();
   });
+  // optional AI fill from the product's photos / PDF
+  const aiBlocks = () => list.querySelectorAll('.rqitem');
+  const syncAi = block => { const bar = block.querySelector('.aifill'); if (!bar) return; const has = [...(block.querySelector('input[type=file]')?.files || [])].some(f => /^image\/|pdf$/i.test(f.type) || /\.pdf$/i.test(f.name)); bar.hidden = !has; };
+  list.addEventListener('change', e => { if (e.target.type === 'file') syncAi(e.target.closest('.rqitem')); });
+  new MutationObserver(() => aiBlocks().forEach(syncAi)).observe(list, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+  list.addEventListener('click', async e => {
+    const btn = e.target.closest('[data-aifill]'); if (!btn) return;
+    const block = btn.closest('.rqitem'), stat = block.querySelector('.aistat');
+    const files = [...block.querySelector('input[type=file]').files].filter(f => /^image\//.test(f.type) || /\.pdf$/i.test(f.name)).slice(0, 4);
+    const f = n => block.querySelector('[name$="[' + n + ']"]');
+    const fd = new FormData(); files.forEach(x => fd.append('files', x)); fd.append('name', f('name').value); fd.append('description', f('description').value);
+    btn.disabled = true; stat.textContent = 'Reading the files…';
+    try {
+      const r = await fetch('/portal/requests/ai-fill', { method: 'POST', body: fd, headers: { Accept: 'application/json' } });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || 'AI could not read the files.');
+      const have = ['name', 'sku', 'description'].filter(k => j[k] && f(k).value.trim() && f(k).value.trim() !== j[k]);
+      const overwrite = !have.length || confirm('Replace what you typed (' + have.join(', ') + ') with the AI suggestion?');
+      let n = 0;
+      for (const k of ['name', 'sku', 'description']) if (j[k] && (overwrite || !f(k).value.trim())) { f(k).value = j[k]; n++; }
+      stat.textContent = n ? 'Filled from your files — please check it.' : 'Nothing new found in the files.';
+    } catch (err) { stat.textContent = err.message; }
+    btn.disabled = false;
+  });
   document.getElementById('rqCur').addEventListener('change', e => document.querySelectorAll('.rqcur').forEach(s => { s.textContent = e.target.value; }));
   renumber();
 })();
