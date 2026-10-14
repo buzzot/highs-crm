@@ -97,6 +97,10 @@ async function saveQuote(req, res, id) {
     const lists = await formLists();
     return res.status(400).render('admin/pricing/quote_form', { title: id ? 'Edit quote' : 'New quote', q: { ...req.body, id }, settings, ...lists, incoterms: INCOTERMS, currencies: CURRENCIES, error: 'Pick the client request this quote answers.' });
   }
+  if (b.product_id) { // the supplier belongs to the product
+    const { data: pr } = await admin.from('products').select('supplier_id').eq('id', b.product_id).maybeSingle();
+    if (pr?.supplier_id) b.supplier_id = pr.supplier_id;
+  }
   if (b.request_item_id) {
     const { data: it } = await admin.from('request_items').select('request_id').eq('id', b.request_item_id).maybeSingle();
     if (it?.request_id !== b.request_id) b.request_item_id = null;

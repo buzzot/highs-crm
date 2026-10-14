@@ -56,12 +56,22 @@ if (form) {
     if (fx) $('f_fx').value = Math.round(fx * 1e6) / 1e6;
   }
 
+  // the supplier belongs to the product: take it from there and lock it
+  function lockSupplier(p) {
+    const sel = $('f_supplier'), note = $('f_supplier_note'), lock = !!(p && p.supplier_id);
+    if (lock) sel.value = p.supplier_id;
+    sel.classList.toggle('locked', lock); sel.tabIndex = lock ? -1 : 0;
+    if (note) note.hidden = !lock;
+  }
+  let lastProduct = $('f_product').value;
   $('f_product').addEventListener('change', () => {
+    if ($('f_product').value === '__new__') { $('f_product').value = lastProduct; openNew(); return; }
+    lastProduct = $('f_product').value;
     const p = product();
+    lockSupplier(p);
     if (p) {
       if (p.unit_cost != null) $('f_cost').value = p.unit_cost;
       $('f_ccur').value = p.cost_currency || 'CNY';
-      if (p.supplier_id) $('f_supplier').value = p.supplier_id;
       if (!$('f_qty').value && p.moq) $('f_qty').value = p.moq;
       syncFx(); syncLead();
     }
@@ -145,4 +155,37 @@ if (form) {
   });
 
   render();
+
+  // quick-add a product without leaving the quote
+  const dlg = $('newProdDlg');
+  function openNew() {
+    if (!dlg) return;
+    const r = request(), it = item() || (r?.items || [])[0];
+    $('np_name').value = it?.name || ''; $('np_sku').value = ''; $('np_cost').value = ''; $('np_moq').value = '';
+    $('np_supplier').value = $('f_supplier').value || ''; $('np_err').hidden = true;
+    dlg.showModal(); $('np_name').focus();
+  }
+  if (dlg) {
+    $('np_cancel').addEventListener('click', () => dlg.close());
+    $('np_save').addEventListener('click', async () => {
+      const btn = $('np_save'), err = $('np_err');
+      const name = $('np_name').value.trim();
+      if (!name) { err.textContent = 'Enter a product name.'; err.hidden = false; return; }
+      btn.disabled = true; err.hidden = true;
+      try {
+        const res = await fetch('/admin/products/quick', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ name, sku: $('np_sku').value, supplier_id: $('np_supplier').value, unit_cost: $('np_cost').value, cost_currency: $('np_ccur').value, moq: $('np_moq').value }) });
+        const j = await res.json();
+        if (!res.ok) throw new Error(j.error || 'Could not add the product.');
+        data.products.push(j);
+        const o = document.createElement('option'); o.value = j.id; o.textContent = j.name + (j.sku ? ' · ' + j.sku : '');
+        const sel = $('f_product'); sel.insertBefore(o, sel.options[2] || null);
+        sel.value = j.id; dlg.close();
+        sel.dispatchEvent(new Event('change'));
+      } catch (e) { err.textContent = e.message; err.hidden = false; }
+      btn.disabled = false;
+    });
+  }
+  { const p0 = product(), s0 = $('f_supplier').value; if (p0 && p0.supplier_id && (!s0 || s0 === p0.supplier_id)) lockSupplier(p0); }
 }
+
