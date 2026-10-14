@@ -986,7 +986,26 @@ textarea.wechat { font-size: 12.5px; background: #fafbfc; font-variant-numeric: 
   body { background: #fff; }
   .page { padding: 0 !important; max-width: none !important; }
   .pldoc { border: 0; box-shadow: none; padding: 0; }
-  .pltable th, .pltable td { padding: 5px 6px; }
+  .pltable th, .pltable td { padding: 6px 7px; }
+}
+/* packing list on paper / PDF: printer margins, landscape for the wide table, dark readable text */
+@page { size: A4 landscape; margin: 14mm 14mm 16mm; }
+@media print {
+  html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .pldoc { padding: 4mm 2mm 0 !important; color: #111827; }
+  .plbrand { color: #0f3a5c; } .plbrand span { color: #0b7a6b; }
+  .pltitle { color: #111827; }
+  .plhead { border-bottom-color: #0f3a5c; }
+  .plmeta { font-size: 12px; } .plmeta dt { color: #374151; } .plmeta dd { color: #111827; }
+  .pltable { width: 100%; }
+  .pltable th { color: #1f2937 !important; font-weight: 600; font-size: 10.5px; border-bottom: 1.5px solid #374151 !important; }
+  .pltable td { color: #111827; font-size: 12px; border-bottom: 1px solid #9ca3af !important; vertical-align: top; }
+  .pltable td:nth-child(3) { min-width: 200px; }
+  .pltable tfoot td { background: #eef1f4 !important; border-top: 1.5px solid #374151 !important; color: #111827; }
+  .pldoc .muted, .plfoot .muted, .plfoot .small { color: #374151 !important; }
+  .plfoot { font-size: 12px; }
+  .pltable tr { break-inside: avoid; }
+  .pltable thead { display: table-header-group; }
 }
 .actlist ul.qbreak { margin: 4px 0 4px; padding-left: 16px; list-style: disc; color: var(--muted); }
 .actlist ul.qbreak li { padding: 1px 0; border: 0; }
