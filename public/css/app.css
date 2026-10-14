@@ -1026,3 +1026,6 @@ dialog.bookdlg h2 { margin: 0 0 14px; }
 .bookfacts input[type=date] { width: auto; }
 dialog.bookdlg .actions { justify-content: flex-end; margin-top: 8px; }
 .okamount { color: var(--ok, #1b7f5c); font-size: 1.15em; }
+
+.rowact{display:flex;align-items:center;gap:10px;flex-wrap:nowrap;white-space:nowrap}
+.rowact form{margin:0}

@@ -32,7 +32,7 @@
 <div class="card">
   <h2>Forwarders &amp; offers</h2>
   <table class="tbl offers">
-    <thead><tr><th>Forwarder · quoted by</th><th>Status</th><th class="right">Total</th><th class="right">Unit price</th><th>Transit</th><th>Ship date</th><th>Handover</th><th>Valid until</th><th></th></tr></thead>
+    <thead><tr><th>Forwarder · quoted by</th><th>Status</th><th class="right">Total</th><th>Ship date</th><th>Handover</th><th>Valid until</th><th></th></tr></thead>
     <tbody>
     <% rfqs.forEach(r => { const rs = respOf(r.id); const first = rs[0]; const q = quoteOf(r.id) || {}; %>
       <tr class="<%= r.id === bestId ? 'bestrow' : '' %>">
@@ -41,12 +41,10 @@
           <div class="muted small">sent <%= fmt.datetime(r.sent_at) %> · <%= r.channel === 'wechat' ? 'WeChat' : r.sent_to %><%= first ? ' · answered after ' + dur(r.sent_at, first.received_at) : '' %></div></td>
         <td><span class="pill <%= pillOf(r.status) %>"><%= RFQ[r.status] %></span></td>
         <td class="right num"><%= r.quote_amount != null ? fmt.money(r.quote_amount, r.quote_currency || 'USD') : '—' %><% if (r.id === bestId) { %><div class="oktext small">lowest</div><% } %></td>
-        <td class="right num small"><%= q.unit_price != null ? n2(q.unit_price) + ' ' + (q.currency || '') : '—' %><% if (q.unit_basis) { %><div class="muted"><%= q.unit_basis %></div><% } %></td>
-        <td><%= r.transit_days ? r.transit_days + ' days' : '—' %></td>
         <td class="small"><%= q.etd ? fmt.date(q.etd) : '—' %><% if (q.cutoff_date) { %><div class="muted">cut-off <%= fmt.date(q.cutoff_date) %></div><% } %></td>
         <td class="small"><%= HAND[q.handover] || q.handover || '—' %><% if (q.pickup_date) { %><div class="muted"><%= q.handover === 'warehouse' ? 'deliver by' : 'on' %> <%= fmt.date(q.pickup_date) %></div><% } %></td>
         <td><%= r.valid_until ? fmt.date(r.valid_until) : '—' %></td>
-        <td class="nowrap">
+        <td class="nowrap"><div class="rowact">
           <form method="post" action="/admin/logistics/quotes/<%= fr.id %>/rfq/<%= r.id %>/status" class="autosubmit inline">
             <select name="status" class="pillselect" aria-label="Status"><% Object.entries(RFQ).forEach(([k, l]) => { %><option value="<%= k %>" <%= r.status === k ? 'selected' : '' %>><%= l %></option><% }) %></select>
           </form>
@@ -54,7 +52,7 @@
             <button type="button" class="btn primary small" data-book="book-<%= r.id %>"><%= r.booking_sent_at ? 'Resend booking' : 'Book' %></button>
             <% if (r.shipment_id) { %><a class="small" href="/admin/logistics/shipments/<%= r.shipment_id %>">Shipment →</a><% } %>
           <% } %>
-        </td>
+        </div></td>
       </tr>
     <% }) %>
     </tbody>
