@@ -7,7 +7,7 @@ import { requireAdmin } from '../../middleware/auth.js';
 import { clean, bool, back, notFound, getSettings, fxRate, INCOTERMS, CURRENCIES } from '../../lib/util.js';
 
 const r = Router();
-const QUOTE_FIELDS = ['request_id', 'product_id', 'supplier_id', 'quantity', 'unit_cost', 'cost_currency', 'fx_rate', 'margin_pct', 'sell_currency',
+const QUOTE_FIELDS = ['request_id', 'request_item_id', 'product_id', 'supplier_id', 'quantity', 'unit_cost', 'cost_currency', 'fx_rate', 'margin_pct', 'sell_currency',
   'freight_estimate', 'duties_estimate', 'other_costs', 'incoterm', 'lead_time_days', 'valid_until', 'notes'];
 
 function compute(b, settings) {
@@ -28,12 +28,17 @@ async function context(q) {
 }
 
 async function formLists() {
-  const [{ data: products }, { data: suppliers }, { data: requests }] = await Promise.all([
+  let [{ data: products }, { data: suppliers }, { data: requests, error: rErr }] = await Promise.all([
     admin.from('products').select('id, name, sku, supplier_id, unit_cost, cost_currency, moq, hs_code, unit_weight_kg, carton_qty, carton_cbm').order('name'),
     admin.from('suppliers').select('id, name, lead_time_days').order('name'),
-    admin.from('requests').select('id, ref, title, quantity, target_unit_price, target_currency, organizations(name)')
+    admin.from('requests').select('id, ref, title, quantity, target_unit_price, target_currency, organizations(name), request_items(id, name, quantity, unit, target_unit_price, position)')
       .in('status', ['new', 'reviewing', 'quoted']).order('created_at', { ascending: false }),
   ]);
+  if (rErr) { // migration 0009 not applied yet
+    console.error(`[pricing] ${rErr.message} — run supabase/migrations/0009_request_items.sql`);
+    ({ data: requests } = await admin.from('requests').select('id, ref, title, quantity, target_unit_price, target_currency, organizations(name)')
+      .in('status', ['new', 'reviewing', 'quoted']).order('created_at', { ascending: false }));
+  }
   return { products: products || [], suppliers: suppliers || [], requests: requests || [] };
 }
 
@@ -65,16 +70,20 @@ r.get('/quotes/new', async (req, res) => {
   const settings = await getSettings(admin);
   const lists = await formLists();
   const q = { quantity: '', margin_pct: settings.pricing.default_margin_pct, cost_currency: 'CNY', sell_currency: 'USD', incoterm: 'FOB',
-    freight_estimate: 0, duties_estimate: 0, other_costs: 0, request_id: req.query.request_id || '', product_id: req.query.product_id || '',
+    freight_estimate: 0, duties_estimate: 0, other_costs: 0, request_id: req.query.request_id || '', request_item_id: req.query.item_id || '', product_id: req.query.product_id || '',
     valid_until: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10) };
   const req0 = lists.requests.find(x => x.id === q.request_id);
-  if (req0) { q.quantity = req0.quantity || ''; q.sell_currency = req0.target_currency || 'USD'; }
+  if (req0) {
+    q.quantity = req0.quantity || ''; q.sell_currency = req0.target_currency || 'USD';
+    const it = (req0.request_items || []).find(i => i.id === q.request_item_id) || (req0.request_items?.length === 1 ? req0.request_items[0] : null);
+    if (it) { q.request_item_id = it.id; if (it.quantity) q.quantity = it.quantity; }
+  }
   const p = lists.products.find(x => x.id === q.product_id);
   if (p) { q.unit_cost = p.unit_cost; q.cost_currency = p.cost_currency; q.supplier_id = p.supplier_id; }
   q.fx_rate = fxRate(settings, q.cost_currency, q.sell_currency);
   // request might not be open anymore — still allow quoting it
   if (q.request_id && !req0) {
-    const { data } = await admin.from('requests').select('id, ref, title, quantity, target_unit_price, target_currency, organizations(name)').eq('id', q.request_id).single();
+    const { data } = await admin.from('requests').select('id, ref, title, quantity, target_unit_price, target_currency, organizations(name), request_items(id, name, quantity, unit, target_unit_price, position)').eq('id', q.request_id).single();
     if (data) lists.requests.unshift(data);
   }
   res.render('admin/pricing/quote_form', { title: 'New quote', q, settings, ...lists, incoterms: INCOTERMS, currencies: CURRENCIES, error: null });
@@ -87,6 +96,11 @@ async function saveQuote(req, res, id) {
     const lists = await formLists();
     return res.status(400).render('admin/pricing/quote_form', { title: id ? 'Edit quote' : 'New quote', q: { ...req.body, id }, settings, ...lists, incoterms: INCOTERMS, currencies: CURRENCIES, error: 'Pick the client request this quote answers.' });
   }
+  if (b.request_item_id) {
+    const { data: it } = await admin.from('request_items').select('request_id').eq('id', b.request_item_id).maybeSingle();
+    if (it?.request_id !== b.request_id) b.request_item_id = null;
+  }
+  if (!b.request_item_id && !id) delete b.request_item_id; // keeps working before migration 0009
   const calc = compute(b, settings);
   const row = {
     ...b, quantity: calc.quantity, margin_pct: calc.marginPct, fx_rate: Number(b.fx_rate) || 1,
@@ -119,6 +133,11 @@ r.get('/quotes/:id', async (req, res) => {
   const settings = await getSettings(admin);
   const { data: q } = await admin.from('quotes').select('*, requests(*, organizations(name)), products(*), suppliers(*)').eq('id', req.params.id).single();
   if (!q) return notFound(res, 'Quote');
+  if (q.requests) {
+    const { data: its } = await admin.from('request_items').select('id, name, quantity, unit, target_unit_price, position').eq('request_id', q.request_id);
+    q.requests.request_items = its || [];
+    q.item = (its || []).find(i => i.id === q.request_item_id) || null;
+  }
   const calc = compute(q, settings);
   const lists = await formLists();
   if (q.requests && !lists.requests.find(x => x.id === q.request_id)) lists.requests.unshift(q.requests);

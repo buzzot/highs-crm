@@ -15,6 +15,8 @@ if (form) {
   };
   const product = () => data.products.find(p => p.id === $('f_product').value);
   const request = () => data.requests.find(r => r.id === $('f_request').value);
+  const item = () => { const r = request(); const sel = $('f_item'); return r && sel ? (r.items || []).find(i => i.id === sel.value) : null; };
+  const target = () => { const r = request(); const it = item(); return it?.target_unit_price != null ? { price: it.target_unit_price, cur: r.target_currency } : r?.target_unit_price ? { price: r.target_unit_price, cur: r.target_currency } : null; };
 
   function render() {
     const scur = $('f_scur').value;
@@ -33,10 +35,10 @@ if (form) {
     const m = $('r_margin');
     m.textContent = `Margin ${c.marginPct}% ${c.meetsMinimum ? '✓' : `— below ${minMargin}% minimum`}`;
     m.className = 'marginbadge ' + (c.meetsMinimum ? 'ok' : 'bad');
-    const r = request();
-    if (r?.target_unit_price) {
-      const diff = c.landedUnitPrice - Number(r.target_unit_price);
-      $('r_target').textContent = `${money(Number(r.target_unit_price), r.target_currency, 4)} (${diff > 0 ? '+' : ''}${money(diff, scur, 4)} landed)`;
+    const t = target();
+    if (t) {
+      const diff = c.landedUnitPrice - Number(t.price);
+      $('r_target').textContent = `${money(Number(t.price), t.cur, 4)} (${diff > 0 ? '+' : ''}${money(diff, scur, 4)} landed)`;
       $('r_target').className = diff > 0 ? 'bad' : 'ok';
     } else { $('r_target').textContent = '—'; $('r_target').className = ''; }
     const p = product();
@@ -65,11 +67,21 @@ if (form) {
     }
     render();
   });
+  function fillItems() {
+    const sel = $('f_item'), wrap = $('f_item_wrap'); if (!sel) return;
+    const r = request(), items = r?.items || [];
+    sel.innerHTML = '<option value="">— whole request —</option>';
+    items.forEach(i => { const o = document.createElement('option'); o.value = i.id; o.textContent = i.name + (i.quantity ? ` · ${i.quantity} ${i.unit || 'pcs'}` : ''); sel.appendChild(o); });
+    if (items.length === 1) sel.value = items[0].id;
+    wrap.hidden = !items.length;
+  }
   $('f_request').addEventListener('change', () => {
-    const r = request();
-    if (r) { if (r.quantity) $('f_qty').value = r.quantity; if (r.target_currency) { $('f_scur').value = r.target_currency; syncFx(); } }
+    fillItems();
+    const r = request(), it = item();
+    if (r) { const qty = it?.quantity || r.quantity; if (qty) $('f_qty').value = qty; if (r.target_currency) { $('f_scur').value = r.target_currency; syncFx(); } }
     render();
   });
+  if ($('f_item')) $('f_item').addEventListener('change', () => { const it = item(); if (it?.quantity) $('f_qty').value = it.quantity; render(); });
   function syncLead() {
     const opt = $('f_supplier').selectedOptions[0];
     if (opt?.dataset.lead && !$('f_lead').value) $('f_lead').value = opt.dataset.lead;

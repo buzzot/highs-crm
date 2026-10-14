@@ -4,11 +4,14 @@
 %>
 <% const ro = typeof readonly !== 'undefined' && readonly; %>
 <form method="post" action="<%= action %>" class="calc" id="calcForm" data-min-margin="<%= settings.pricing.min_margin_pct %>">
-  <script type="application/json" id="pricingData"><%- JSON.stringify({ fx: settings.fx, products, requests: requests.map(r => ({ id: r.id, quantity: r.quantity, target_unit_price: r.target_unit_price, target_currency: r.target_currency })) }).replace(/</g, '\\u003c') %></script>
+  <script type="application/json" id="pricingData"><%- JSON.stringify({ fx: settings.fx, products, requests: requests.map(r => ({ id: r.id, quantity: r.quantity, target_unit_price: r.target_unit_price, target_currency: r.target_currency, items: (r.request_items || []).sort((a, b) => a.position - b.position).map(i => ({ id: i.id, name: i.name, quantity: i.quantity, unit: i.unit, target_unit_price: i.target_unit_price })) })) }).replace(/</g, '\\u003c') %></script>
   <fieldset <%= ro ? 'disabled' : '' %>>
   <div class="calcgrid">
     <div class="inputs">
       <label>Client request <select name="request_id" id="f_request"><option value="">— none (calculator only) —</option><% requests.forEach(r => { %><option value="<%= r.id %>" <%= q.request_id === r.id ? 'selected' : '' %>><%= r.ref %> · <%= r.title %> · <%= r.organizations?.name || '' %></option><% }) %></select></label>
+      <% const selReq = requests.find(r => r.id === q.request_id); const selItems = (selReq?.request_items || []).slice().sort((a, b) => a.position - b.position); %>
+      <label id="f_item_wrap" <%= selItems.length ? '' : 'hidden' %>>Product in this request
+        <select name="request_item_id" id="f_item"><option value="">— whole request —</option><% selItems.forEach(i => { %><option value="<%= i.id %>" <%= q.request_item_id === i.id ? 'selected' : '' %>><%= i.name %><%= i.quantity ? ' · ' + i.quantity + ' ' + (i.unit || 'pcs') : '' %></option><% }) %></select></label>
       <div class="row">
         <label class="grow2">Product <select name="product_id" id="f_product"><option value="">— custom —</option><% products.forEach(p => { %><option value="<%= p.id %>" <%= q.product_id === p.id ? 'selected' : '' %>><%= p.name %><%= p.sku ? ' · ' + p.sku : '' %></option><% }) %></select></label>
         <label class="grow2">Supplier <select name="supplier_id" id="f_supplier"><option value="">—</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" data-lead="<%= s.lead_time_days || '' %>" <%= q.supplier_id === s.id ? 'selected' : '' %>><%= s.name %></option><% }) %></select></label>

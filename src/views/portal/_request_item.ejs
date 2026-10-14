@@ -1,0 +1,23 @@
+<%# One product block of the request form. locals: it (values), i (block key), unitList, cur %>
+<div class="card rqitem">
+  <div class="rqitemhead">
+    <span class="rqbadge">Product <span class="rqnum"><%= typeof i === 'number' ? i + 1 : '' %></span></span>
+    <button type="button" class="rqdel" aria-label="Remove this product" title="Remove this product">&times;</button>
+  </div>
+  <label>Product name <input name="items[<%= i %>][name]" required value="<%= it.name || '' %>" placeholder="e.g. Stainless steel tumbler 500 ml, custom logo"></label>
+  <label>Details <textarea name="items[<%= i %>][description]" rows="3" placeholder="Specifications, materials, colours, packaging, certifications, reference links…"><%= it.description || '' %></textarea></label>
+  <div class="row">
+    <label>Quantity <input type="number" min="1" name="items[<%= i %>][quantity]" value="<%= it.quantity ?? '' %>"></label>
+    <label>Unit <select name="items[<%= i %>][unit]"><% unitList.forEach(u => { %><option <%= (it.unit || 'pcs') === u ? 'selected' : '' %>><%= u %></option><% }) %></select></label>
+    <label>Target unit price <span class="muted small rqcur"><%= cur %></span><input type="number" step="0.0001" min="0" name="items[<%= i %>][target_unit_price]" value="<%= it.target_unit_price ?? '' %>"></label>
+  </div>
+  <div class="dropwrap">
+    <div class="filedrop compact" data-dropzone data-max="10" data-max-mb="20" tabindex="0">
+      <input type="file" name="item_files_<%= i %>" multiple accept="image/*,.pdf,.xlsx,.xls,.docx,.doc,.csv" aria-label="Photos for this product">
+      <span class="dicon"><%- icon('upload') %></span>
+      <strong data-drop-count>Drag photos or files for this product, or <span class="dlink">browse</span></strong>
+      <span class="muted small dsub">Photos, PDF, Excel or Word · up to 10 files, 20 MB each · paste a screenshot with ⌘/Ctrl V</span>
+    </div>
+    <div class="fgrid" data-drop-list></div>
+  </div>
+</div>

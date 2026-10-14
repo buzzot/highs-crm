@@ -4,16 +4,18 @@ import { requireClient } from '../middleware/auth.js';
 import { admin } from '../lib/supabase.js';
 import { log } from '../lib/activity.js';
 import { uploadDocument, signedUrl } from '../lib/storage.js';
+import { parseItems, validateItems, requestTitle, splitFiles, UNITS } from '../lib/request-items.js';
+const CURRENCY_OK = ['USD', 'EUR', 'GBP', 'CNY'];
 import { validateCompany, COMPANY_FIELDS } from '../lib/company.js';
 
 const r = Router();
 // Explicit column lists: clients have column-level grants only (see migration 0002).
 const REQ = 'id, ref, title, description, quantity, target_unit_price, target_currency, destination_country, destination_city, needed_by, status, created_at, updated_at';
-const QUOTE = 'id, request_id, quantity, sell_currency, unit_price, freight_estimate, duties_estimate, other_costs, landed_unit_price, incoterm, lead_time_days, valid_until, status, notes, created_at';
+const QUOTE = 'id, request_id, request_item_id, quantity, sell_currency, unit_price, freight_estimate, duties_estimate, other_costs, landed_unit_price, incoterm, lead_time_days, valid_until, status, notes, created_at';
 const ORDER = 'id, order_no, request_id, status, currency, subtotal, client_notes, expected_ship_date, created_at, updated_at';
 const ITEM = 'id, description, quantity, unit_price, hs_code';
 const SHIP = 'id, order_id, mode, incoterm, origin_port, destination_port, container_no, tracking_no, bl_no, export_declaration_no, export_official, etd, eta, atd, ata, status, gross_weight_kg, volume_cbm, cartons, created_at';
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 40 } });
 r.use(requireClient);
 
 // Everything here uses req.db (the user's token) so Supabase RLS enforces org scoping.
@@ -75,35 +77,57 @@ r.get('/requests', async (req, res) => {
   res.render('portal/requests', { title: 'My requests', requests: list, counts, tab, q });
 });
 
-r.get('/requests/new', (req, res) => res.render('portal/request_form', { title: 'New request', error: null, form: {} }));
+const newForm = (res, extra = {}) => res.render('portal/request_form', { title: 'New request', error: null, form: {}, items: [{}], units: UNITS, ...extra });
+r.get('/requests/new', (req, res) => newForm(res));
 
-r.post('/requests', upload.array('files', 10), async (req, res) => {
+r.post('/requests', upload.any(), async (req, res) => {
   const f = req.body;
-  if (!f.title) return res.status(400).render('portal/request_form', { title: 'New request', error: 'Title is required.', form: f });
+  const items = parseItems(f);
+  const bad = validateItems(items);
+  const again = error => newForm(res.status(400), { error, form: f, items: items.length ? items : [{}] });
+  if (bad) return again(bad);
+  if ((req.files || []).length > 40) return again('Too many files — up to 40 per request.');
+  const single = items.length === 1 ? items[0] : null;
   const { data, error } = await req.db.from('requests').insert({
     org_id: req.user.org_id, created_by: req.user.id,
-    title: f.title, description: f.description, quantity: f.quantity || null,
-    target_unit_price: f.target_unit_price || null, target_currency: f.target_currency || 'USD',
+    title: requestTitle(f.title, items), description: String(f.description || '').trim() || null,
+    quantity: single?.quantity ?? null, target_unit_price: single?.target_unit_price ?? null,
+    target_currency: CURRENCY_OK.includes(f.target_currency) ? f.target_currency : 'USD',
     destination_country: f.destination_country, destination_city: f.destination_city, needed_by: f.needed_by || null,
   }).select('id').single();
-  if (error) return res.status(400).render('portal/request_form', { title: 'New request', error: error.message, form: f });
+  if (error) return again(error.message);
 
-  for (const file of req.files || []) {
-    await uploadDocument({ file, entityType: 'request', entityId: data.id, kind: 'product_photo', uploadedBy: req.user.id });
+  const { data: saved, error: iErr } = await admin.from('request_items')
+    .insert(items.map((it, i) => ({ request_id: data.id, position: i, name: it.name, description: it.description, quantity: it.quantity, unit: it.unit, target_unit_price: it.target_unit_price })))
+    .select('id, position');
+  if (iErr) console.error(`[request] ${data.id}: products not saved: ${iErr.message}`);
+  const idByKey = {};
+  (saved || []).forEach(row => { idByKey[items[row.position].key] = row.id; });
+
+  const { general, byKey } = splitFiles(req.files);
+  const uploads = [...general.map(file => ({ file, itemId: null })),
+    ...Object.entries(byKey).flatMap(([k, fs]) => fs.map(file => ({ file, itemId: idByKey[k] || null })))];
+  for (const { file, itemId } of uploads) {
+    const kind = file.mimetype?.startsWith('image/') ? 'product_photo' : 'other';
+    try {
+      const doc = await uploadDocument({ file, entityType: 'request', entityId: data.id, kind, uploadedBy: req.user.id });
+      if (itemId) await admin.from('documents').update({ request_item_id: itemId }).eq('id', doc.id);
+    } catch (e) { console.error(`[request] ${data.id}: upload ${file.originalname} failed: ${e.message}`); }
   }
-  await log({ entityType: 'request', entityId: data.id, action: 'created', actorId: req.user.id, clientVisible: true });
+  await log({ entityType: 'request', entityId: data.id, action: 'created', actorId: req.user.id, clientVisible: true, detail: { products: items.length } });
   res.redirect(`/portal/requests/${data.id}`);
 });
 
 r.get('/requests/:id', async (req, res) => {
   const { data: request } = await req.db.from('requests').select(REQ).eq('id', req.params.id).single();
   if (!request) return res.status(404).render('error', { title: 'Not found', message: 'Request not found.' });
-  const [{ data: quotes }, { data: docs }, { data: events }] = await Promise.all([
+  const [{ data: quotes }, { data: docs }, { data: events }, { data: items }] = await Promise.all([
     req.db.from('quotes').select(QUOTE).eq('request_id', request.id).order('created_at', { ascending: false }),
-    req.db.from('documents').select('*').eq('entity_type', 'request').eq('entity_id', request.id),
+    req.db.from('documents').select('*').eq('entity_type', 'request').eq('entity_id', request.id).order('created_at'),
     req.db.from('activity_log').select('*').eq('entity_type', 'request').eq('entity_id', request.id).order('created_at', { ascending: false }),
+    req.db.from('request_items').select('*').eq('request_id', request.id).order('position'),
   ]);
-  res.render('portal/request_detail', { title: request.ref, request, quotes: quotes || [], docs: docs || [], events: events || [] });
+  res.render('portal/request_detail', { title: request.ref, request, quotes: quotes || [], docs: docs || [], events: events || [], items: items || [] });
 });
 
 // client accepts / rejects a sent quote

@@ -39,6 +39,16 @@ const docs = [
   { id: 'doc2', entity_type: 'order', entity_id: 'ord1', kind: 'packing_photo', title: 'cartons.jpg', mime_type: 'image/jpeg', client_visible: false, created_at: d(-1) },
   { id: 'doc3', entity_type: 'order', entity_id: 'ord1', kind: 'proforma_invoice', title: 'PI-HB-2610-1187.pdf', mime_type: 'application/pdf', client_visible: true, created_at: d(-8) },
 ];
+const rItems = [
+  { id: 'ri1', request_id: 'r1', position: 0, name: 'LED desk lamp 10W, foldable', description: 'USB-C, black. Laser logo on base.', quantity: 2000, unit: 'pcs', target_unit_price: 6.9 },
+  { id: 'ri2', request_id: 'r1', position: 1, name: 'Wireless charging pad 15W', description: 'Matte white, retail box with our artwork.', quantity: 1500, unit: 'pcs', target_unit_price: 4.2 },
+  { id: 'ri3', request_id: 'r1', position: 2, name: 'Braided USB-C cable 1 m', description: null, quantity: 5000, unit: 'pcs', target_unit_price: null },
+];
+const rDocs = [
+  { id: 'rd1', entity_type: 'request', entity_id: 'r1', request_item_id: 'ri1', kind: 'product_photo', title: 'lamp.jpg', mime_type: 'image/jpeg', client_visible: true, created_at: d(-2) },
+  { id: 'rd2', entity_type: 'request', entity_id: 'r1', request_item_id: 'ri2', kind: 'other', title: 'charger-spec.pdf', mime_type: 'application/pdf', client_visible: true, created_at: d(-2) },
+  { id: 'rd3', entity_type: 'request', entity_id: 'r1', request_item_id: null, kind: 'other', title: 'artwork.pdf', mime_type: 'application/pdf', client_visible: true, created_at: d(-2) },
+];
 const events = [
   { id: 1, action: 'status_in_production', detail: { note: 'Production started, 40% done' }, client_visible: true, created_at: d(-1), profiles: { full_name: 'Anna Lee' } },
   { id: 2, action: 'documents_uploaded', detail: { note: '1 × proforma invoice' }, client_visible: true, created_at: d(-8), profiles: { full_name: 'Anna Lee' } },
@@ -48,7 +58,7 @@ const packing = Array.from({ length: 4 }, (_, i) => ({ id: 'pk' + i, carton_no: 
 const forwarders = [{ id: 'f1', name: 'Oceanlink Logistics', contact_name: 'Amy Zhou', email: 'amy@oceanlink.example', modes: ['sea_fcl', 'sea_lcl'], notes: 'Good LCL rates to US West Coast' }, { id: 'f2', name: 'SkyFast Freight', contact_name: 'Ken Huang', modes: ['air', 'express'] }];
 const lists = {
   products: [prod, prod2], suppliers: [{ id: 's1', name: sup.name, lead_time_days: 30 }, { id: 's2', name: 'Yiwu Sunhome Houseware', lead_time_days: 25 }],
-  requests: requests.map(r => ({ id: r.id, ref: r.ref, title: r.title, quantity: r.quantity, target_unit_price: r.target_unit_price, target_currency: r.target_currency, organizations: r.organizations })),
+  requests: requests.map(r => ({ id: r.id, ref: r.ref, title: r.title, quantity: r.quantity, target_unit_price: r.target_unit_price, target_currency: r.target_currency, organizations: r.organizations, request_items: r.id === 'r1' ? rItems : [] })),
 };
 const INCOTERMS = ['EXW', 'FOB', 'FCA', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DDP'];
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CNY'];
@@ -90,7 +100,7 @@ export const pages = {
   'admin/products/form': base(staffUser, '/admin/products/new', { title: 'New product', p: { cost_currency: 'CNY' }, specText: '', suppliers: lists.suppliers, photos: [{ id: 'doc1', title: 'front.jpg' }, { id: 'doc2', title: 'box.jpg' }], error: null }),
   'admin/products/detail': base(staffUser, '/admin/products/p1', { title: prod.name, p: { ...prod, suppliers: sup }, docs, quotes: [{ ...quote, requests: { id: 'r1', ref: request.ref, organizations: { name: 'Acme Retail LLC' } } }], specText: 'Power: 10 W\nMaterial: Aluminium' }),
   'admin/sourcing/index': base(staffUser, '/admin/sourcing', { title: 'Sourcing', requests, byStatus: { new: 2, reviewing: 3, quoted: 1, accepted: 9 }, statuses: ['new', 'reviewing', 'quoted', 'accepted', 'declined', 'cancelled'], status: 'open' }),
-  'admin/sourcing/detail': base(staffUser, '/admin/sourcing/r1', { title: request.ref, request: { ...request, organizations: org, creator: { full_name: 'Tom Baker' } }, quotes: [{ ...quote, products: { id: 'p1', name: prod.name }, suppliers: { id: 's1', name: sup.name } }, { ...quote, id: 'q2', status: 'accepted', margin_pct: 18, ai_check: null, products: null, suppliers: null }], docs: docs.slice(0, 1), events, staff: [staffUser], orders: [], statuses: ['new', 'reviewing', 'quoted', 'accepted', 'declined', 'cancelled'] }),
+  'admin/sourcing/detail': base(staffUser, '/admin/sourcing/r1', { title: request.ref, request: { ...request, organizations: org, creator: { full_name: 'Tom Baker' } }, quotes: [{ ...quote, products: { id: 'p1', name: prod.name }, suppliers: { id: 's1', name: sup.name } }, { ...quote, id: 'q2', status: 'accepted', margin_pct: 18, ai_check: null, products: null, suppliers: null }], docs: rDocs, items: rItems, events, staff: [staffUser], orders: [], statuses: ['new', 'reviewing', 'quoted', 'accepted', 'declined', 'cancelled'] }),
   'admin/orders/index': base(staffUser, '/admin/orders', { title: 'Orders', orders: ordersList, byStatus: { in_production: 4, qc: 1, in_transit: 2, delivered: 12 }, statuses: ORDER_STATUSES, status: 'open', clients: [org] }),
   'admin/orders/new': base(staffUser, '/admin/orders/new', { title: 'New order', clients: [org], suppliers: lists.suppliers, currencies: CURRENCIES, org: '' }),
   'admin/orders/detail': base(staffUser, '/admin/orders/ord1', { title: overview.order_no, order: overview, items, shipments: [{ ...shipment, forwarders: { name: 'Oceanlink Logistics' }, freight_costs: costs }], packing, events, docs, suppliers: lists.suppliers, products: lists.products, statuses: ORDER_STATUSES, land: landed(overview, items) }),
@@ -120,8 +130,10 @@ export const pages = {
   'portal/company': base(clientUser, '/portal/company', { title: 'Company details', first: true, saved: false,
     org: { ...org, details_completed_at: null }, form: { ...org, city: 'San Francisco', email: 'bad' }, errors: { phone: 'Company phone is required.', email: 'Enter a valid email address.' } }),
   'portal/requests': base(clientUser, '/portal/requests', { title: 'My requests', requests, counts: { all: 2, open: 2, quoted: 0, accepted: 0, closed: 0 }, tab: 'all', q: '' }),
-  'portal/request_form': base(clientUser, '/portal/requests/new', { title: 'New request', error: null, form: {} }),
-  'portal/request_detail': base(clientUser, '/portal/requests/r1', { title: request.ref, request, quotes: [{ ...quote, status: 'sent' }], docs: docs.slice(0, 1), events }),
+  'portal/request_form': base(clientUser, '/portal/requests/new', { title: 'New request', error: null, form: {}, items: [{}], units: ['pcs', 'sets', 'kg'] }),
+  'portal/request_form_error': ['portal/request_form', base(clientUser, '/portal/requests/new', { title: 'New request', error: 'Product 2: enter a product name.', form: { title: 'Spring range', target_currency: 'EUR' }, items: [{ name: 'Mug', quantity: 100, unit: 'pcs' }, { description: 'like the photo' }], units: ['pcs', 'sets'] })],
+  'portal/request_detail': base(clientUser, '/portal/requests/r1', { title: request.ref, request, quotes: [{ ...quote, status: 'sent', request_item_id: 'ri1' }], docs: rDocs, events, items: rItems }),
+  'portal/request_detail_legacy': ['portal/request_detail', base(clientUser, '/portal/requests/r1', { title: request.ref, request, quotes: [], docs: [], events, items: [] })],
   'portal/orders': base(clientUser, '/portal/orders', { title: 'My orders', orders: [{ ...overview, shipments: [shipment] }, { ...overview, id: 'o2', order_no: 'HB-2609-1102', status: 'in_transit', subtotal: 22400, shipments: [] }], counts: { all: 2, production: 1, shipping: 1, delivered: 0 }, tab: 'all', q: '' }),
   'portal/order_detail': base(clientUser, '/portal/orders/ord1', { title: overview.order_no, order: { ...overview, order_items: items }, shipments: [shipment], documents: docs, events, packing }),
   // ---- auth ----

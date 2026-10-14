@@ -6,22 +6,20 @@
 <div class="grid2">
   <div>
     <div class="card">
-      <h2>Request</h2>
+      <h2>Products <span class="muted small"><%= items.length || 1 %></span></h2>
       <dl class="dl">
-        <dt>Quantity</dt><dd><%= request.quantity ?? '—' %></dd>
-        <dt>Target price</dt><dd><%= request.target_unit_price ? fmt.money(request.target_unit_price, request.target_currency) : '—' %></dd>
         <dt>Destination</dt><dd><%= [request.destination_city, request.destination_country].filter(Boolean).join(', ') || '—' %></dd>
         <dt>Needed by</dt><dd><%= fmt.date(request.needed_by) %></dd>
       </dl>
-      <% if (request.description) { %><p class="pre"><%= request.description %></p><% } %>
-      <% if (docs.length) { %><h3>Files</h3><ul class="files"><% docs.forEach(d => { %><li><a href="/portal/documents/<%= d.id %>/download" target="_blank"><%= d.title %></a></li><% }) %></ul><% } %>
+      <%- include('../partials/request_items', { request, items, docs, base: '/portal', quotes }) %>
     </div>
     <div class="card">
       <h2>Quotes</h2>
       <% if (!quotes.length) { %><p class="muted">We're working on it — quotes will appear here.</p><% } %>
       <% quotes.forEach(q => { %>
         <div class="quote">
-          <div class="qhead"><strong>Quote</strong> <span class="pill <%= q.status %>"><%= fmt.status(q.status) %></span> <span class="muted">valid until <%= fmt.date(q.valid_until) %></span></div>
+          <% const qi = items.find(i => i.id === q.request_item_id); %>
+          <div class="qhead"><strong><%= qi ? qi.name : 'Quote' %></strong> <span class="pill <%= q.status %>"><%= fmt.status(q.status) %></span> <span class="muted">valid until <%= fmt.date(q.valid_until) %></span></div>
           <dl class="dl">
             <dt>Quantity</dt><dd><%= q.quantity %></dd>
             <dt>Unit price (<%= q.incoterm %>)</dt><dd><%= fmt.money(q.unit_price, q.sell_currency, 4) %></dd>

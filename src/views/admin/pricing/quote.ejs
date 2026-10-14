@@ -2,7 +2,7 @@
 <% const editable = ['draft','sent'].includes(q.status); const ai = q.ai_check; %>
 <div class="pagehead">
   <div><a class="back" href="<%= q.request_id ? '/admin/sourcing/' + q.request_id : '/admin/pricing' %>">← <%= q.requests?.ref || 'Pricing' %></a>
-    <h1>Quote · <%= q.products?.name || q.requests?.title || 'custom item' %></h1>
+    <h1>Quote · <%= q.item?.name || q.products?.name || q.requests?.title || 'custom item' %></h1>
     <p class="muted"><%= q.requests?.organizations?.name %> · <%= q.suppliers?.name || 'no supplier' %> · created <%= fmt.date(q.created_at) %></p></div>
   <span class="pill lg <%= q.status %>"><%= fmt.status(q.status) %></span>
 </div>

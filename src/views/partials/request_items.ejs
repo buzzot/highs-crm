@@ -1,0 +1,48 @@
+<%#
+  Products in a sourcing request. locals: request, items, docs, base ('/portal' | '/admin'), quotes, [staff]
+  Requests made before multi-product support have no items: the request itself is shown as one product.
+%>
+<% const isStaff = typeof staff !== 'undefined' && staff;
+   const rows = items.length ? items : [{ id: null, name: request.title, description: request.description, quantity: request.quantity, unit: 'pcs', target_unit_price: request.target_unit_price }];
+   const own = d => items.length ? d.request_item_id : null;
+   const quotesFor = it => quotes.filter(q => items.length > 1 ? q.request_item_id === it.id : true); %>
+<div class="rqitems">
+  <% rows.forEach((it, k) => { const files = docs.filter(d => it.id ? d.request_item_id === it.id : !d.request_item_id); const qs = quotesFor(it); %>
+    <div class="rqrow">
+      <span class="rqn"><%= k + 1 %></span>
+      <div>
+        <div class="rqname"><%= it.name %></div>
+        <div class="rqfacts">
+          <span>Qty <b><%= it.quantity != null ? Number(it.quantity).toLocaleString('en-US') + ' ' + (it.unit || 'pcs') : '—' %></b></span>
+          <span>Target <b><%= it.target_unit_price != null ? fmt.money(it.target_unit_price, request.target_currency, 4) : '—' %></b></span>
+        </div>
+        <% if (it.description) { %><p class="pre"><%= it.description %></p><% } %>
+        <% if (files.length) { %>
+          <div class="rqthumbs">
+            <% files.forEach(d => { const url = base + '/documents/' + d.id + '/download'; %>
+              <% if ((d.mime_type || '').startsWith('image/')) { %><a href="<%= url %>" target="_blank" title="<%= d.title %>"><img src="<%= url %>" alt="<%= d.title %>" loading="lazy"></a>
+              <% } else { %><a class="fchip" href="<%= url %>" target="_blank"><%- icon('file') %>&nbsp;<%= d.title %></a><% } %>
+            <% }) %>
+          </div>
+        <% } %>
+      </div>
+      <div class="rqside">
+        <% qs.slice(0, 3).forEach(q => { %><span class="pill <%= q.status %>"><%= isStaff ? '' : 'Quote ' %><%= fmt.status(q.status) %></span><% }) %>
+        <% if (isStaff && it.id) { %><a class="btn small" href="/admin/pricing/quotes/new?request_id=<%= request.id %>&item_id=<%= it.id %>">+ Quote</a><% } %>
+      </div>
+    </div>
+  <% }) %>
+</div>
+<% const general = items.length ? docs.filter(d => !d.request_item_id) : []; %>
+<% if (request.description && items.length) { const dupe = items.some(i => i.description === request.description); if (!dupe) { %>
+  <h3>General notes</h3><p class="pre"><%= request.description %></p>
+<% } } %>
+<% if (general.length) { %>
+  <h3>General files</h3>
+  <div class="rqthumbs">
+    <% general.forEach(d => { const url = base + '/documents/' + d.id + '/download'; %>
+      <% if ((d.mime_type || '').startsWith('image/')) { %><a href="<%= url %>" target="_blank" title="<%= d.title %>"><img src="<%= url %>" alt="<%= d.title %>" loading="lazy"></a>
+      <% } else { %><a class="fchip" href="<%= url %>" target="_blank"><%- icon('file') %>&nbsp;<%= d.title %></a><% } %>
+    <% }) %>
+  </div>
+<% } %>

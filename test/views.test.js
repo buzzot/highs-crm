@@ -26,9 +26,13 @@ test('every page template has a fixture', () => {
   assert.deepEqual(missing, []);
 });
 
-for (const [name, locals] of Object.entries(pages)) {
+// a fixture is either locals, or [template, locals] for an extra variant of a page
+const resolve = (name, v) => (Array.isArray(v) ? v : [name, v]);
+
+for (const [name, entry] of Object.entries(pages)) {
+  const [tpl, locals] = resolve(name, entry);
   test(`renders ${name}`, () => {
-    const html = render(path.join(views, name + '.ejs'), locals);
+    const html = render(path.join(views, tpl + '.ejs'), locals);
     assert.match(html, /<\/html>/);
     assert.doesNotMatch(html, /undefined|NaN|\[object Object\]/, 'leaked undefined/NaN/object into HTML');
     if (out) {
@@ -39,9 +43,10 @@ for (const [name, locals] of Object.entries(pages)) {
 }
 
 test('client portal never renders cost, margin or supplier fields', () => {
-  for (const [name, locals] of Object.entries(pages)) {
+  for (const [name, entry] of Object.entries(pages)) {
     if (!name.startsWith('portal/')) continue;
-    const html = render(path.join(views, name + '.ejs'), locals);
+    const [tpl, locals] = resolve(name, entry);
+    const html = render(path.join(views, tpl + '.ejs'), locals);
     assert.doesNotMatch(html, /Brightway|margin|unit cost|internal/i, `${name} leaks internal data`);
   }
 });

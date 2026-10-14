@@ -7,14 +7,13 @@
 <div class="grid2">
   <div>
     <div class="card">
-      <h2>Client request</h2>
+      <h2>Client request · <%= items.length || 1 %> product<%= items.length > 1 ? 's' : '' %></h2>
       <dl class="dl">
-        <dt>Quantity</dt><dd><%= request.quantity ?? '—' %></dd>
-        <dt>Target price</dt><dd><%= request.target_unit_price ? fmt.money(request.target_unit_price, request.target_currency, 4) : '—' %></dd>
         <dt>Destination</dt><dd><%= [request.destination_city, request.destination_country].filter(Boolean).join(', ') || '—' %></dd>
         <dt>Needed by</dt><dd><%= fmt.date(request.needed_by) %></dd>
+        <dt>Price currency</dt><dd><%= request.target_currency || '—' %></dd>
       </dl>
-      <% if (request.description) { %><p class="pre"><%= request.description %></p><% } %>
+      <%- include('../../partials/request_items', { request, items, docs, base: '/admin', quotes, staff: true }) %>
     </div>
 
     <div class="card">
@@ -31,7 +30,7 @@
         <tbody>
         <% quotes.forEach(q => { const ord = orders.find(o => o.quote_id === q.id); %>
           <tr>
-            <td><a href="/admin/pricing/quotes/<%= q.id %>"><%= q.products?.name || 'Custom item' %></a><div class="muted small"><%= q.suppliers?.name || '' %></div></td>
+            <% const qi = items.find(i => i.id === q.request_item_id); %><td><a href="/admin/pricing/quotes/<%= q.id %>"><%= qi?.name || q.products?.name || 'Custom item' %></a><% if (qi && q.products?.name && q.products.name !== qi.name) { %><div class="muted small">catalogue: <%= q.products.name %></div><% } %><div class="muted small"><%= q.suppliers?.name || '' %></div></td>
             <td><%= q.quantity %></td>
             <td class="right"><%= fmt.money(q.unit_price, q.sell_currency, 4) %></td>
             <td class="right"><%= fmt.money(q.landed_unit_price, q.sell_currency, 4) %></td>

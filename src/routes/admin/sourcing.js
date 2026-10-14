@@ -26,17 +26,18 @@ r.get('/', async (req, res) => {
 
 r.get('/:id', async (req, res) => {
   const id = req.params.id;
-  const [{ data: request }, { data: quotes }, { data: docs }, { data: events }, { data: staff }, { data: orders }] = await Promise.all([
+  const [{ data: request }, { data: quotes }, { data: docs }, { data: events }, { data: staff }, { data: orders }, { data: items }] = await Promise.all([
     admin.from('requests').select('*, organizations(*), creator:profiles!requests_created_by_fkey(full_name, email)').eq('id', id).single(),
     admin.from('quotes').select('*, products(id, name, sku), suppliers(id, name)').eq('request_id', id).order('created_at', { ascending: false }),
     admin.from('documents').select('*').eq('entity_type', 'request').eq('entity_id', id).order('created_at', { ascending: false }),
     admin.from('activity_log').select('*, profiles(full_name, email)').eq('entity_type', 'request').eq('entity_id', id).order('created_at', { ascending: false }),
     admin.from('profiles').select('id, full_name, email').in('role', ['admin', 'staff']).eq('active', true).order('full_name'),
     admin.from('orders').select('id, order_no, status, quote_id').eq('request_id', id),
+    admin.from('request_items').select('*').eq('request_id', id).order('position'),
   ]);
   if (!request) return notFound(res, 'Request');
   res.render('admin/sourcing/detail', {
-    title: request.ref, request, quotes: quotes || [], docs: docs || [], events: events || [], staff: staff || [],
+    title: request.ref, request, quotes: quotes || [], docs: docs || [], items: items || [], events: events || [], staff: staff || [],
     orders: orders || [], statuses: REQUEST_STATUSES, msg: req.query.msg, err: req.query.err,
   });
 });
@@ -61,6 +62,8 @@ r.post('/:id', async (req, res) => {
 r.post('/:id/brief', async (req, res) => {
   const { data: request } = await admin.from('requests').select('title, description, quantity, target_unit_price, target_currency, destination_country, needed_by').eq('id', req.params.id).single();
   if (!request) return notFound(res, 'Request');
+  const { data: products } = await admin.from('request_items').select('name, description, quantity, unit, target_unit_price').eq('request_id', req.params.id).order('position');
+  if (products?.length) request.products = products;
   const brief = await summarizeRequest(request);
   if (!brief) return back(res, `/admin/sourcing/${req.params.id}`, { err: 'AI is not configured (set ANTHROPIC_API_KEY).' });
   await admin.from('requests').update({ ai_brief: brief }).eq('id', req.params.id);
@@ -70,7 +73,7 @@ r.post('/:id/brief', async (req, res) => {
 
 // Accepted quote → order
 r.post('/quotes/:qid/convert', async (req, res) => {
-  const { data: q } = await admin.from('quotes').select('*, requests(id, org_id, title, description), products(name, hs_code)').eq('id', req.params.qid).single();
+  const { data: q } = await admin.from('quotes').select('*, requests(id, org_id, title, description), products(name, hs_code), request_items(name)').eq('id', req.params.qid).single();
   if (!q) return notFound(res, 'Quote');
   const { data: existing } = await admin.from('orders').select('id').eq('quote_id', q.id).maybeSingle();
   if (existing) return res.redirect(`/admin/orders/${existing.id}`);
@@ -87,12 +90,12 @@ r.post('/quotes/:qid/convert', async (req, res) => {
   }).select('id, order_no').single();
   if (error) return back(res, `/admin/sourcing/${q.request_id}`, { err: error.message });
   await admin.from('order_items').insert({
-    order_id: order.id, product_id: q.product_id, description: q.products?.name || q.requests.title,
+    order_id: order.id, product_id: q.product_id, description: q.products?.name || q.request_items?.name || q.requests.title,
     quantity: q.quantity, unit_cost: Math.round(unitCostSell * 10000) / 10000, unit_price: q.unit_price, hs_code: q.products?.hs_code || null,
   });
   if (q.status !== 'accepted') await admin.from('quotes').update({ status: 'accepted' }).eq('id', q.id);
   await admin.from('requests').update({ status: 'accepted' }).eq('id', q.request_id);
-  await log({ entityType: 'order', entityId: order.id, action: 'order_confirmed', actorId: req.user.id, clientVisible: true, detail: { note: `from ${q.requests.title}` } });
+  await log({ entityType: 'order', entityId: order.id, action: 'order_confirmed', actorId: req.user.id, clientVisible: true, detail: { note: `from ${q.request_items?.name || q.requests.title}` } });
   await log({ entityType: 'request', entityId: q.request_id, action: 'order_created', actorId: req.user.id, clientVisible: true, detail: { order_no: order.order_no } });
   res.redirect(`/admin/orders/${order.id}`);
 });

@@ -1,23 +1,83 @@
 <%- include('../partials/head') %>
-<div class="card narrow-md">
-  <h1>New sourcing request</h1>
-  <p class="muted">Describe the product you need. Photos, links or reference samples help us source faster.</p>
-  <% if (error) { %><div class="alert err"><%= error %></div><% } %>
-  <form method="post" action="/portal/requests" enctype="multipart/form-data">
-    <label>Product / title <input name="title" required value="<%= form.title || '' %>" placeholder="e.g. Stainless steel tumbler 500ml, custom logo"></label>
-    <label>Details <textarea name="description" rows="6" placeholder="Specifications, materials, colours, packaging, certifications, reference links…"><%= form.description || '' %></textarea></label>
-    <div class="row">
-      <label>Quantity <input type="number" name="quantity" min="1" value="<%= form.quantity || '' %>"></label>
-      <label>Target unit price <input type="number" step="0.0001" name="target_unit_price" value="<%= form.target_unit_price || '' %>"></label>
-      <label>Currency <select name="target_currency"><option>USD</option><option>EUR</option><option>GBP</option><option>CNY</option></select></label>
-    </div>
+<% const itemList = (typeof items !== 'undefined' && items.length) ? items : [{}];
+   const unitList = typeof units !== 'undefined' ? units : ['pcs'];
+   const cur = form.target_currency || 'USD'; %>
+<form method="post" action="/portal/requests" enctype="multipart/form-data" class="rqform" id="rqForm">
+  <div class="card">
+    <h1>New sourcing request</h1>
+    <p class="muted">Add every product you need — one request can hold several. Photos, links or reference samples help us source faster.</p>
+    <% if (error) { %><div class="alert err"><%= error %></div><% if ((typeof items !== 'undefined') && items.length) { %><p class="muted small">Files are not kept after an error — please add them again.</p><% } } %>
+    <label>Request name <span class="muted small">— optional, e.g. "Spring kitchen range"</span>
+      <input name="title" value="<%= form.title || '' %>" placeholder="Leave empty to use the first product name"></label>
     <div class="row">
       <label>Destination country <input name="destination_country" value="<%= form.destination_country || '' %>"></label>
       <label>Destination city / port <input name="destination_city" value="<%= form.destination_city || '' %>"></label>
       <label>Needed by <input type="date" name="needed_by" value="<%= form.needed_by || '' %>"></label>
+      <label>Price currency <select name="target_currency" id="rqCur"><% ['USD','EUR','GBP','CNY'].forEach(c => { %><option <%= cur === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
     </div>
-    <label>Photos / reference files <input type="file" name="files" multiple accept="image/*,.pdf,.xlsx,.docx"></label>
-    <div class="actions"><button class="btn primary">Submit request</button> <a class="btn" href="/portal/requests">Cancel</a></div>
-  </form>
-</div>
+  </div>
+
+  <div class="rqhead">
+    <h2>Products <span class="count" id="rqCount"><%= itemList.length %></span></h2>
+  </div>
+
+  <div id="rqItems">
+    <% itemList.forEach((it, i) => { %>
+      <%- include('_request_item', { it, i, unitList, cur }) %>
+    <% }) %>
+  </div>
+
+  <button type="button" class="rqadd" id="rqAdd">
+    <%- icon('plus') %> Add another product
+  </button>
+
+  <div class="card">
+    <h2>General notes &amp; files <span class="muted small">— optional, for the whole request</span></h2>
+    <label>Notes <textarea name="description" rows="3" placeholder="Packaging or labelling for all products, certifications, shipping preferences…"><%= form.description || '' %></textarea></label>
+    <div class="dropwrap">
+      <div class="filedrop" data-dropzone data-max="10" data-max-mb="20" tabindex="0">
+        <input type="file" name="files" multiple accept="image/*,.pdf,.xlsx,.xls,.docx,.doc,.csv" aria-label="General files">
+        <span class="dicon"><%- icon('upload') %></span>
+        <strong data-drop-count>Drag files here or <span class="dlink">browse</span></strong>
+        <span class="muted small dsub">e.g. a product list in Excel, a catalogue PDF · up to 10 files, 20 MB each</span>
+      </div>
+      <div class="fgrid" data-drop-list></div>
+    </div>
+    <div class="actions"><button class="btn primary lg">Submit request</button> <a class="btn" href="/portal/requests">Cancel</a></div>
+  </div>
+</form>
+
+<template id="rqTemplate"><%- include('_request_item', { it: {}, i: '__I__', unitList, cur }) %></template>
+<script>
+(function () {
+  const list = document.getElementById('rqItems'), tpl = document.getElementById('rqTemplate');
+  let next = list.children.length;
+  const renumber = () => {
+    const blocks = [...list.querySelectorAll('.rqitem')];
+    blocks.forEach((b, k) => { b.querySelector('.rqnum').textContent = k + 1; b.querySelector('.rqdel').hidden = blocks.length < 2; });
+    document.getElementById('rqCount').textContent = blocks.length;
+    document.getElementById('rqAdd').hidden = blocks.length >= 30;
+  };
+  document.getElementById('rqAdd').addEventListener('click', () => {
+    const html = tpl.innerHTML.replace(/__I__/g, String(next++));
+    const wrap = document.createElement('div'); wrap.innerHTML = html.trim();
+    const block = wrap.firstElementChild;
+    list.appendChild(block);
+    window.initDropzones && window.initDropzones(block);
+    renumber();
+    block.querySelector('input[name$="[name]"]').focus();
+    block.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+  list.addEventListener('click', e => {
+    const del = e.target.closest('.rqdel');
+    if (!del) return;
+    const block = del.closest('.rqitem');
+    const filled = [...block.querySelectorAll('input:not([type=file]):not([type=hidden]), textarea')].some(x => x.value.trim()) || block.querySelector('.fitem');
+    if (filled && !block.classList.contains('confirm')) { block.classList.add('confirm'); del.textContent = 'Click again to remove'; setTimeout(() => { block.classList.remove('confirm'); del.innerHTML = '&times;'; }, 3000); return; }
+    block.remove(); renumber();
+  });
+  document.getElementById('rqCur').addEventListener('change', e => document.querySelectorAll('.rqcur').forEach(s => { s.textContent = e.target.value; }));
+  renumber();
+})();
+</script>
 <%- include('../partials/foot') %>
