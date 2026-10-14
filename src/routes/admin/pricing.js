@@ -4,6 +4,7 @@ import { calcQuote } from '../../lib/pricing.js';
 import { verifyQuote } from '../../lib/ai.js';
 import { log } from '../../lib/activity.js';
 import { sendEmail } from '../../lib/mailer.js';
+import { getCompany } from '../../lib/purchase.js';
 import { quoteSentEmail } from '../../lib/email-templates.js';
 import { requireAdmin } from '../../middleware/auth.js';
 import { clean, bool, back, notFound, getSettings, fxRate, INCOTERMS, CURRENCIES } from '../../lib/util.js';
@@ -218,7 +219,7 @@ r.post('/quotes/:id/withdraw', async (req, res) => {
 
 // ---- settings (FX + margin rules) ----
 r.get('/settings', requireAdmin, async (req, res) => {
-  res.render('admin/pricing/settings', { title: 'Pricing settings', settings: await getSettings(admin), msg: req.query.msg });
+  res.render('admin/pricing/settings', { title: 'Pricing settings', settings: await getSettings(admin), company: await getCompany(admin), msg: req.query.msg });
 });
 r.post('/settings', requireAdmin, async (req, res) => {
   const fx = {};
@@ -239,6 +240,8 @@ r.post('/settings', requireAdmin, async (req, res) => {
     { key: 'container', value: container, updated_at: new Date().toISOString() },
     { key: 'fx_rates', value: fx, updated_at: new Date().toISOString() },
     { key: 'pricing', value: pricing, updated_at: new Date().toISOString() },
+    { key: 'company', value: { name: String(req.body.co_name || '').trim() || 'Lumi Trade', email: String(req.body.co_email || '').trim(), phone: String(req.body.co_phone || '').trim(), website: String(req.body.co_website || '').trim(),
+      address: String(req.body.co_address || '').trim(), bank: String(req.body.co_bank || '').trim(), payment_terms: String(req.body.co_payment_terms || '').trim() }, updated_at: new Date().toISOString() },
   ]);
   back(res, '/admin/pricing/settings', { msg: 'Settings saved.' });
 });

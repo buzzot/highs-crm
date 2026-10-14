@@ -125,6 +125,43 @@ export function quoteSentEmail({ request, validUntil, leadTimeDays, url }) {
   };
 }
 
+// ---- purchase orders and proforma invoices ----
+export function poSubmittedEmail({ po, orgName, who, url }) {
+  return {
+    subject: `Purchase order ${po.po_no} from ${orgName || 'a client'} — approval needed`,
+    html: layout({
+      preheader: `${who} sent ${po.po_no}`, eyebrow: 'New purchase order', title: 'Review the purchase order',
+      introHtml: `<strong>${esc(who)}</strong> from <strong>${esc(orgName || 'a client')}</strong> sent purchase order <strong>${esc(po.po_no)}</strong> (${esc(po.currency)} ${Number(po.total).toLocaleString('en-US', { minimumFractionDigits: 2 })}). Check every detail, add comments if needed, then approve it to create the order. The PO is attached as a PDF.`,
+      buttonText: 'Review the PO', buttonUrl: url, fineHtml: 'You get this email because you handle this request or are an admin.',
+    }),
+    text: `${who} (${orgName}) sent purchase order ${po.po_no}. Review: ${url}`,
+  };
+}
+
+export function poRejectedEmail({ po, note, url }) {
+  return {
+    subject: `Your purchase order ${po.po_no} needs changes`,
+    html: layout({
+      preheader: 'See the note from our team.', eyebrow: 'Purchase order', title: 'We could not accept the purchase order yet',
+      introHtml: `We could not accept <strong>${esc(po.po_no)}</strong> as sent.` + (note ? `<br><br><em>“${esc(note)}”</em>` : ''),
+      buttonText: 'Open the request', buttonUrl: url, fineHtml: 'Questions? Just reply to this email.',
+    }),
+    text: `We could not accept ${po.po_no}. ${note || ''} ${url}`,
+  };
+}
+
+export function piEmail({ pi, order, company, total, currency, message, url }) {
+  return {
+    subject: `Proforma invoice ${pi.pi_no} · order ${order.order_no}`,
+    html: layout({
+      preheader: `Proforma invoice ${pi.pi_no} for order ${order.order_no}`, eyebrow: 'Proforma invoice', title: `Order ${esc(order.order_no)} is confirmed`,
+      introHtml: `Thank you for your purchase order. Please find the proforma invoice <strong>${esc(pi.pi_no)}</strong> attached (${esc(currency)} ${Number(total).toLocaleString('en-US', { minimumFractionDigits: 2 })}).` + (message ? `<br><br>${esc(message).replace(/\n/g, '<br>')}` : ''),
+      buttonText: 'Open your order', buttonUrl: url, fineHtml: `${esc(company?.name || 'Lumi Trade')} · reply to this email with any questions.`,
+    }),
+    text: `Proforma invoice ${pi.pi_no} for order ${order.order_no} is attached (${currency} ${total}). ${message || ''} ${url}`,
+  };
+}
+
 export function changeDecidedEmail({ request, approved, note, url }) {
   return {
     subject: approved ? `Your changes to ${request.ref} were approved` : `Your changes to ${request.ref} were not accepted`,

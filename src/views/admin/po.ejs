@@ -1,0 +1,66 @@
+<%- include('../partials/head') %>
+<% const c = p.client || {}; const same = quoteTotal != null && Math.abs(quoteTotal - total) < 0.005; %>
+<div class="pagehead">
+  <div><a class="back" href="/admin/sourcing/<%= p.request_id %>">← <%= p.requests?.ref %></a><h1>Purchase order <%= p.po_no %></h1>
+    <p class="muted"><a href="/admin/clients/<%= p.org_id %>"><%= p.organizations?.name %></a> · <%= p.requests?.title %> · <%= p.submitted_at ? 'sent ' + fmt.datetime(p.submitted_at) : 'not sent yet (client draft)' %></p></div>
+  <div class="headactions">
+    <a class="btn" href="/admin/po/<%= p.id %>/pdf" target="_blank"><%- icon('file') %> Print / PDF</a>
+    <span class="pill lg <%= p.status %>"><%= ({ draft: 'Client draft', submitted: 'To approve', approved: 'Approved', rejected: 'Sent back' })[p.status] %></span>
+  </div>
+</div>
+<% if (msg) { %><div class="alert ok"><%= msg %></div><% } %>
+<% if (err) { %><div class="alert err"><%= err %></div><% } %>
+<% if (p.status === 'approved' && order) { %>
+  <div class="card"><h2>Order created</h2>
+    <p>Order <a href="/admin/orders/<%= order.id %>"><strong><%= order.order_no %></strong></a> was created from this PO.</p>
+    <div class="actions">
+      <% if (pis.length) { %><% pis.forEach(x => { %><a class="btn" href="/admin/pi/<%= x.id %>"><%= x.pi_no %></a> <span class="pill <%= x.status === 'sent' ? 'ok' : '' %>"><%= x.status === 'sent' ? 'Sent' : 'Draft' %></span> <% }) %>
+      <% } else { %><form method="post" action="/admin/pi/order/<%= order.id %>" class="inline"><button class="btn primary">Generate proforma invoice</button></form><% } %>
+    </div>
+  </div>
+<% } %>
+<% if (p.status === 'rejected') { %><div class="alert warn"><strong>Sent back to the client</strong> — <%= p.admin_note %></div><% } %>
+
+<form method="post" action="/admin/po/<%= p.id %>" class="poform">
+<fieldset <%= editable ? '' : 'disabled' %> class="plain">
+  <div class="card">
+    <h2>Client (header of the PO)</h2>
+    <div class="row">
+      <label>Company <input name="company" value="<%= c.company || '' %>"></label>
+      <label>Contact person <input name="contact" value="<%= c.contact || '' %>"></label>
+      <label>Email <input name="email" value="<%= c.email || '' %>"></label>
+      <label>Phone <input name="phone" value="<%= c.phone || '' %>"></label>
+    </div>
+    <div class="row">
+      <label>Address <textarea name="address" rows="2"><%= c.address || '' %></textarea></label>
+      <label>Delivery address <textarea name="delivery_address" rows="2"><%= c.delivery_address || '' %></textarea></label>
+      <label>Client PO number <input name="ref" value="<%= c.ref || '' %>"></label>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Lines <span class="muted small">check against the quotation<% if (quoteTotal != null) { %> — quote total <%= fmt.money(quoteTotal, p.currency) %> <%= same ? '✓ matches' : '— differs from the PO total' %><% } %></span></h2>
+    <%- include('../partials/po_lines', { lines: p.lines, currency: p.currency, edit: editable }) %>
+    <div class="row">
+      <label>Incoterm <input name="incoterm" value="<%= p.incoterm || '' %>"></label>
+      <label>Lead time (days) <input type="number" name="lead_time_days" value="<%= p.lead_time_days || '' %>"></label>
+    </div>
+    <% if (p.client_notes) { %><p><strong>Client's notes</strong></p><p class="pre"><%= p.client_notes %></p><% } %>
+    <label>Terms <textarea name="terms" rows="2"><%= p.terms || '' %></textarea></label>
+  </div>
+  <div class="card">
+    <h2>Comments</h2>
+    <label>Internal comment <span class="muted small">— only our team sees this; copied to the order's internal notes</span><textarea name="admin_comment" rows="2"><%= p.admin_comment || '' %></textarea></label>
+    <label>Note to the client <span class="muted small">— shown on the PO; required when you send it back</span><textarea name="admin_note" rows="2"><%= p.admin_note || '' %></textarea></label>
+  </div>
+</fieldset>
+<% if (editable) { %>
+  <div class="card"><div class="actions">
+    <button class="btn" formaction="/admin/po/<%= p.id %>">Save changes</button>
+    <% if (p.status === 'submitted') { %>
+      <button class="btn primary" formaction="/admin/po/<%= p.id %>/approve" onclick="return confirm('Approve this PO and create the order?')">Approve &amp; create order</button>
+      <button class="btn danger" formaction="/admin/po/<%= p.id %>/reject" onclick="return confirm('Send this PO back to the client?')">Send back to client</button>
+    <% } else { %><span class="muted small">The client has not sent this PO yet.</span><% } %>
+  </div></div>
+<% } %>
+</form>
+<%- include('../partials/foot') %>

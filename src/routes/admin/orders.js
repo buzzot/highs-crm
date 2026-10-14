@@ -77,8 +77,12 @@ r.get('/:id', async (req, res) => {
   const { data: docs } = await admin.from('documents').select('*')
     .or(`and(entity_type.eq.order,entity_id.eq.${id})${shipIds.length ? `,and(entity_type.eq.shipment,entity_id.in.(${shipIds.join(',')}))` : ''}`)
     .order('created_at', { ascending: false });
+  const [{ data: pis }, { data: pos }] = await Promise.all([
+    admin.from('proforma_invoices').select('id, pi_no, status, sent_at').eq('order_id', id).order('created_at'),
+    admin.from('purchase_orders').select('id, po_no, status').eq('order_id', id),
+  ]);
   res.render('admin/orders/detail', {
-    title: order.order_no, order, items: items || [], shipments: shipments || [], packing: packing || [], events: events || [],
+    pis: pis || [], pos: pos || [], title: order.order_no, order, items: items || [], shipments: shipments || [], packing: packing || [], events: events || [],
     docs: docs || [], suppliers: suppliers || [], products: products || [], statuses: ORDER_STATUSES,
     land: landed(order, items), msg: req.query.msg, err: req.query.err,
   });

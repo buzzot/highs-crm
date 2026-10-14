@@ -44,7 +44,8 @@ app.use(async (req, res, next) => {
     // red ball on the Sourcing menu: client change requests waiting for approval
     try {
       const { count } = await admin.from('request_revisions').select('id', { count: 'exact', head: true }).eq('status', 'pending');
-      res.locals.navPending = { sourcing: count || 0 };
+      const { count: poCount } = await admin.from('purchase_orders').select('id', { count: 'exact', head: true }).eq('status', 'submitted');
+      res.locals.navPending = { sourcing: (count || 0) + (poCount || 0) };
     } catch { res.locals.navPending = { sourcing: 0 }; }
   } else res.locals.aiLine = () => '';
   aiContext.run({ userId: req.user?.id || null, orgId: req.user?.org_id || null, supplierId: req.user?.supplier_id || null }, next);

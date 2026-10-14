@@ -53,6 +53,12 @@
               <form method="post" action="/portal/quotes/<%= q.id %>/reject" onsubmit="return confirm('Reject this quote?')"><button class="btn">Reject</button></form>
             </div>
           <% } %>
+          <% if (q.status === 'accepted') { const po = (typeof pos !== 'undefined' ? pos : []).find(p => p.quote_id === q.id); %>
+            <div class="actions">
+              <% if (!po) { %><a class="btn primary" href="/portal/quotes/<%= q.id %>/po">Send PO</a><span class="muted small">Quote accepted — send your purchase order so we can confirm the order.</span>
+              <% } else { %><a class="btn" href="/portal/po/<%= po.id %>"><%= po.po_no %></a> <span class="pill <%= po.status %>"><%= ({ draft: 'Draft — not sent', submitted: 'Sent — awaiting approval', approved: 'Approved' })[po.status] %></span><% } %>
+            </div>
+          <% } %>
         </div>
       <% }) %>
     </div>

@@ -4,6 +4,21 @@
     <p class="muted"><a href="/admin/clients/<%= request.organizations.id %>"><%= request.organizations.name %></a> · submitted by <%= request.creator?.full_name || request.creator?.email || '—' %> · <%= fmt.date(request.created_at) %></p></div>
   <span class="pill lg <%= request.status %>"><%= fmt.status(request.status) %></span>
 </div>
+<% const poList = typeof pos !== 'undefined' ? pos : []; %>
+<% if (poList.length) { %>
+  <div class="card <%= poList.some(x => x.status === 'submitted') ? 'pending' : '' %>">
+    <h2>Purchase orders <span class="count"><%= poList.length %></span></h2>
+    <table class="tbl compact"><tbody>
+    <% poList.forEach(x => { %><tr>
+      <td><a href="/admin/po/<%= x.id %>"><strong><%= x.po_no %></strong></a></td>
+      <td class="right num"><%= fmt.money(x.lines.reduce((t, l) => t + Number(l.quantity || 0) * Number(l.unit_price || 0), 0), x.currency) %></td>
+      <td><span class="pill <%= x.status %>"><%= ({ draft: 'Client draft', submitted: 'To approve', approved: 'Approved', rejected: 'Sent back' })[x.status] %></span></td>
+      <td class="muted small"><%= x.submitted_at ? 'sent ' + fmt.datetime(x.submitted_at) : '' %></td>
+      <td class="right"><a class="btn small <%= x.status === 'submitted' ? 'primary' : '' %>" href="/admin/po/<%= x.id %>"><%= x.status === 'submitted' ? 'Review &amp; approve' : 'Open' %></a></td>
+    </tr><% }) %>
+    </tbody></table>
+  </div>
+<% } %>
 <% const pend = typeof pending !== 'undefined' ? pending : null; %>
 <% if (pend) { %>
   <div class="card pending">

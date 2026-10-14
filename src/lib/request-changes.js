@@ -94,6 +94,20 @@ async function mail(to, m) {
   try { await sendEmail({ to, ...m }); } catch (e) { console.error(`[revision] email to ${to}: ${e.message}`); }
 }
 
+/** Who handles a request: the assignee, otherwise every active admin. */
+export async function staffEmails(request) {
+  let to = [];
+  if (request.assigned_to) {
+    const { data } = await admin.from('profiles').select('email').eq('id', request.assigned_to).eq('active', true).maybeSingle();
+    if (data?.email) to = [data.email];
+  }
+  if (!to.length) {
+    const { data } = await admin.from('profiles').select('email').eq('role', 'admin').eq('active', true);
+    to = (data || []).map(x => x.email).filter(Boolean);
+  }
+  return to;
+}
+
 export async function notifyStaffOfChange(req0, user) {
   const { data: request } = await admin.from('requests').select('id, ref, title, org_id, assigned_to').eq('id', req0.id).single();
   if (!request) return;

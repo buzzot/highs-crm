@@ -147,6 +147,16 @@
       </script>
     </div>
 
+    <% const piList = typeof pis !== 'undefined' ? pis : []; const poL = typeof pos !== 'undefined' ? pos : []; %>
+    <div class="card">
+      <h2>Purchase order &amp; proforma invoice</h2>
+      <% poL.forEach(x => { %><p>Client PO: <a href="/admin/po/<%= x.id %>"><strong><%= x.po_no %></strong></a></p><% }) %>
+      <% if (piList.length) { %>
+        <table class="tbl compact"><tbody><% piList.forEach(x => { %><tr><td><a href="/admin/pi/<%= x.id %>"><strong><%= x.pi_no %></strong></a></td><td><span class="pill <%= x.status === 'sent' ? 'ok' : '' %>"><%= x.status === 'sent' ? 'Sent ' + fmt.date(x.sent_at) : 'Draft' %></span></td><td class="right"><a class="btn small" href="/admin/pi/<%= x.id %>">Open</a></td></tr><% }) %></tbody></table>
+      <% } else { %><p class="muted small">No proforma invoice yet. It starts from the order's lines and the client's PO — you can edit everything before sending.</p><% } %>
+      <form method="post" action="/admin/pi/order/<%= order.id %>" class="inline"><% if (piList.length) { %><input type="hidden" name="another" value="1"><% } %><button class="btn <%= piList.length ? '' : 'primary' %>"><%= piList.length ? '+ Another proforma invoice' : 'Generate proforma invoice' %></button></form>
+    </div>
+
     <%- include('../../partials/docs', { docs, entityType: 'order', entityId: order.id, redirect: '/admin/orders/' + order.id, heading: 'Product & packing photos, documents', defaultKind: 'product_photo' }) %>
   </div>
   <div>

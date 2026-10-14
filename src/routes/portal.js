@@ -5,6 +5,11 @@ import { admin } from '../lib/supabase.js';
 import { log } from '../lib/activity.js';
 import { aiEnabled, extractProductInfo } from '../lib/ai.js';
 import { companyAiOn } from '../lib/ai-access.js';
+import { getCompany, poFromQuote, poPdf, totalOf, text as txt } from '../lib/purchase.js';
+import { staffEmails } from '../lib/request-changes.js';
+import { sendEmail } from '../lib/mailer.js';
+import { poSubmittedEmail } from '../lib/email-templates.js';
+const appUrl = () => (process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
 import { uploadDocument, signedUrl } from '../lib/storage.js';
 import { parseItems, validateItems, requestTitle, splitFiles, UNITS } from '../lib/request-items.js';
 import { EDITABLE, DELIVERY, snapshot, buildRevision, diff } from '../lib/request-revisions.js';
@@ -152,11 +157,12 @@ r.get('/requests/:id', async (req, res) => {
     req.db.from('request_items').select('*').eq('request_id', request.id).order('position'),
     req.db.from('request_revisions').select('*').eq('request_id', request.id).order('created_at', { ascending: false }).limit(1),
   ]);
+  const { data: pos } = await admin.from('purchase_orders').select('id, po_no, quote_id, status').eq('request_id', request.id).eq('org_id', req.user.org_id).in('status', ['draft', 'submitted', 'approved']);
   const last = revs?.[0] || null;
   const pending = last?.status === 'pending' ? last : null;
   const pendingDiff = pending ? diff(snapshot(request, items || []), pending.data) : null;
   res.render('portal/request_detail', {
-    title: request.ref, request, quotes: quotes || [], docs: (docs || []).filter(d => !d.revision_id), events: events || [], items: items || [],
+    title: request.ref, request, pos: pos || [], quotes: quotes || [], docs: (docs || []).filter(d => !d.revision_id), events: events || [], items: items || [],
     pending, pendingDiff, lastDecision: last && ['approved', 'rejected'].includes(last.status) ? last : null, canEdit: EDITABLE.includes(request.status),
   });
 });
@@ -279,6 +285,69 @@ r.post('/quotes/:id/:decision(accept|reject)', async (req, res) => {
   await admin.from('requests').update({ status: accept ? 'accepted' : 'quoted' }).eq('id', quote.request_id);
   await log({ entityType: 'request', entityId: quote.request_id, action: accept ? 'quote_accepted' : 'quote_rejected', actorId: req.user.id, clientVisible: true, detail: { quote_id: quote.id } });
   res.redirect(`/portal/requests/${quote.request_id}`);
+});
+
+// ---- purchase orders: after accepting a quote the client sends a PO ----
+const ownPo = async (req, id) => {
+  const { data } = await admin.from('purchase_orders').select('*').eq('id', id).eq('org_id', req.user.org_id).maybeSingle();
+  return data;
+};
+r.get('/quotes/:id/po', async (req, res) => {
+  const { data: quote } = await req.db.from('quotes').select(QUOTE).eq('id', req.params.id).single();
+  if (!quote || quote.status !== 'accepted') return res.status(400).render('error', { title: 'Not allowed', message: 'Accept the quote first, then you can send your purchase order.' });
+  const { data: live } = await admin.from('purchase_orders').select('id').eq('quote_id', quote.id).in('status', ['draft', 'submitted', 'approved']).maybeSingle();
+  if (live) return res.redirect(`/portal/po/${live.id}`);
+  const [{ data: request }, { data: item }, { data: product }, { data: org }] = await Promise.all([
+    req.db.from('requests').select('id, ref, title').eq('id', quote.request_id).single(),
+    quote.request_item_id ? req.db.from('request_items').select('name, sku, unit').eq('id', quote.request_item_id).maybeSingle() : { data: null },
+    admin.from('quotes').select('products(name, sku)').eq('id', quote.id).single().then(x => ({ data: x.data?.products || null })),
+    admin.from('organizations').select('*').eq('id', req.user.org_id).single(),
+  ]);
+  const base = poFromQuote({ quote, item, product, request, org, profile: req.user });
+  const { data: po, error } = await admin.from('purchase_orders').insert({ ...base, quote_id: quote.id, request_id: quote.request_id, org_id: req.user.org_id, created_by: req.user.id }).select('id').single();
+  if (error) return res.status(500).render('error', { title: 'Could not create the PO', message: error.message });
+  await log({ entityType: 'request', entityId: quote.request_id, action: 'po_created', actorId: req.user.id, clientVisible: true });
+  res.redirect(`/portal/po/${po.id}`);
+});
+r.get('/po/:id', async (req, res) => {
+  const po = await ownPo(req, req.params.id);
+  if (!po) return res.status(404).render('error', { title: 'Not found', message: 'Purchase order not found.' });
+  const [{ data: request }, { data: order }] = await Promise.all([
+    req.db.from('requests').select('id, ref, title').eq('id', po.request_id).single(),
+    po.order_id ? req.db.from('orders').select('id, order_no').eq('id', po.order_id).maybeSingle() : { data: null },
+  ]);
+  res.render('portal/po', { title: po.po_no, po, request: request || { id: po.request_id, ref: '' }, order, msg: req.query.msg, err: req.query.err });
+});
+r.get('/po/:id/pdf', async (req, res) => {
+  const po = await ownPo(req, req.params.id);
+  if (!po) return res.status(404).render('error', { title: 'Not found', message: 'Purchase order not found.' });
+  res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${po.po_no}.pdf"` });
+  res.send(poPdf(po, await getCompany(admin)));
+});
+r.post('/po/:id', async (req, res) => {
+  const po = await ownPo(req, req.params.id);
+  if (!po) return res.status(404).render('error', { title: 'Not found', message: 'Purchase order not found.' });
+  const back_ = (m, k = 'msg') => res.redirect(`/portal/po/${po.id}?${k}=` + encodeURIComponent(m));
+  if (po.status !== 'draft') return back_('This purchase order was already sent.', 'err');
+  const b = req.body, s = (v, n = 300) => String(v ?? '').trim().slice(0, n);
+  const client = { ...po.client, contact: s(b.contact, 120), email: s(b.email, 200), phone: s(b.phone, 60), ref: s(b.ref, 60), address: s(b.address, 500), delivery_address: s(b.delivery_address, 500) };
+  const patch = { client, client_notes: txt(b.client_notes), updated_at: new Date().toISOString() };
+  if (b.do === 'send') {
+    if (!client.contact || !/@/.test(client.email)) { await admin.from('purchase_orders').update(patch).eq('id', po.id); return back_('Enter a contact person and an email address first.', 'err'); }
+    const sent = { ...po, ...patch, status: 'submitted', submitted_at: new Date().toISOString() };
+    await admin.from('purchase_orders').update({ ...patch, status: 'submitted', submitted_at: sent.submitted_at }).eq('id', po.id);
+    await log({ entityType: 'request', entityId: po.request_id, action: 'po_submitted', actorId: req.user.id, clientVisible: true, detail: { po_no: po.po_no } });
+    try {
+      const { data: rq } = await admin.from('requests').select('id, ref, title, assigned_to').eq('id', po.request_id).single();
+      const to = await staffEmails(rq);
+      const company = await getCompany(admin);
+      if (to.length) await sendEmail({ to, ...poSubmittedEmail({ po: { ...sent, total: totalOf(sent.lines) }, orgName: client.company, who: client.contact || req.user.email, url: `${appUrl()}/admin/po/${po.id}` }),
+        attachments: [{ filename: `${po.po_no}.pdf`, content: poPdf(sent, company).toString('base64') }] });
+    } catch (e) { console.error(`[po] email to staff failed: ${e.message}`); }
+    return back_('Purchase order sent to Lumi Trade. We will review it and confirm your order.');
+  }
+  await admin.from('purchase_orders').update(patch).eq('id', po.id);
+  back_('Draft saved.');
 });
 
 // ---- orders ----

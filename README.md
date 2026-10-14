@@ -46,7 +46,7 @@ Node.js (Express, server-rendered EJS) on **Supabase** (Postgres, Auth, Storage)
    5. `supabase/migrations/0005_product_import.sql`
    6. `supabase/migrations/0006_profile_and_email_codes.sql`
    7. `supabase/migrations/0007_app_email_codes.sql`
-   8. `0008` … `0014` in number order (request items, request edits, supplier portal, supplier CRM, AI usage, packing lists & freight quotes)
+   8. `0008` … `0019` in number order (request items, request edits, supplier portal, supplier CRM, AI usage, packing lists & freight quotes, RFQ booking, partial shipments, product SKU, per-company AI switch, purchase orders & proforma invoices)
    9. optional demo data: `supabase/seed.sql`
 3. **Auth settings** (Authentication):
    - Providers → Email: turn **off** "Allow new users to sign up" (invite-only).
@@ -125,3 +125,7 @@ test/                       node:test suites (no DB needed)
 - **Portal pages** query with the client's own token. Row policies limit them to their company, and column grants hide costs, margins, suppliers and internal notes.
 - Files are in a private bucket. Downloads go through short-lived signed URLs after a permission check, and each file has a "visible to client" switch.
 - Roles and company membership come only from staff-created invitations.
+
+
+## Purchase orders & proforma invoices
+After a client accepts a quote they press **Send PO** on the request: a PO is generated from the quote (client company, contact, email/phone, lines), can be printed / saved as PDF and is sent to the admins by email (PDF attached) and appears under Sourcing (red ball on the menu). An admin checks and edits every detail, adds comments, then **Approve** creates the order (or sends the PO back with a note). On the order, **Generate proforma invoice** builds a PI from the order/PO; edit it, then **Send to client** emails the PDF and stores it in the order's documents. Fill in *Company details on PO / proforma invoice* (name, address, bank details, payment terms) under Pricing → Settings. PDFs are written by a built-in generator (`src/lib/pdf-write.js`, Latin text only).

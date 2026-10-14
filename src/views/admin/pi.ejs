@@ -1,0 +1,57 @@
+<%- include('../partials/head') %>
+<% const d = p.data, b = d.buyer || {}; const sent = p.status === 'sent'; %>
+<div class="pagehead">
+  <div><a class="back" href="/admin/orders/<%= order.id %>">← <%= order.order_no %></a><h1>Proforma invoice <%= p.pi_no %></h1>
+    <p class="muted"><%= order.organizations?.name %> · <%= sent ? 'sent ' + fmt.datetime(p.sent_at) : 'draft — not sent' %></p></div>
+  <div class="headactions">
+    <a class="btn" href="/admin/pi/<%= p.id %>/pdf" target="_blank"><%- icon('file') %> Print / PDF</a>
+    <span class="pill lg <%= sent ? 'ok' : '' %>"><%= sent ? 'Sent' : 'Draft' %></span>
+  </div>
+</div>
+<% if (msg) { %><div class="alert ok"><%= msg %></div><% } %>
+<% if (err) { %><div class="alert err"><%= err %></div><% } %>
+<% if (sent) { %><div class="alert info">Already sent. You can change it and send it again — the client receives the new PDF.</div><% } %>
+<form method="post" action="/admin/pi/<%= p.id %>" class="poform">
+  <div class="card">
+    <h2>Bill to</h2>
+    <div class="row">
+      <label>Company <input name="company" value="<%= b.company || '' %>"></label>
+      <label>Contact person <input name="contact" value="<%= b.contact || '' %>"></label>
+      <label>Email <input name="email" value="<%= b.email || '' %>"></label>
+      <label>Phone <input name="phone" value="<%= b.phone || '' %>"></label>
+    </div>
+    <div class="row">
+      <label>Address <textarea name="address" rows="2"><%= b.address || '' %></textarea></label>
+      <label>Delivery address <textarea name="delivery_address" rows="2"><%= b.delivery_address || '' %></textarea></label>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Lines</h2>
+    <%- include('../partials/po_lines', { lines: d.lines, currency: d.currency, edit: true }) %>
+    <div class="row">
+      <label>Client PO number <input name="po_ref" value="<%= d.po_ref || '' %>"></label>
+      <label>Incoterm <input name="incoterm" value="<%= d.incoterm || '' %>"></label>
+      <label>Lead time (days) <input type="number" name="lead_time_days" value="<%= d.lead_time_days || '' %>"></label>
+      <label>Valid until <input type="date" name="valid_until" value="<%= d.valid_until || '' %>"></label>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Payment</h2>
+    <label>Payment terms <textarea name="payment_terms" rows="2"><%= d.payment_terms || '' %></textarea></label>
+    <label>Bank details <textarea name="bank" rows="4"><%= d.bank || '' %></textarea></label>
+    <label>Notes <textarea name="notes" rows="2"><%= d.notes || '' %></textarea></label>
+  </div>
+  <div class="card">
+    <h2>Send to the client</h2>
+    <div class="row">
+      <label>Send to (email) <input name="send_to" value="<%= b.email || '' %>"></label>
+    </div>
+    <label>Message <span class="muted small">optional, added to the email</span><textarea name="message" rows="2"></textarea></label>
+    <div class="actions">
+      <button class="btn">Save</button>
+      <button class="btn primary" formaction="/admin/pi/<%= p.id %>/send" onclick="return confirm('Send the proforma invoice to the client now?')"><%= sent ? 'Send again' : 'Send to client' %></button>
+    </div>
+    <p class="muted small">The PDF is emailed and also kept in the order's documents, where the client can download it.</p>
+  </div>
+</form>
+<%- include('../partials/foot') %>

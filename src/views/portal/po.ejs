@@ -1,0 +1,60 @@
+<%- include('../partials/head') %>
+<% const editable = po.status === 'draft'; const c = po.client || {}; %>
+<div class="pagehead">
+  <div><a class="back" href="/portal/requests/<%= request.id %>">← <%= request.ref %></a><h1>Purchase order <%= po.po_no %></h1></div>
+  <div class="headactions">
+    <a class="btn" href="/portal/po/<%= po.id %>/pdf" target="_blank"><%- icon('file') %> Print / PDF</a>
+    <span class="pill lg <%= po.status %>"><%= ({ draft: 'Draft', submitted: 'Sent', approved: 'Approved', rejected: 'Not accepted' })[po.status] %></span>
+  </div>
+</div>
+<% if (msg) { %><div class="alert ok"><%= msg %></div><% } %>
+<% if (err) { %><div class="alert err"><%= err %></div><% } %>
+<% if (po.status === 'submitted') { %><div class="alert info">Sent to Lumi Trade on <%= fmt.datetime(po.submitted_at) %>. We check every detail and confirm your order — a proforma invoice follows.</div><% } %>
+<% if (po.status === 'approved') { %><div class="alert ok">Approved. <% if (order) { %>Your order is <a href="/portal/orders/<%= order.id %>"><strong><%= order.order_no %></strong></a>. The proforma invoice will be sent to you.<% } %><%= po.admin_note ? ' — ' + po.admin_note : '' %></div><% } %>
+<% if (po.status === 'rejected') { %><div class="alert warn"><strong>This purchase order was not accepted</strong><%= po.admin_note ? ' — ' + po.admin_note : '.' %> <a href="/portal/quotes/<%= po.quote_id %>/po">Create a new one</a></div><% } %>
+
+<form method="post" action="/portal/po/<%= po.id %>" class="poform">
+  <div class="card">
+    <h2>Buyer — your company</h2>
+    <% if (editable) { %>
+      <p class="muted small">These details go in the header of the purchase order. Check them before you send.</p>
+      <div class="row">
+        <label>Company <input value="<%= c.company %>" disabled></label>
+        <label>Contact person <input name="contact" value="<%= c.contact || '' %>" required></label>
+      </div>
+      <div class="row">
+        <label>Email <input type="email" name="email" value="<%= c.email || '' %>" required></label>
+        <label>Phone <input name="phone" value="<%= c.phone || '' %>"></label>
+        <label>Your PO number <span class="muted small">optional</span><input name="ref" value="<%= c.ref || '' %>" maxlength="60"></label>
+      </div>
+      <div class="row">
+        <label>Company address <textarea name="address" rows="2"><%= c.address || '' %></textarea></label>
+        <label>Delivery address <textarea name="delivery_address" rows="2"><%= c.delivery_address || '' %></textarea></label>
+      </div>
+    <% } else { %>
+      <dl class="dl">
+        <dt>Company</dt><dd><%= c.company %></dd><dt>Contact person</dt><dd><%= c.contact || '—' %></dd>
+        <dt>Email / phone</dt><dd><%= [c.email, c.phone].filter(Boolean).join(' · ') || '—' %></dd>
+        <dt>Your PO number</dt><dd><%= c.ref || '—' %></dd>
+        <dt>Address</dt><dd class="pre"><%= c.address || '—' %></dd><dt>Delivery address</dt><dd class="pre"><%= c.delivery_address || '—' %></dd>
+      </dl>
+    <% } %>
+  </div>
+  <div class="card">
+    <h2>Order <span class="muted small"><%= [po.incoterm, po.lead_time_days ? 'lead time ' + po.lead_time_days + ' days' : null].filter(Boolean).join(' · ') %></span></h2>
+    <%- include('../partials/po_lines', { lines: po.lines, currency: po.currency }) %>
+    <% if (editable) { %><label>Notes for Lumi Trade <span class="muted small">optional</span><textarea name="client_notes" rows="3" placeholder="Special requirements, packaging, labelling…"><%= po.client_notes || '' %></textarea></label>
+    <% } else if (po.client_notes) { %><p class="pre"><%= po.client_notes %></p><% } %>
+  </div>
+  <% if (editable) { %>
+  <div class="card">
+    <div class="actions">
+      <button class="btn" name="do" value="save">Save draft</button>
+      <button class="btn primary" name="do" value="send" onclick="return confirm('Send this purchase order to Lumi Trade?')">Send PO to Lumi Trade</button>
+      <a class="btn" href="/portal/po/<%= po.id %>/pdf" target="_blank">Print / PDF</a>
+    </div>
+    <p class="muted small">Save first if you changed anything, then use Print / PDF to keep a copy. Sending notifies our team; we review and confirm your order.</p>
+  </div>
+  <% } %>
+</form>
+<%- include('../partials/foot') %>

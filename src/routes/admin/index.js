@@ -13,6 +13,7 @@ import logistics from './logistics.js';
 import pricing from './pricing.js';
 import documents from './documents.js';
 import orders from './orders.js';
+import { po as poRoutes, pi as piRoutes } from './po.js';
 import { FEATURES, costOf, clearPriceCache, getPrices } from '../../lib/ai-usage.js';
 
 const r = Router();
@@ -125,5 +126,7 @@ r.use('/logistics', logistics);
 r.use('/pricing', pricing);
 r.use('/documents', documents);
 r.use('/orders', orders);
+r.use('/po', poRoutes);
+r.use('/pi', piRoutes);
 
 export default r;
