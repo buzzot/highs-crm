@@ -7,7 +7,7 @@ import multer from 'multer';
 import { readXlsx, workbookToText } from '../../lib/xlsx-read.js';
 import { readCsv } from './imports.js';
 import { normalizeRows, rowsFromSheet, totals as packTotals, packingText, packingSheet } from '../../lib/packing.js';
-import { writeXlsx } from '../../lib/xlsx-write.js';
+import { rfqWorkbook } from '../../lib/quote-form.js';
 import { extractPacking, aiEnabled } from '../../lib/ai.js';
 import { uploadDocument } from '../../lib/storage.js';
 import { sendEmail } from '../../lib/mailer.js';
@@ -207,11 +207,13 @@ r.post('/:id/packing/confirm', async (req, res) => {
 });
 
 async function packingData(id) {
-  const [{ data: order }, { data: rows }] = await Promise.all([
+  // packing_info lives on orders (the order_overview view predates that column)
+  const [{ data: order }, { data: rows }, { data: o }] = await Promise.all([
     admin.from('order_overview').select('*').eq('id', id).single(),
     admin.from('packing_lists').select('*').eq('order_id', id).order('position').order('carton_no'),
+    admin.from('orders').select('packing_info').eq('id', id).maybeSingle(),
   ]);
-  return { order, rows: rows || [], t: packTotals(rows || []), info: order?.packing_info || {} };
+  return { order, rows: rows || [], t: packTotals(rows || []), info: o?.packing_info || order?.packing_info || {} };
 }
 
 // standard packing list: print / PDF, Excel, send to forwarders
@@ -231,8 +233,7 @@ r.get('/:id/packing-list', async (req, res) => {
 r.get('/:id/packing-list.xlsx', async (req, res) => {
   const { order, rows, t, info } = await packingData(req.params.id);
   if (!order) return notFound(res, 'Order');
-  const sheet = packingSheet({ order, info, rows, t });
-  const buf = writeXlsx(sheet, { sheet: 'Packing list', boldRows: [0, sheet.findIndex(x => x[0] === 'CTN No.'), sheet.findIndex(x => x[0] === 'TOTAL')], widths: [10, 8, 34, 14, 12, 9, 10, 8, 8, 8, 9, 10, 11, 12, 11, 12] });
+  const buf = rfqWorkbook({ order, info, rows, t });
   res.set({ 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="packing-list-${order.order_no}.xlsx"` });
   res.send(buf);
 });
@@ -254,8 +255,6 @@ r.post('/:id/packing-list/send', async (req, res) => {
   const extra = String(req.body.extra_emails || '').split(/[\s,;]+/).map(x => x.trim().toLowerCase()).filter(x => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x));
   const targets = [...(fws || []).filter(f => f.email).map(f => ({ fw: f, email: f.email })), ...extra.map(email => ({ fw: null, email }))];
   if (!targets.length) return back(res, `/admin/orders/${id}/packing-list`, { err: 'Choose a forwarder with an email address, or type an email.' });
-  const sheet = packingSheet({ order, info, rows, t });
-  const xlsx = writeXlsx(sheet, { sheet: 'Packing list', boldRows: [0, sheet.findIndex(x => x[0] === 'CTN No.'), sheet.findIndex(x => x[0] === 'TOTAL')] });
   const message = String(req.body.message || '').trim().slice(0, 3000);
   const { data: fr, error: frErr } = await admin.from('freight_requests').insert({
     order_id: id, info, totals: { cartons: t.cartons, pieces: t.pieces, gross_kg: t.gross, cbm: t.cbm }, message: message || null, created_by: req.user.id,
@@ -268,7 +267,7 @@ r.post('/:id/packing-list/send', async (req, res) => {
     try {
       const m = rfqEmail({ order, info, rows, t, message, senderName: req.user.full_name, forwarderName: tg.fw?.contact_name || tg.fw?.name });
       await sendEmail({ to: tg.email, ...m, subject: `${m.subject} ${subjectTag(fr.ref, rfq.token)}`, replyTo: replyAddress(rfq.token, req.user.email),
-        attachments: [{ filename: `packing-list-${order.order_no}.xlsx`, content: xlsx }] });
+        attachments: [{ filename: `${fr.ref}-quotation-packing-list-${order.order_no}.xlsx`, content: rfqWorkbook({ order, info, rows, t, ref: fr.ref, token: rfq.token }) }] });
       sent.push(tg.fw?.name || tg.email);
     } catch (e) {
       await admin.from('freight_rfqs').delete().eq('id', rfq.id);

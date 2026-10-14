@@ -1013,3 +1013,8 @@ textarea.wechat { font-size: 12.5px; background: #fafbfc; font-variant-numeric: 
 .actlist li > p { margin: 4px 0; }
 #reviewForm .bulkbar label.check { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; margin: 0; }
 #reviewForm .bulkbar label.check input { width: auto; margin: 0; }
+.qfacts { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; margin: 6px 0 8px; }
+.qfacts dt { color: var(--muted); } .qfacts dd { margin: 0; }
+.actlist .qcharges { margin: 6px 0; } .actlist .qcharges td, .actlist .qcharges th { padding: 4px 8px; font-size: 12.5px; }
+.actlist .qcharges tfoot td { font-weight: 600; border-top: 1px solid var(--line); }
+.offers td { vertical-align: top; } .offers td .small a { white-space: nowrap; }

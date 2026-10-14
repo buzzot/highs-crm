@@ -4,6 +4,11 @@ import { log } from '../../lib/activity.js';
 import { clean, bool, back, notFound, getSettings, fxRate, SHIPMENT_STATUSES, SHIPMENT_MODES, FREIGHT_TYPES, INCOTERMS, CURRENCIES } from '../../lib/util.js';
 import { landed } from '../../lib/landed.js';
 import { saveResponse } from '../../lib/freight-store.js';
+import multer from 'multer';
+import { rfqWorkbook } from '../../lib/quote-form.js';
+import { totals as packTotals } from '../../lib/packing.js';
+
+const quoteFiles = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024, files: 5 } }).array('files', 5);
 
 const r = Router();
 const SHIP_FIELDS = ['order_id', 'forwarder_id', 'mode', 'incoterm', 'origin_port', 'destination_port', 'container_no', 'tracking_no', 'bl_no',
@@ -58,16 +63,31 @@ r.get('/quotes/:id', async (req, res) => {
 });
 
 // paste a reply (WeChat / email) or type the offer → AI reads it → saved as a response
-r.post('/quotes/:id/response', async (req, res) => {
+r.post('/quotes/:id/response', quoteFiles, async (req, res) => {
   const { data: rfq } = await admin.from('freight_rfqs').select('*').eq('id', req.body.rfq_id).eq('request_id', req.params.id).single();
   if (!rfq) return back(res, `/admin/logistics/quotes/${req.params.id}`, { err: 'Choose the forwarder who answered.' });
   const text = String(req.body.text || '').trim();
   const manual = { amount: req.body.amount, currency: req.body.currency, transit_days: req.body.transit_days, valid_until: req.body.valid_until, notes: req.body.notes };
-  if (!text && (manual.amount === '' || manual.amount == null)) return back(res, `/admin/logistics/quotes/${req.params.id}`, { err: 'Paste the reply or type the price.' });
+  const files = req.files || [];
+  if (!text && !files.length && (manual.amount === '' || manual.amount == null)) return back(res, `/admin/logistics/quotes/${req.params.id}`, { err: 'Paste the reply, attach their quotation file, or type the price.' });
   try {
-    const { extracted, usage } = await saveResponse({ rfq, channel: req.body.channel === 'email' ? 'email' : req.body.channel === 'manual' ? 'manual' : 'wechat', text, manual, userId: req.user.id });
+    const { extracted, usage } = await saveResponse({ rfq, channel: req.body.channel === 'email' ? 'email' : req.body.channel === 'manual' ? 'manual' : 'wechat', text, files, manual, userId: req.user.id });
     back(res, `/admin/logistics/quotes/${req.params.id}`, { msg: `Response saved${extracted?.summary ? ': ' + extracted.summary : ''}${usage ? ' — ' + res.locals.aiLine(usage) : ''}` });
   } catch (e) { back(res, `/admin/logistics/quotes/${req.params.id}`, { err: e.message }); }
+});
+
+// the quotation form + packing list for one forwarder (e.g. to send by WeChat) — tagged with their token
+r.get('/quotes/:id/rfq/:rid/form.xlsx', async (req, res) => {
+  const { data: rfq } = await admin.from('freight_rfqs').select('*, freight_requests!freight_rfqs_request_id_fkey(ref, info)').eq('id', req.params.rid).eq('request_id', req.params.id).maybeSingle();
+  if (!rfq) return notFound(res, 'Quote request');
+  const [{ data: order }, { data: rows }] = await Promise.all([
+    admin.from('orders').select('id, order_no').eq('id', rfq.order_id).single(),
+    admin.from('packing_lists').select('*').eq('order_id', rfq.order_id).order('position').order('carton_no'),
+  ]);
+  const fr = rfq.freight_requests || {};
+  const buf = rfqWorkbook({ order, info: fr.info || {}, rows: rows || [], t: packTotals(rows || []), ref: fr.ref, token: rfq.token });
+  res.set({ 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="${fr.ref}-quotation-packing-list-${order.order_no}.xlsx"` });
+  res.send(buf);
 });
 
 r.post('/quotes/:id/rfq/:rid/status', async (req, res) => {

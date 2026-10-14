@@ -4,6 +4,10 @@
   const RFQ = { sent: 'Waiting for quote', quoted: 'Quoted', declined: 'Declined', accepted: 'Accepted' };
   const pillOf = s => s === 'quoted' ? 'quoted' : s === 'accepted' ? 'accepted' : s === 'declined' ? 'declined' : 'new';
   const respOf = id => responses.filter(r => r.rfq_id === id);
+  const quoteOf = id => respOf(id).map(x => x.extracted || {}).filter(e => e.is_quote).slice(-1)[0] || null;
+  const dd = v => (/^\d{4}-\d{2}-\d{2}$/.test(v || '') ? fmt.date(v) : v);
+  const n2 = v => v == null || v === '' ? '' : Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 });
+  const HAND = { pickup: 'Pickup from supplier', warehouse: 'Supplier delivers to their warehouse' };
   const dur = (a, b) => { const m = Math.round((new Date(b) - new Date(a)) / 60000); return m < 60 ? m + ' min' : m < 2880 ? Math.round(m / 60) + ' h' : Math.round(m / 1440) + ' days'; };
   const timeline = [
     ...rfqs.map(r => ({ at: r.sent_at, kind: 'sent', r })),
@@ -27,22 +31,26 @@
 
 <div class="card">
   <h2>Forwarders &amp; offers</h2>
-  <table class="tbl">
-    <thead><tr><th>Forwarder</th><th>Sent</th><th>Status</th><th class="right">Quote</th><th>Transit</th><th>Valid until</th><th>Summary</th><th></th></tr></thead>
+  <table class="tbl offers">
+    <thead><tr><th>Forwarder · quoted by</th><th>Status</th><th class="right">Total</th><th class="right">Unit price</th><th>Transit</th><th>Ship date</th><th>Handover</th><th>Valid until</th><th></th></tr></thead>
     <tbody>
-    <% rfqs.forEach(r => { const rs = respOf(r.id); const first = rs[0]; %>
+    <% rfqs.forEach(r => { const rs = respOf(r.id); const first = rs[0]; const q = quoteOf(r.id) || {}; %>
       <tr class="<%= r.id === bestId ? 'bestrow' : '' %>">
-        <td><%= r.forwarders?.name || r.sent_to %><div class="muted small"><%= r.channel === 'wechat' ? 'WeChat' + (r.forwarders?.wechat ? ' ' + r.forwarders.wechat : '') : r.sent_to %></div></td>
-        <td class="small"><%= fmt.datetime(r.sent_at) %><% if (first) { %><div class="muted">answered after <%= dur(r.sent_at, first.received_at) %></div><% } %></td>
+        <td><%= r.forwarders?.name || q.company || r.sent_to %>
+          <% if (q.contact_person || q.email || q.phone) { %><div class="small"><%= [q.contact_person, q.phone].filter(Boolean).join(' · ') %><%= q.email ? ' · ' : '' %><% if (q.email) { %><a href="mailto:<%= q.email %>"><%= q.email %></a><% } %></div><% } %>
+          <div class="muted small">sent <%= fmt.datetime(r.sent_at) %> · <%= r.channel === 'wechat' ? 'WeChat' : r.sent_to %><%= first ? ' · answered after ' + dur(r.sent_at, first.received_at) : '' %></div></td>
         <td><span class="pill <%= pillOf(r.status) %>"><%= RFQ[r.status] %></span></td>
         <td class="right num"><%= r.quote_amount != null ? fmt.money(r.quote_amount, r.quote_currency || 'USD') : '—' %><% if (r.id === bestId) { %><div class="oktext small">lowest</div><% } %></td>
+        <td class="right num small"><%= q.unit_price != null ? n2(q.unit_price) + ' ' + (q.currency || '') : '—' %><% if (q.unit_basis) { %><div class="muted"><%= q.unit_basis %></div><% } %></td>
         <td><%= r.transit_days ? r.transit_days + ' days' : '—' %></td>
+        <td class="small"><%= q.etd ? fmt.date(q.etd) : '—' %><% if (q.cutoff_date) { %><div class="muted">cut-off <%= fmt.date(q.cutoff_date) %></div><% } %></td>
+        <td class="small"><%= HAND[q.handover] || q.handover || '—' %><% if (q.pickup_date) { %><div class="muted"><%= q.handover === 'warehouse' ? 'deliver by' : 'on' %> <%= fmt.date(q.pickup_date) %></div><% } %></td>
         <td><%= r.valid_until ? fmt.date(r.valid_until) : '—' %></td>
-        <td class="small"><%= r.quote_notes || '' %></td>
         <td class="nowrap">
           <form method="post" action="/admin/logistics/quotes/<%= fr.id %>/rfq/<%= r.id %>/status" class="autosubmit inline">
             <select name="status" class="pillselect" aria-label="Status"><% Object.entries(RFQ).forEach(([k, l]) => { %><option value="<%= k %>" <%= r.status === k ? 'selected' : '' %>><%= l %></option><% }) %></select>
           </form>
+          <a class="small" href="/admin/logistics/quotes/<%= fr.id %>/rfq/<%= r.id %>/form.xlsx" title="Quotation form + packing list for this forwarder (e.g. to send by WeChat)">⇩ Form</a>
         </td>
       </tr>
     <% }) %>
@@ -62,8 +70,19 @@
             <div class="ahead"><strong>Reply from <%= e.r?.forwarders?.name || x.from_address || 'forwarder' %></strong>
               <span class="muted small"><%= fmt.datetime(x.received_at) %> · <%= x.channel === 'email' ? 'email' + (x.from_address ? ' ' + x.from_address : '') : x.channel === 'wechat' ? 'WeChat (pasted)' : 'typed in' %><%= x.profiles ? ' · added by ' + (x.profiles.full_name || x.profiles.email) : '' %></span></div>
             <% if (ex.summary) { %><p class="<%= ex.is_quote ? 'oktext' : 'muted' %>">✦ <%= ex.summary %></p><% } %>
-            <% if ((ex.breakdown || []).length) { %><ul class="small qbreak"><% ex.breakdown.forEach(b => { %><li><%= b.item %>: <%= b.amount != null ? Number(b.amount).toLocaleString('en-US') : '' %> <%= b.currency || '' %><%= b.per ? ' / ' + b.per : '' %></li><% }) %></ul><% } %>
+            <% if (ex.source === 'form') { %><p class="muted small">Read from their filled quotation form<%= ex.file ? ' (' + ex.file + ')' : '' %> — no AI needed.</p><% } %>
+            <% const facts = [['Company', ex.company], ['Address', ex.address], ['Quoted by', ex.contact_person], ['Email', ex.email], ['Phone / WeChat', ex.phone], ['Date quoted', dd(ex.quote_date)], ['Valid until', dd(ex.valid_until)], ['Mode', [ex.mode, ex.scope].filter(Boolean).join(' · ')], ['Transit', ex.transit_days ? ex.transit_days + ' days' : null], ['Ship date (ETD)', dd(ex.etd)], ['Handover', HAND[ex.handover] || ex.handover], [ex.handover === 'warehouse' ? 'Deliver to warehouse by' : 'Pickup date', dd(ex.pickup_date)], ['Warehouse', [ex.warehouse_address, ex.warehouse_contact].filter(Boolean).join(' · ')], ['Cut-off', dd(ex.cutoff_date)]].filter(([, v]) => v); %>
+            <% if (facts.length) { %><dl class="qfacts small"><% facts.forEach(([k, v]) => { %><dt><%= k %></dt><dd><%= v %></dd><% }) %></dl><% } %>
+            <% if ((ex.breakdown || []).length) { %>
+              <table class="tbl qcharges small"><thead><tr><th>Charge</th><th>Basis</th><th class="right">Unit price</th><th class="right">Qty</th><th class="right">Amount</th></tr></thead><tbody>
+              <% ex.breakdown.forEach(b => { %><tr><td><%= b.item %><% if (b.notes) { %><div class="muted"><%= b.notes %></div><% } %></td><td><%= b.per || '' %></td><td class="right num"><%= n2(b.unit_price) %></td><td class="right num"><%= n2(b.qty) %></td><td class="right num"><%= n2(b.amount) %> <%= b.currency || ex.currency || '' %></td></tr><% }) %>
+              </tbody><% if (ex.amount != null) { %><tfoot><tr><td colspan="4">Total</td><td class="right num"><%= n2(ex.amount) %> <%= ex.currency || '' %></td></tr></tfoot><% } %></table>
+            <% } %>
+            <% if (ex.includes) { %><p class="small"><span class="muted">Included:</span> <%= ex.includes %></p><% } %>
+            <% if (ex.excludes) { %><p class="small warntext"><span class="muted">Not included / extra:</span> <%= ex.excludes %></p><% } %>
+            <% if (ex.remarks) { %><p class="small"><span class="muted">Remarks:</span> <%= ex.remarks %></p><% } %>
             <% if (ex.questions) { %><p class="warntext small">Question: <%= ex.questions %></p><% } %>
+            <% if ((ex.files || []).length) { %><p class="small"><% ex.files.forEach(f => { %><a href="/admin/documents/<%= f.id %>/download">📎 <%= f.name %></a> <% }) %></p><% } %>
             <% if (x.body) { %><details><summary class="muted small">Original message</summary><p class="pre small"><%= x.body %></p></details><% } %>
           </li>
         <% } %>
@@ -74,12 +93,13 @@
   <div class="card">
     <h2>Add a response</h2>
     <p class="muted small"><% if (inboundOn) { %>Email replies arrive here automatically. Paste WeChat messages (or anything else) below.<% } else { %>Email replies go to your inbox for now — paste them (or WeChat messages) below. Automatic capture: set up Mailgun — see “Inbound email” in the README.<% } %> AI reads the price, transit time and validity.</p>
-    <form method="post" action="/admin/logistics/quotes/<%= fr.id %>/response">
+    <form method="post" action="/admin/logistics/quotes/<%= fr.id %>/response" enctype="multipart/form-data">
       <div class="row">
         <label>From <select name="rfq_id" required><% rfqs.forEach(r => { %><option value="<%= r.id %>"><%= r.forwarders?.name || r.sent_to %></option><% }) %></select></label>
         <label>Channel <select name="channel"><option value="wechat">WeChat</option><option value="email">Email</option><option value="manual">Phone / other</option></select></label>
       </div>
-      <label>Their message <textarea name="text" rows="6" placeholder="Paste the reply — Chinese or English is fine"></textarea></label>
+      <label>Their message <textarea name="text" rows="5" placeholder="Paste the reply — Chinese or English is fine"></textarea></label>
+      <label>Their quotation file <span class="muted small">— our filled form is read exactly; other Excel, PDF or screenshots are read by AI</span><input type="file" name="files" multiple accept=".xlsx,.pdf,image/*"></label>
       <details class="manualq"><summary class="muted small">…or type the offer yourself</summary>
         <div class="row">
           <label>Amount <input type="number" step="0.01" name="amount"></label>

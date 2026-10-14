@@ -349,31 +349,47 @@ Never invent values — use null when something is not in the document. Skip TOT
 // ---------------------------------------------------------------------------------------------
 const QUOTE_TOOL = {
   name: 'record_freight_quote',
-  description: "Record the forwarder's offer from their reply.",
+  description: "Record the forwarder's offer from their reply (email text, attached quotation PDF/Excel, or screenshot).",
   input_schema: {
     type: 'object',
     properties: {
-      is_quote: { type: 'boolean', description: 'false if the message has no price (e.g. a question, "will check", out-of-office)' },
-      amount: { ...numOrNull, description: 'All-in total for the shipment if given; otherwise the main freight total' },
+      is_quote: { type: 'boolean', description: 'false if there is no price (a question, "will check", out-of-office)' },
+      company: { ...strOrNull, description: "Forwarder's company name" },
+      contact_person: { ...strOrNull, description: 'Person who quoted' },
+      email: strOrNull, phone: { ...strOrNull, description: 'Phone and/or WeChat' },
+      quote_date: { ...strOrNull, description: 'YYYY-MM-DD the quote was issued' },
+      valid_until: { ...strOrNull, description: 'YYYY-MM-DD validity' },
+      amount: { ...numOrNull, description: 'All-in total for the shipment; if only unit prices are given, compute it from the shipment totals in context' },
       currency: { ...strOrNull, description: 'ISO code: USD, CNY, EUR…' },
-      transit_days: { ...numOrNull, description: 'Transit time in days (use the upper value of a range)' },
-      valid_until: { ...strOrNull, description: 'YYYY-MM-DD if a validity date is given' },
+      unit_price: { ...numOrNull, description: 'Main freight unit price' },
+      unit_basis: { ...strOrNull, description: 'per kg / per cbm / per container / per shipment' },
       mode: { ...strOrNull, description: 'Sea FCL / Sea LCL / Air / Express / Rail / Truck' },
-      breakdown: { type: 'array', items: { type: 'object', properties: { item: { type: 'string' }, amount: numOrNull, currency: strOrNull, per: strOrNull } }, description: 'Cost lines as written (freight, origin charges, destination charges, customs, per cbm/kg…)' },
-      includes: strOrNull, excludes: strOrNull,
+      scope: { ...strOrNull, description: 'Port to port / door to door DDP / DDU…' },
+      transit_days: { ...numOrNull, description: 'Transit time in days (upper value of a range)' },
+      etd: { ...strOrNull, description: 'Shipping date / ETD, YYYY-MM-DD' },
+      handover: { type: ['string', 'null'], enum: ['pickup', 'warehouse', null], description: "pickup = they collect from our supplier; warehouse = supplier must deliver to the forwarder's warehouse" },
+      pickup_date: { ...strOrNull, description: 'Pickup date or last day to deliver to their warehouse, YYYY-MM-DD' },
+      warehouse_address: strOrNull, warehouse_contact: strOrNull,
+      cutoff_date: { ...strOrNull, description: 'Warehouse / port cut-off, YYYY-MM-DD' },
+      breakdown: { type: 'array', items: { type: 'object', properties: { item: { type: 'string' }, per: strOrNull, unit_price: numOrNull, qty: numOrNull, amount: numOrNull, currency: strOrNull, notes: strOrNull } }, description: 'Every cost line as written: freight, pickup, warehouse, customs/documents, origin and destination charges, surcharges, insurance, duties, delivery…' },
+      includes: strOrNull, excludes: { ...strOrNull, description: 'Not included / possible extra charges' },
       questions: { ...strOrNull, description: 'Anything the forwarder asks us' },
-      summary: { type: 'string', description: 'One line in English, e.g. "USD 1,850 door-to-door, 32 days, valid to 31 Oct"' },
+      summary: { type: 'string', description: 'One line in English, e.g. "USD 1,850 Sea LCL door to door · 32 days · ETD 2 Nov · valid to 31 Oct · pickup from supplier"' },
     },
     required: ['is_quote', 'summary'],
   },
 };
 
-export async function extractQuote({ text, context }, entity = null) {
-  const system = `You read replies from freight forwarders (often Chinese/English mixed, from email or WeChat) to a freight quote request.
+/** @param {{ text?: string, context?: object, pdf?: Buffer, image?: { data: Buffer, mediaType: string }, sheetText?: string }} src */
+export async function extractQuote({ text, context, pdf, image, sheetText }, entity = null) {
+  const system = `You read replies from freight forwarders (often Chinese/English mixed, from email or WeChat, sometimes with a quotation PDF, Excel or screenshot) to a freight quote request.
 Extract the offer exactly as written. Do not convert currencies. If several options are given, use the cheapest complete option for amount
-and list the others in breakdown. If the price is per cbm/kg, compute the total using the shipment totals given in context and say so in summary.
-Never invent numbers.`;
-  const content = [{ type: 'text', text: `Shipment we asked about: ${JSON.stringify(context || {})}\n\nReply:\n${String(text).slice(0, 15000)}` }];
-  const { input, usage } = await forcedTool({ tool: QUOTE_TOOL, content, system, maxTokens: 2000, feature: 'freight_quote_read', entity });
+and list the others in breakdown. If prices are per cbm/kg, compute the total using the shipment totals given in context and say so in summary.
+Dates as YYYY-MM-DD (assume the current or next year when the year is missing). Never invent numbers or contact details.`;
+  const content = [];
+  if (pdf) content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdf.toString('base64') } });
+  if (image) content.push({ type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.data.toString('base64') } });
+  content.push({ type: 'text', text: `Shipment we asked about: ${JSON.stringify(context || {})}\n\nReply:\n${String(text || '(no text)').slice(0, 15000)}${sheetText ? `\n\nAttached spreadsheet:\n${sheetText.slice(0, 30000)}` : ''}` });
+  const { input, usage } = await forcedTool({ tool: QUOTE_TOOL, content, system, maxTokens: 4000, feature: 'freight_quote_read', entity });
   return { ...input, usage };
 }

@@ -6,7 +6,9 @@ import multer from 'multer';
 import { Router } from '../lib/router.js';
 import { admin } from '../lib/supabase.js';
 import { normalizeInbound, matchKeys, mailgunSignatureOk } from '../lib/freight.js';
-import { saveResponse } from '../lib/freight-store.js';
+import { saveResponse, usefulFiles } from '../lib/freight-store.js';
+import { parseQuoteForm } from '../lib/quote-form.js';
+import { readXlsx } from '../lib/xlsx-read.js';
 import { timingSafeEqual } from 'node:crypto';
 
 const r = Router();
@@ -26,12 +28,19 @@ r.post('/inbound-email', express.json({ limit: '15mb' }), express.urlencoded({ e
     const { data: fr } = await admin.from('freight_requests').select('id').eq('ref', keys.ref).maybeSingle();
     if (fr) ({ data: rfq } = await admin.from('freight_rfqs').select('*').eq('request_id', fr.id).ilike('sent_to', mail.from).maybeSingle());
   }
+  const files = usefulFiles(req.files || []);
+  if (!rfq) { // last chance: the token printed on our quotation form
+    for (const f of files.filter(f => /\.xlsx$/i.test(f.originalname || ''))) {
+      try { const tok = parseQuoteForm(readXlsx(f.buffer))?.token; if (tok) ({ data: rfq } = await admin.from('freight_rfqs').select('*').eq('token', tok).maybeSingle()); } catch { /* not a workbook */ }
+      if (rfq) break;
+    }
+  }
   if (!rfq) {
     console.warn(`[inbound] no matching quote request: from=${mail.from} subject=${mail.subject}`);
     return res.json({ ok: true, matched: false }); // 200 so the provider doesn't retry forever
   }
   try {
-    const { extracted } = await saveResponse({ rfq, channel: 'email', from: mail.from, subject: mail.subject, text: mail.text });
+    const { extracted } = await saveResponse({ rfq, channel: 'email', from: mail.from, subject: mail.subject, text: mail.text, files });
     console.log(`[inbound] reply for rfq ${rfq.id} from ${mail.from}: ${extracted?.summary || 'saved'}`);
     res.json({ ok: true, matched: true });
   } catch (e) {
