@@ -138,7 +138,7 @@ export function rfqEmail({ order, info = {}, rows, t, message, senderName, forwa
     ['Cartons', n(t.cartons)], ['Pieces', n(t.pieces)], ['Gross weight', `${n(t.gross)} kg`], ['Volume', `${t.cbm} cbm`],
     ['Shipping marks', info.marks], ['Cargo notes', info.remarks],
   ].filter(([, v]) => v !== undefined && v !== null && v !== '');
-  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f1f3f6;">
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:0;background:#f1f3f6;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f3f6;"><tr><td align="center" style="padding:28px 12px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:760px;background:#fff;border:1px solid #e3e6eb;border-radius:14px;">
 <tr><td style="padding:26px 30px 6px;font-family:${F};">
@@ -152,11 +152,16 @@ export function rfqEmail({ order, info = {}, rows, t, message, senderName, forwa
     ${rows.map(x => `<tr>${td(x.carton_no)}${td([x.description, x.sku].filter(Boolean).join(' · '))}${td(n(x.cartons), 1)}${td(n(x.quantity), 1)}${td(x.length_cm ? `${Number(x.length_cm)}×${Number(x.width_cm)}×${Number(x.height_cm)}` : '', 1)}${td(n(x.gross_weight_kg), 1)}${td(x.length_cm ? (x.length_cm * x.width_cm * x.height_cm / 1e6 * x.cartons).toFixed(3) : '', 1)}</tr>`).join('')}
     <tr><td style="padding:8px;font-weight:700;font-size:13px;">TOTAL</td><td></td><td style="padding:8px;text-align:right;font-weight:700;font-size:13px;">${n(t.cartons)}</td><td></td><td></td><td style="padding:8px;text-align:right;font-weight:700;font-size:13px;">${n(t.gross)} kg</td><td style="padding:8px;text-align:right;font-weight:700;font-size:13px;">${t.cbm}</td></tr>
   </table>
-  <p style="font-size:15px;line-height:1.6;color:#2f3a4a;margin-top:20px;">Please include: freight, local charges at origin and destination, transit time and validity. Reply to this email with your offer.</p>
+  <p style="font-size:15px;line-height:1.6;color:#2f3a4a;margin-top:20px;">Please include: freight, local charges at origin and destination, transit time and validity.</p>
+  <div style="margin:16px 0 18px;padding:12px 16px;border:1px solid #f1c2c2;border-left:4px solid #c62828;border-radius:8px;background:#fdf3f3;font-size:14px;line-height:1.6;color:#c62828;">
+    <strong style="font-weight:600;">Important: please send your quote by replying to this email.</strong><br>
+    Quotes sent as a new email are not received by our system. Email is a must; a copy may also be sent via WeChat.
+    <div style="margin-top:6px;color:#b23b3b;font-size:13px;">重要：请直接回复本邮件报价。新建邮件发送的报价我们无法收到。必须通过邮件报价，副本可同时发微信。</div>
+  </div>
   <p style="font-size:15px;color:#2f3a4a;">Best regards,<br><span style="color:#6b7686;">Logistics Department</span><br><strong style="font-weight:600;color:#0f3a5c;">Lumi Trade</strong></p>
 </td></tr>
 <tr><td style="padding:14px 30px 24px;font-family:${F};font-size:12px;color:#7a8494;border-top:1px solid #eef0f3;">Lumi Trade · Sourcing, orders and shipments in one place</td></tr>
 </table></td></tr></table></body></html>`;
-  const text = [`Freight quote request — ${order.order_no}`, ...facts.map(([k, v]) => `${k}: ${v}`), '', message || '', 'Packing list attached (Excel).', '', 'Best regards,', 'Logistics Department', 'Lumi Trade'].join('\n');
+  const text = [`Freight quote request — ${order.order_no}`, ...facts.map(([k, v]) => `${k}: ${v}`), '', message || '', 'Packing list attached (Excel).', '', 'Please include: freight, local charges at origin and destination, transit time and validity.', '', 'IMPORTANT: please send your quote by REPLYING to this email. Quotes sent as a new email are not received by our system. Email is a must; a copy may also be sent via WeChat.', '重要：请直接回复本邮件报价。新建邮件发送的报价我们无法收到。必须通过邮件报价，副本可同时发微信。', '', 'Best regards,', 'Logistics Department', 'Lumi Trade'].join('\n');
   return { subject: `Freight quote request · ${order.order_no}${info.mode ? ' · ' + info.mode : ''}${info.pol && info.pod ? ` · ${info.pol} → ${info.pod}` : ''}`, html, text };
 }
