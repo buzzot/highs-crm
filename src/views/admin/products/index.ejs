@@ -1,32 +1,80 @@
 <%- include('../../partials/head') %>
+<%
+  const qs = k => query[k] || '';
+  const exportUrl = '/admin/products/export.csv?' + new URLSearchParams(Object.fromEntries(['q', 'category', 'supplier', 'sort', 'issues'].filter(k => query[k]).map(k => [k, query[k]]))).toString();
+  const usd = (v, d = 2) => v == null ? '—' : '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const cnt = typeof photoCount !== 'undefined' ? photoCount : {};
+%>
 <div class="pagehead">
-  <h1>Products</h1>
-  <div class="actions"><a class="btn" href="/admin/products/import">⇪ Import from Excel / PDF</a><a class="btn primary" href="/admin/products/new">+ New product</a></div>
+  <div><h1>Products</h1><p class="muted"><%= products.length %> of <%= total %> · landed = factory price + 40HQ sea freight ($<%= container.freight_40hq_usd %>) per unit · wholesale @<%= container.wholesale_markup_pct %>%</p></div>
+  <div class="actions">
+    <a class="btn" href="<%= exportUrl %>">⇩ Export CSV</a>
+    <a class="btn" href="/admin/products/import">⇪ Import from Excel / PDF</a>
+    <a class="btn primary" href="/admin/products/new">+ New product</a>
+  </div>
 </div>
-<div class="card">
-  <form class="row tight" method="get">
-    <input name="q" value="<%= query.q || '' %>" placeholder="Search name, SKU, HS code…">
-    <select name="category"><option value="">All categories</option><% categories.forEach(c => { %><option <%= query.category === c ? 'selected' : '' %>><%= c %></option><% }) %></select>
-    <select name="supplier"><option value="">All suppliers</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= query.supplier === s.id ? 'selected' : '' %>><%= s.name %></option><% }) %></select>
-    <button class="btn">Filter</button>
-  </form>
-  <table class="tbl">
-    <thead><tr><th></th><th>Product</th><th>Category</th><th>Supplier</th><th class="right">Unit cost</th><th>MOQ</th><th>HS code</th><th>Carton</th></tr></thead>
+
+<form class="filterbar" method="get">
+  <input name="q" value="<%= qs('q') %>" placeholder="Search name, SKU, HS code, supplier…" class="grow">
+  <select name="category"><option value="">All categories</option><% categories.forEach(c => { %><option <%= query.category === c ? 'selected' : '' %>><%= c %></option><% }) %></select>
+  <select name="supplier"><option value="">All suppliers</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= query.supplier === s.id ? 'selected' : '' %>><%= s.name %></option><% }) %></select>
+  <select name="sort"><% Object.entries(sorts).forEach(([k, l]) => { %><option value="<%= k %>" <%= sort === k ? 'selected' : '' %>><%= l %></option><% }) %></select>
+  <label class="check"><input type="checkbox" name="issues" value="1" <%= query.issues ? 'checked' : '' %>> Missing data</label>
+  <button class="btn primary">Apply</button>
+  <% if (query.q || query.category || query.supplier || query.issues || (query.sort && query.sort !== 'name')) { %><a class="link small" href="/admin/products">Clear</a><% } %>
+</form>
+
+<form method="get" action="/admin/products/compare" class="card tablecard" id="cmpForm">
+  <div class="bulkbar">
+    <span><strong id="selCount">0</strong> selected</span>
+    <button class="btn small" name="go" value="1" id="btnCompare" disabled>Compare</button>
+    <button class="btn small ai" name="ai" value="1" id="btnAi" disabled>✦ AI compare</button>
+    <span class="muted small" id="selHint">Tick 2–6 products to compare them side by side, or let AI rank them.</span>
+  </div>
+  <table class="tbl plist">
+    <thead><tr>
+      <th class="cbcell"><input type="checkbox" id="selAll" aria-label="Select all"></th>
+      <th></th><th>Product</th><th>Category</th><th class="right">Factory price</th><th class="right">Landed</th><th class="right">Sugg. wholesale</th>
+      <th class="right">MOQ</th><th class="right">Units / 40HQ</th><th>HS code</th><th>Data</th>
+    </tr></thead>
     <tbody>
-    <% if (!products.length) { %><tr><td colspan="8" class="muted">No products found.</td></tr><% } %>
-    <% products.forEach(p => { %>
+    <% if (!products.length) { %><tr><td colspan="11" class="muted">No products found.</td></tr><% } %>
+    <% products.forEach(p => { const m = p.m; %>
       <tr>
-        <td class="thumbcell"><% if (thumb[p.id]) { %><img class="thumb" loading="lazy" src="/admin/documents/<%= thumb[p.id] %>/download" alt=""><% } else { %><span class="thumb empty"></span><% } %></td>
-        <td><a href="/admin/products/<%= p.id %>"><strong><%= p.name %></strong></a><div class="muted small"><%= [p.sku, p.supplier_sku].filter(Boolean).join(' · ') %></div></td>
+        <td class="cbcell"><input type="checkbox" name="ids" value="<%= p.id %>" class="sel" aria-label="Select <%= p.name %>"></td>
+        <td class="thumbcell"><% if (thumb[p.id]) { %><img class="thumb" loading="lazy" src="/admin/documents/<%= thumb[p.id] %>/download" alt=""><% } else { %><span class="thumb empty">—</span><% } %></td>
+        <td class="pname">
+          <a href="/admin/products/<%= p.id %>"><strong><%= p.name %></strong></a><% if (cnt[p.id] > 1) { %> <span class="pc" title="<%= cnt[p.id] %> photos"><%= cnt[p.id] %></span><% } %>
+          <div class="muted small"><% if (p.suppliers) { %><a href="/admin/suppliers/<%= p.suppliers.id %>"><%= p.suppliers.name %></a><% } else { %>no supplier<% } %><%= p.supplier_sku ? ' · ' + p.supplier_sku : p.sku ? ' · ' + p.sku : '' %></div>
+        </td>
         <td><%= p.category || '—' %></td>
-        <td><% if (p.suppliers) { %><a href="/admin/suppliers/<%= p.suppliers.id %>"><%= p.suppliers.name %></a><% } else { %>—<% } %></td>
-        <td class="right"><%= fmt.money(p.unit_cost, p.cost_currency, 4) %></td>
-        <td><%= p.moq ?? '—' %></td>
-        <td><%= p.hs_code || '—' %></td>
-        <td class="small"><%= p.carton_qty ? p.carton_qty + ' pcs · ' + fmt.num(p.carton_cbm, 3) + ' cbm' : '—' %></td>
+        <td class="right num"><%= p.unit_cost != null ? fmt.money(p.unit_cost, p.cost_currency, 2) : '—' %><div class="muted small"><%= p.cost_currency !== 'USD' && m.priceUsd != null ? usd(m.priceUsd) + ' · FOB' : 'FOB' %></div></td>
+        <td class="right num"><strong><%= usd(m.landedUsd, 3) %></strong><div class="muted small">FCL 40HQ</div></td>
+        <td class="right num"><%= usd(m.wholesaleUsd) %><div class="muted small">@<%= m.markupPct %>%</div></td>
+        <td class="right num"><%= p.moq != null ? Number(p.moq).toLocaleString('en-US') : '—' %></td>
+        <td class="right num"><%= m.unitsPer40hq != null ? m.unitsPer40hq.toLocaleString('en-US') : '—' %></td>
+        <td class="num"><%= p.hs_code || '—' %></td>
+        <td><% if (m.issues.length) { %><span class="badge warn" title="<%= m.issues.join(', ') %>"><%= m.issues.length %> missing</span><% } else { %><span class="badge ok">complete</span><% } %></td>
       </tr>
     <% }) %>
     </tbody>
   </table>
-</div>
+</form>
+<script>
+(function () {
+  const boxes = [...document.querySelectorAll('.sel')], all = document.getElementById('selAll');
+  const sync = () => {
+    const n = boxes.filter(b => b.checked).length;
+    document.getElementById('selCount').textContent = n;
+    const ok = n >= 2 && n <= 6;
+    document.getElementById('btnCompare').disabled = !ok; document.getElementById('btnAi').disabled = !ok;
+    document.getElementById('selHint').textContent = n > 6 ? 'Compare up to six products at a time.' : n === 1 ? 'Tick at least one more product.' : 'Tick 2–6 products to compare them side by side, or let AI rank them.';
+    boxes.forEach(b => b.closest('tr').classList.toggle('picked', b.checked));
+  };
+  boxes.forEach(b => b.addEventListener('change', sync));
+  all && all.addEventListener('change', () => { boxes.forEach(b => { b.checked = all.checked; }); sync(); });
+  document.getElementById('btnAi').addEventListener('click', () => { document.getElementById('btnAi').textContent = '✦ AI is comparing…'; });
+  sync();
+})();
+</script>
 <%- include('../../partials/foot') %>

@@ -1,6 +1,6 @@
 import { Router } from '../lib/router.js';
 import { admin, anon } from '../lib/supabase.js';
-import { setSession, clearSession, requireAuth } from '../middleware/auth.js';
+import { setSession, clearSession, requireAuth, markLogin } from '../middleware/auth.js';
 import { findInvite } from '../lib/invites.js';
 import { homeFor } from '../lib/util.js';
 import { log } from '../lib/activity.js';
@@ -43,7 +43,7 @@ r.post('/login', async (req, res) => {
     return res.status(403).render('auth/login', { title: 'Sign in', error: 'Your account is not activated yet. Ask an administrator.', next: '' });
   }
   if (!twoFactorOn()) {
-    setSession(res, data.session);
+    setSession(res, data.session); markLogin(data.session);
     return res.redirect(safeNext(next) || home(profile.role));
   }
   // Step 2: keep the (encrypted) session aside until the emailed code is entered.
@@ -78,7 +78,7 @@ r.post('/login/verify', async (req, res) => {
   const { data: profile } = await admin.from('profiles').select('role, active').eq('id', data.user.id).single();
   if (!profile?.active) return res.status(403).render('auth/login', { title: 'Sign in', error: 'Your account is not active.', next: '' });
   res.clearCookie(PENDING);
-  setSession(res, data.session);
+  setSession(res, data.session); markLogin(data.session);
   console.log(`[login] ${pending.e}: signed in with email code`);
   res.redirect(pending.n || home(profile.role));
 });
@@ -114,7 +114,7 @@ r.post('/auth/accept', async (req, res) => {
   if (full_name) await admin.from('profiles').update({ full_name }).eq('id', data.user.id);
 
   const { data: signed } = await anon.auth.signInWithPassword({ email: data.user.email, password });
-  if (signed?.session) setSession(res, signed.session);
+  if (signed?.session) { setSession(res, signed.session); markLogin(signed.session); }
   const { data: profile } = await admin.from('profiles').select('role').eq('id', data.user.id).single();
   res.redirect(homeFor(profile?.role));
 });
@@ -209,7 +209,7 @@ r.post('/invite/:token', async (req, res) => {
 
   // the email code already proved ownership of the address → sign straight in
   const { data: signed } = await anon.auth.signInWithPassword({ email: inv.email, password });
-  if (signed?.session) setSession(res, signed.session);
+  if (signed?.session) { setSession(res, signed.session); markLogin(signed.session); }
   res.clearCookie(INVITE_OK);
   res.redirect(home(inv.role));
 });
@@ -246,7 +246,7 @@ r.post('/reset/:email/:token', async (req, res) => {
   if (error) return resetView(res.status(400), { error: error.message });
   // the link proved access to the mailbox → sign straight in
   const { data: signed } = await anon.auth.signInWithPassword({ email, password });
-  if (signed?.session) setSession(res, signed.session);
+  if (signed?.session) { setSession(res, signed.session); markLogin(signed.session); }
   console.log(`[reset] ${email}: password changed`);
   res.redirect(home(p.role) + '?msg=' + encodeURIComponent('Password changed.'));
 });

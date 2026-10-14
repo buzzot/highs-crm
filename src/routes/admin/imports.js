@@ -49,7 +49,10 @@ r.get('/', async (req, res) => {
 
 r.post('/', upload.single('file'), async (req, res) => {
   const f = req.file;
-  if (!f) return back(res, '/admin/products/import', { err: 'Choose a file to import.' });
+  // started from a supplier's page: errors go back there, and the supplier is already known
+  const fixedSupplier = /^[0-9a-f-]{36}$/i.test(req.body.supplier_id || '') ? req.body.supplier_id : null;
+  const home = fixedSupplier ? `/admin/suppliers/${fixedSupplier}` : '/admin/products/import';
+  if (!f) return back(res, home, { err: 'Choose a file to import.' });
   const ext = (f.originalname.split('.').pop() || '').toLowerCase();
   const id = randomUUID();
   let method = 'template', supplier = {}, rows = [], notes = [], model = null;
@@ -90,9 +93,9 @@ r.post('/', upload.single('file'), async (req, res) => {
     }
   } catch (e) {
     console.error('[import]', e);
-    return back(res, '/admin/products/import', { err: e.message });
+    return back(res, home, { err: e.message });
   }
-  if (!rows.length) return back(res, '/admin/products/import', { err: 'No products found in this file.' });
+  if (!rows.length) return back(res, home, { err: 'No products found in this file.' });
 
   // keep the original file and row photos in storage (under imports/<id>/)
   const filePath = `imports/${id}/original.${ext}`;
@@ -112,7 +115,11 @@ r.post('/', upload.single('file'), async (req, res) => {
 
   // supplier duplicate check
   supplier = Object.fromEntries(SUPPLIER_FIELDS.map(k => [k, s(supplier?.[k]) || null]));
-  const match = matchSupplier(supplier, await allSuppliers());
+  let match = matchSupplier(supplier, await allSuppliers());
+  if (fixedSupplier) {
+    const { data: fs } = await admin.from('suppliers').select('id, name, city').eq('id', fixedSupplier).maybeSingle();
+    if (fs) match = { status: 'match', candidates: [{ id: fs.id, name: fs.name, city: fs.city || null, score: 1, strong: true, reasons: ['imported from this supplier’s page'] }] };
+  }
 
   // AI second opinion on the rows (never blocks the import)
   if (aiEnabled()) {

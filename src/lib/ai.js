@@ -84,6 +84,38 @@ Respond ONLY with JSON: {"ok":bool,"score":0-100,"issues":[{"severity":"high|med
 }
 
 /** Draft a client-facing request summary / sourcing brief from a free-text request. */
+/**
+ * Compare 2–6 products for a buyer. Returns
+ * { summary, recommended_id, ranking: [{ id, score, verdict, pros: [], cons: [] }], risks: [], questions: [] }.
+ * Uses a plain JSON answer (no tool forcing) so it works with every model.
+ */
+export async function compareProducts({ products, purpose }) {
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error('AI is not configured (set ANTHROPIC_API_KEY).');
+  const client = new Anthropic();
+  const system = `You are a senior sourcing manager at a trading company that buys from Chinese factories and sells wholesale.
+Compare the products for a buyer. Weigh: landed cost per unit (factory price + sea freight per unit), price per unit of function/size,
+MOQ and the money tied up at MOQ, units per 40HQ container (shipping efficiency), packaging data quality (missing carton size/weight/HS code is a risk),
+supplier factors (rating, export rights, lead time, company type), and anything in the specs or description.
+Be concrete and short; use the numbers you are given; never invent data — say what is missing.
+Respond ONLY with JSON:
+{"summary": string (2–4 sentences), "recommended_id": string|null,
+ "ranking": [{"id": string, "score": 0-100, "verdict": string (one line), "pros": [string], "cons": [string]}],
+ "risks": [string], "questions": [string] (what to ask the suppliers before ordering)}`;
+  const msg = await client.messages.create({
+    model: MODEL, max_tokens: 4000, system,
+    messages: [{ role: 'user', content: `${purpose ? `What the buyer needs: ${purpose}\n\n` : ''}Products (prices in USD unless noted):\n${JSON.stringify(products, null, 1)}` }],
+  });
+  const text = msg.content.map(c => (c.type === 'text' ? c.text : '')).join('');
+  const a = text.indexOf('{'), b = text.lastIndexOf('}');
+  let out;
+  try { out = JSON.parse(text.slice(a, b + 1)); } catch { throw new Error('AI answer could not be read — try again.'); }
+  const ids = new Set(products.map(p => p.id));
+  out.ranking = (out.ranking || []).filter(x => ids.has(x.id)).sort((x, y) => (y.score || 0) - (x.score || 0));
+  if (!ids.has(out.recommended_id)) out.recommended_id = out.ranking[0]?.id || null;
+  out.risks ||= []; out.questions ||= [];
+  return { ...out, model: MODEL, at: new Date().toISOString() };
+}
+
 export async function summarizeRequest(request) {
   if (!process.env.ANTHROPIC_API_KEY) return null;
   const client = new Anthropic();

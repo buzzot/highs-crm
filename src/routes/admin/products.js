@@ -1,7 +1,9 @@
 import { Router } from '../../lib/router.js';
 import { admin } from '../../lib/supabase.js';
 import multer from 'multer';
-import { clean, notFound } from '../../lib/util.js';
+import { clean, notFound, getSettings, fxRate } from '../../lib/util.js';
+import { productMetrics } from '../../lib/product-metrics.js';
+import { compareProducts } from '../../lib/ai.js';
 import { uploadDocument, deleteDocument } from '../../lib/storage.js';
 
 // product photos: up to 12 images per save, 10 MB each, stored in Supabase Storage (bucket "documents")
@@ -51,22 +53,94 @@ async function formData() {
   return data || [];
 }
 
+// ---------- list (filters, sort, estimates), CSV export and comparison ----------
+const SORTS = {
+  name: ['Name A–Z', (a, b) => a.name.localeCompare(b.name)],
+  newest: ['Newest first', (a, b) => String(b.created_at).localeCompare(String(a.created_at))],
+  price: ['Factory price ↑', (a, b) => nz(a.m.priceUsd) - nz(b.m.priceUsd)],
+  price_desc: ['Factory price ↓', (a, b) => nz(b.m.priceUsd, -1) - nz(a.m.priceUsd, -1)],
+  landed: ['Landed ↑', (a, b) => nz(a.m.landedUsd) - nz(b.m.landedUsd)],
+  moq: ['MOQ ↑', (a, b) => nz(a.moq) - nz(b.moq)],
+  per40: ['Units / 40HQ ↓', (a, b) => nz(b.m.unitsPer40hq, -1) - nz(a.m.unitsPer40hq, -1)],
+  issues: ['Most issues', (a, b) => b.m.issues.length - a.m.issues.length],
+};
+const nz = (v, empty = Infinity) => (v == null ? empty : Number(v));
+
+async function listProducts(query) {
+  const settings = await getSettings(admin);
+  const toUsd = c => fxRate(settings, c, 'USD');
+  const [{ data }, suppliers] = await Promise.all([
+    admin.from('products').select('*, suppliers(id, name, rating, lead_time_days, can_export_official, company_type, city)').order('name'),
+    formData(),
+  ]);
+  const all = (data || []).map(p => ({ ...p, m: productMetrics(p, toUsd, settings.container) }));
+  const categories = [...new Set(all.map(p => p.category).filter(Boolean))].sort();
+  const q = String(query.q || '').trim().toLowerCase();
+  let rows = all.filter(p => (!q || [p.name, p.sku, p.supplier_sku, p.hs_code, p.category, p.description, p.suppliers?.name].some(x => String(x || '').toLowerCase().includes(q)))
+    && (!query.category || p.category === query.category)
+    && (!query.supplier || p.supplier_id === query.supplier)
+    && (!query.issues || p.m.issues.length > 0));
+  const sort = SORTS[query.sort] ? query.sort : 'name';
+  rows = rows.sort(SORTS[sort][1]);
+  return { rows, total: all.length, categories, suppliers, settings, sort };
+}
+
+async function firstPhotos(ids) {
+  if (!ids.length) return {};
+  const { data } = await admin.from('documents').select('id, entity_id').eq('entity_type', 'product').eq('kind', 'product_photo').in('entity_id', ids).order('created_at');
+  const out = {}, count = {};
+  (data || []).forEach(d => { out[d.entity_id] ||= d.id; count[d.entity_id] = (count[d.entity_id] || 0) + 1; });
+  return { first: out, count };
+}
+
 r.get('/', async (req, res) => {
-  let q = admin.from('products').select('*, suppliers(id, name)').order('name');
-  const s = like(req.query.q);
-  if (s) q = q.or(`name.ilike.%${s}%,sku.ilike.%${s}%,supplier_sku.ilike.%${s}%,hs_code.ilike.%${s}%`);
-  if (req.query.category) q = q.eq('category', req.query.category);
-  if (req.query.supplier) q = q.eq('supplier_id', req.query.supplier);
-  const [{ data }, { data: cats }, suppliers] = await Promise.all([q, admin.from('products').select('category'), formData()]);
-  const categories = [...new Set((cats || []).map(c => c.category).filter(Boolean))].sort();
-  // first photo per product for thumbnails
-  const ids = (data || []).map(p => p.id);
-  const { data: photos } = ids.length
-    ? await admin.from('documents').select('id, entity_id').eq('entity_type', 'product').eq('kind', 'product_photo').in('entity_id', ids)
-    : { data: [] };
-  const thumb = {};
-  (photos || []).forEach(p => { thumb[p.entity_id] ||= p.id; });
-  res.render('admin/products/index', { title: 'Products', products: data || [], categories, suppliers, thumb });
+  const { rows, total, categories, suppliers, settings, sort } = await listProducts(req.query);
+  const photos = await firstPhotos(rows.map(p => p.id));
+  res.render('admin/products/index', {
+    title: 'Products', products: rows, total, categories, suppliers, thumb: photos.first || {}, photoCount: photos.count || {},
+    sorts: Object.fromEntries(Object.entries(SORTS).map(([k, [label]]) => [k, label])), sort, container: settings.container,
+  });
+});
+
+r.get('/export.csv', async (req, res) => {
+  const { rows } = await listProducts(req.query);
+  const cols = [['Name', p => p.name], ['SKU', p => p.sku], ['Supplier SKU', p => p.supplier_sku], ['Supplier', p => p.suppliers?.name], ['Category', p => p.category],
+    ['Factory price', p => p.unit_cost], ['Currency', p => p.cost_currency], ['Factory price USD', p => p.m.priceUsd], ['Landed USD (FCL 40HQ)', p => p.m.landedUsd],
+    ['Suggested wholesale USD', p => p.m.wholesaleUsd], ['MOQ', p => p.moq], ['Units per 40HQ', p => p.m.unitsPer40hq], ['HS code', p => p.hs_code],
+    ['Pcs per carton', p => p.carton_qty], ['Carton cbm', p => p.carton_cbm], ['Carton kg', p => p.carton_weight_kg], ['Missing data', p => p.m.issues.join('; ')]];
+  const cell = v => { const t = v == null ? '' : String(v); return /[",\n;]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const csv = '﻿' + [cols.map(c => c[0]).join(','), ...rows.map(p => cols.map(c => cell(c[1](p))).join(','))].join('\r\n');
+  res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="lumi-trade-products-${new Date().toISOString().slice(0, 10)}.csv"` });
+  res.send(csv);
+});
+
+// Compare 2–6 products side by side; with ai=1 the AI ranks them as well.
+r.get('/compare', async (req, res) => {
+  const ids = [...new Set([].concat(req.query.ids || []).flatMap(x => String(x).split(',')).filter(x => /^[0-9a-f-]{36}$/i.test(x)))].slice(0, 6);
+  if (ids.length < 2) return res.redirect('/admin/products?err=' + encodeURIComponent('Tick at least two products to compare (up to six).'));
+  const settings = await getSettings(admin);
+  const toUsd = c => fxRate(settings, c, 'USD');
+  const { data } = await admin.from('products').select('*, suppliers(id, name, rating, lead_time_days, can_export_official, company_type, city, country)').in('id', ids);
+  const products = ids.map(id => (data || []).find(p => p.id === id)).filter(Boolean).map(p => ({ ...p, m: productMetrics(p, toUsd, settings.container) }));
+  const photos = await firstPhotos(products.map(p => p.id));
+  let ai = null, aiError = null;
+  if (req.query.ai) {
+    try {
+      ai = await compareProducts({
+        purpose: String(req.query.purpose || '').slice(0, 500),
+        products: products.map(p => ({
+          id: p.id, name: p.name, category: p.category, description: p.description, specs: p.spec,
+          supplier: p.suppliers ? { name: p.suppliers.name, rating: p.suppliers.rating, lead_time_days: p.suppliers.lead_time_days, export_rights: p.suppliers.can_export_official, type: p.suppliers.company_type } : null,
+          factory_price: p.unit_cost, currency: p.cost_currency, factory_price_usd: p.m.priceUsd, landed_usd_fcl40hq: p.m.landedUsd,
+          suggested_wholesale_usd: p.m.wholesaleUsd, moq: p.moq, money_at_moq_usd: p.m.moqValueUsd, units_per_40hq: p.m.unitsPer40hq,
+          pcs_per_carton: p.carton_qty, carton_cbm: p.carton_cbm, carton_kg: p.carton_weight_kg, unit_weight_kg: p.unit_weight_kg, hs_code: p.hs_code,
+          missing_data: p.m.issues,
+        })),
+      });
+    } catch (e) { aiError = e.message; console.error('[compare ai]', e.message); }
+  }
+  const specKeys = [...new Set(products.flatMap(p => Object.keys(p.spec || {})))];
+  res.render('admin/products/compare', { title: 'Compare products', products, thumb: photos.first || {}, specKeys, ai, aiError, container: settings.container, purpose: req.query.purpose || '' });
 });
 
 r.get('/new', async (req, res) => res.render('admin/products/form', {

@@ -1,0 +1,112 @@
+<%- include('../../partials/head') %>
+<%
+  const usd = (v, d = 2) => v == null ? '—' : '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const n0 = v => v == null || v === '' ? '—' : Number(v).toLocaleString('en-US');
+  const ids = products.map(p => p.id);
+  const urlWith = list => '/admin/products/compare?' + list.map(id => 'ids=' + id).join('&');
+  // best value per row → highlighted
+  const best = (vals, dir = 'low') => {
+    const ok = vals.map((v, i) => [v == null || v === '' ? null : Number(v), i]).filter(([v]) => v != null && Number.isFinite(v));
+    if (ok.length < 2) return new Set();
+    const t = dir === 'low' ? Math.min(...ok.map(x => x[0])) : Math.max(...ok.map(x => x[0]));
+    if (ok.every(x => x[0] === t)) return new Set();
+    return new Set(ok.filter(x => x[0] === t).map(x => x[1]));
+  };
+  const rows = [
+    ['Pricing'],
+    ['Factory price', p => p.unit_cost != null ? fmt.money(p.unit_cost, p.cost_currency, 2) : '—', p => p.m.priceUsd, 'low'],
+    ['Factory price, USD', p => usd(p.m.priceUsd, 3), p => p.m.priceUsd, 'low'],
+    ['Freight per unit (40HQ)', p => usd(p.m.freightPerUnit, 3), p => p.m.freightPerUnit, 'low'],
+    ['Landed, USD', p => usd(p.m.landedUsd, 3), p => p.m.landedUsd, 'low'],
+    ['Suggested wholesale', p => usd(p.m.wholesaleUsd), p => p.m.wholesaleUsd, 'low'],
+    ['Ordering'],
+    ['MOQ', p => n0(p.moq), p => p.moq, 'low'],
+    ['Money at MOQ', p => usd(p.m.moqValueUsd, 0), p => p.m.moqValueUsd, 'low'],
+    ['Lead time', p => p.suppliers?.lead_time_days ? p.suppliers.lead_time_days + ' days' : '—', p => p.suppliers?.lead_time_days, 'low'],
+    ['Packing & shipping'],
+    ['Units per 40HQ', p => n0(p.m.unitsPer40hq), p => p.m.unitsPer40hq, 'high'],
+    ['Pcs per carton', p => n0(p.carton_qty)],
+    ['Carton size', p => p.carton_length_cm ? [p.carton_length_cm, p.carton_width_cm, p.carton_height_cm].map(Number).join(' × ') + ' cm' : '—'],
+    ['Carton volume', p => p.carton_cbm ? Number(p.carton_cbm).toFixed(3) + ' cbm' : '—'],
+    ['Carton weight', p => p.carton_weight_kg ? Number(p.carton_weight_kg) + ' kg' : '—'],
+    ['Unit weight', p => p.unit_weight_kg ? Number(p.unit_weight_kg) + ' kg' : '—', p => p.unit_weight_kg, 'low'],
+    ['Unit size', p => p.unit_length_cm ? [p.unit_length_cm, p.unit_width_cm, p.unit_height_cm].map(Number).join(' × ') + ' cm' : '—'],
+    ['HS code', p => p.hs_code || '—'],
+    ['Supplier'],
+    ['Supplier', p => p.suppliers ? p.suppliers.name : '—'],
+    ['Rating', p => p.suppliers?.rating ? '★'.repeat(p.suppliers.rating) : '—', p => p.suppliers?.rating, 'high'],
+    ['Export rights', p => p.suppliers ? (p.suppliers.can_export_official ? 'Yes' : 'No') : '—'],
+    ['Location', p => [p.suppliers?.city, p.suppliers?.country].filter(Boolean).join(', ') || '—'],
+  ];
+  const ranked = ai ? Object.fromEntries((ai.ranking || []).map((r, i) => [r.id, { ...r, place: i + 1 }])) : {};
+%>
+<div class="pagehead">
+  <div><a class="back" href="/admin/products">← Products</a><h1>Compare <%= products.length %> products</h1>
+    <p class="muted">Best value in each row is highlighted. Landed = factory price + $<%= container.freight_40hq_usd %> 40HQ freight spread over a full container.</p></div>
+  <form method="get" action="/admin/products/compare" class="aiask">
+    <% ids.forEach(id => { %><input type="hidden" name="ids" value="<%= id %>"><% }) %>
+    <input type="hidden" name="ai" value="1">
+    <input name="purpose" value="<%= purpose %>" placeholder="Optional: what is it for? e.g. 'budget line for EU supermarkets'">
+    <button class="btn ai" onclick="this.textContent='✦ AI is comparing…'">✦ <%= ai ? 'Ask AI again' : 'AI compare' %></button>
+  </form>
+</div>
+
+<% if (aiError) { %><div class="alert err">AI compare failed: <%= aiError %></div><% } %>
+<% if (ai) { const rec = products.find(p => p.id === ai.recommended_id); %>
+  <div class="card aiverdict">
+    <div class="aihead"><span class="aibadge">✦ AI verdict</span><% if (rec) { %> <span>Recommended: <strong><%= rec.name %></strong></span><% } %><span class="muted small"><%= ai.model %></span></div>
+    <p class="aisum"><%= ai.summary %></p>
+    <div class="aigrid">
+      <% (ai.ranking || []).forEach((r, i) => { const p = products.find(x => x.id === r.id); if (!p) return; %>
+        <div class="airank <%= i === 0 ? 'top' : '' %>">
+          <div class="arhead"><span class="place">#<%= i + 1 %></span><strong><%= p.name %></strong><span class="score"><%= r.score %></span></div>
+          <% if (r.verdict) { %><p class="small"><%= r.verdict %></p><% } %>
+          <ul class="pc pros"><% (r.pros || []).forEach(x => { %><li><%= x %></li><% }) %></ul>
+          <ul class="pc cons"><% (r.cons || []).forEach(x => { %><li><%= x %></li><% }) %></ul>
+        </div>
+      <% }) %>
+    </div>
+    <div class="grid2 even aiextra">
+      <% if (ai.risks.length) { %><div><h3>Risks</h3><ul><% ai.risks.forEach(x => { %><li><%= x %></li><% }) %></ul></div><% } %>
+      <% if (ai.questions.length) { %><div><h3>Ask the suppliers</h3><ul><% ai.questions.forEach(x => { %><li><%= x %></li><% }) %></ul></div><% } %>
+    </div>
+  </div>
+<% } %>
+
+<div class="card tablecard cmpwrap">
+  <table class="tbl cmp" style="--n: <%= products.length %>">
+    <thead>
+      <tr>
+        <th class="rowlabel"></th>
+        <% products.forEach(p => { const rk = ranked[p.id]; %>
+          <th class="pcol <%= ai && ai.recommended_id === p.id ? 'rec' : '' %>">
+            <div class="cmphead">
+              <% if (products.length > 2) { %><a class="cmprm" href="<%= urlWith(ids.filter(x => x !== p.id)) %>" title="Remove from comparison">×</a><% } %>
+              <% if (thumb[p.id]) { %><img src="/admin/documents/<%= thumb[p.id] %>/download" alt="" loading="lazy"><% } else { %><span class="noimg">no photo</span><% } %>
+              <a href="/admin/products/<%= p.id %>" class="cmpname"><%= p.name %></a>
+              <span class="muted small"><%= p.category || '' %><%= p.supplier_sku ? ' · ' + p.supplier_sku : '' %></span>
+              <% if (rk) { %><span class="rankchip">#<%= rk.place %> · <%= rk.score %></span><% } %>
+              <% if (p.m.issues.length) { %><span class="badge warn" title="<%= p.m.issues.join(', ') %>"><%= p.m.issues.length %> missing</span><% } %>
+            </div>
+          </th>
+        <% }) %>
+      </tr>
+    </thead>
+    <tbody>
+      <% rows.forEach(([label, show, val, dir]) => { %>
+        <% if (!show) { %><tr class="group"><td colspan="<%= products.length + 1 %>"><%= label %></td></tr><% return; } %>
+        <% const win = val ? best(products.map(val), dir) : new Set(); %>
+        <tr><th class="rowlabel"><%= label %></th><% products.forEach((p, i) => { %><td class="<%= win.has(i) ? 'win' : '' %>"><%= show(p) %></td><% }) %></tr>
+      <% }) %>
+      <% if (specKeys.length) { %>
+        <tr class="group"><td colspan="<%= products.length + 1 %>">Specifications</td></tr>
+        <% specKeys.forEach(k => { %><tr><th class="rowlabel"><%= k %></th><% products.forEach(p => { %><td><%= (p.spec || {})[k] || '—' %></td><% }) %></tr><% }) %>
+      <% } %>
+      <tr class="group"><td colspan="<%= products.length + 1 %>">Description</td></tr>
+      <tr><th class="rowlabel"></th><% products.forEach(p => { %><td class="pre small"><%= p.description || '—' %></td><% }) %></tr>
+      <tr class="group"><td colspan="<%= products.length + 1 %>">Missing data</td></tr>
+      <tr><th class="rowlabel"></th><% products.forEach(p => { %><td class="small <%= p.m.issues.length ? 'warntext' : 'oktext' %>"><%= p.m.issues.length ? p.m.issues.join(', ') : 'complete' %></td><% }) %></tr>
+    </tbody>
+  </table>
+</div>
+<%- include('../../partials/foot') %>

@@ -22,6 +22,8 @@ export async function getSettings(db) {
   return {
     fx: s.fx_rates || { CNY_USD: 0.138 },
     pricing: { min_margin_pct: 20, default_margin_pct: 25, ...(s.pricing || {}) },
+    // product-list estimates: 40HQ sea freight, usable volume / weight, wholesale markup
+    container: { freight_40hq_usd: 4500, container_cbm: 68, container_max_kg: 26500, wholesale_markup_pct: 45, ...(s.container || {}) },
   };
 }
 

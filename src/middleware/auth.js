@@ -9,6 +9,14 @@ export function setSession(res, session) {
   res.cookie(COOKIE, value, { httpOnly: true, sameSite: 'lax', secure, maxAge: 1000 * 60 * 60 * 24 * 7 });
   res.cookie('hb_just', '1', { httpOnly: true, sameSite: 'lax', secure, maxAge: 60e3 }); // lets /login notice a lost cookie
 }
+/** Remember when a person really signed in (password + code, invitation or reset) — not token refreshes. */
+export function markLogin(session) {
+  const id = session?.user?.id;
+  if (!id) return;
+  admin.from('profiles').update({ last_login_at: new Date().toISOString() }).eq('id', id)
+    .then(({ error }) => { if (error && !/last_login_at/.test(error.message)) console.error(`[session] last login: ${error.message}`); });
+}
+
 export function clearSession(res, why) {
   res.clearCookie(COOKIE);
   if (why) res.cookie('hb_why', why.slice(0, 300), { httpOnly: true, sameSite: 'lax', secure, maxAge: 5 * 60e3 });

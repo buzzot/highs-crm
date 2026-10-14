@@ -1,72 +1,217 @@
 <%- include('../../partials/head') %>
+<%
+  const mem = typeof members !== 'undefined' ? members : [];
+  const ty = typeof types !== 'undefined' ? types : {};
+  const crm = typeof crmStatuses !== 'undefined' ? crmStatuses : {};
+  const acts = typeof activityTypes !== 'undefined' ? activityTypes : {};
+  const evs = typeof events !== 'undefined' ? events : [];
+  const photos = typeof photoOf !== 'undefined' ? photoOf : {};
+  const placeholder = /^\(.*\)$/.test(s.name || '');
+  const today = new Date().toISOString().slice(0, 10);
+  const overdue = s.next_follow_up && s.next_follow_up < today;
+  const v = k => s[k] ?? '';
+  const isAdmin = user.role === 'admin';
+  const ago = d => { if (!d) return '—'; const days = Math.floor((Date.now() - new Date(d)) / 864e5); return days <= 0 ? 'today' : days === 1 ? 'yesterday' : days < 30 ? days + ' days ago' : fmt.date(d); };
+  const evLabel = e => {
+    if (e.action.startsWith('crm_')) return acts[e.action.slice(4)] || 'Note';
+    return ({ supplier_invited: 'Supplier added by invitation', invite_accepted: 'Invitation accepted', details_completed: 'Company details completed by supplier', details_updated: 'Company details updated by supplier', portal_blocked: 'Portal access blocked', portal_restored: 'Portal access restored' })[e.action] || fmt.status(e.action);
+  };
+%>
 <div class="pagehead">
-  <div><a class="back" href="/admin/suppliers">← Suppliers</a><h1><%= s.name %></h1>
-    <p class="muted"><%= [s.city, s.country].filter(Boolean).join(', ') %> <% if (s.rating) { %>· <span class="stars"><%= '★'.repeat(s.rating) %></span><% } %> <% if (s.can_export_official) { %>· <span class="tag ok">official exporter</span><% } %></p></div>
-  <div class="actions"><a class="btn" href="/admin/suppliers/<%= s.id %>/edit">Edit</a><a class="btn" href="/admin/products/import">⇪ Import price list</a><a class="btn primary" href="/admin/products/new?supplier_id=<%= s.id %>">+ Product</a></div>
+  <div>
+    <a class="back" href="/admin/suppliers">← Suppliers</a>
+    <h1><%= placeholder ? 'New supplier ' + s.name : s.name %></h1>
+    <p class="muted suphead">
+      <span class="pill crm-<%= s.crm_status || 'active' %>"><%= crm[s.crm_status] || 'Active supplier' %></span>
+      <%= [s.city, s.country].filter(Boolean).join(', ') || '—' %>
+      <% if (s.company_type) { %>· <%= ty[s.company_type] %><% } %>
+      · <%= s.details_completed_at ? 'registered ' + fmt.date(s.details_completed_at) : 'added ' + fmt.date(s.created_at) %>
+      <% if (s.rating) { %>· <span class="stars"><%= '★'.repeat(s.rating) %></span><% } %>
+      <% if (s.can_export_official) { %>· <span class="tag ok">official exporter</span><% } %>
+    </p>
+  </div>
+  <div class="actions">
+    <% if (mem.some(m => m.state === 'accepted')) { %>
+      <form method="post" action="/admin/suppliers/<%= s.id %>/portal" class="inline" <% if (!portalBlocked) { %>onsubmit="return confirm('Block portal access for everyone at this supplier?')"<% } %>>
+        <input type="hidden" name="action" value="<%= portalBlocked ? 'restore' : 'block' %>">
+        <button class="btn <%= portalBlocked ? '' : 'danger-outline' %>"><%= portalBlocked ? 'Restore portal access' : 'Block portal access' %></button>
+      </form>
+    <% } %>
+    <a class="btn primary" href="/admin/products/new?supplier_id=<%= s.id %>">+ Product</a>
+  </div>
 </div>
-<% const mem = typeof members !== 'undefined' ? members : []; const ty = typeof types !== 'undefined' ? types : {}; %>
-<div class="card portalcard">
-  <h2>Portal access <span class="count"><%= mem.filter(x => x.state === 'accepted' && x.active !== false).length %> active<%= mem.some(x => x.state === 'pending') ? ' · ' + mem.filter(x => x.state === 'pending').length + ' invited' : '' %></span></h2>
-  <% if (s.details_completed_at) { %>
-    <p class="muted small">✓ Company details completed by the supplier on <%= fmt.date(s.details_completed_at) %>.</p>
-  <% } else if (mem.some(x => x.state === 'pending' || x.state === 'accepted')) { %>
-    <div class="alert warn">Waiting for the supplier to register — they fill in the company details after accepting the invitation.</div>
-  <% } else { %>
-    <p class="muted small">Invite the supplier so they can register and keep their company details up to date themselves.</p>
-  <% } %>
-  <%- include('../../partials/members', { members: mem, inviteAction: '/admin/suppliers/' + s.id + '/invite', cancelAction: '/admin/suppliers/' + s.id + '/invites/cancel', toggleBase: '/admin/suppliers/' + s.id + '/users' }) %>
-  <form method="post" action="/admin/suppliers/<%= s.id %>/invite" class="row tight inviteform">
-    <input type="email" name="email" required placeholder="<%= mem.length ? 'colleague@factory.com' : (s.email || 'sales@factory.com') %>" value="<%= mem.length ? '' : (s.email || '') %>">
-    <button class="btn primary"><%- icon('mail') %> <%= mem.length ? 'Invite another person' : 'Send invitation' %></button>
-  </form>
-</div>
-<div class="kpis">
+
+<div class="kpis kpis4">
   <div class="kpi"><span class="n"><%= products.length %></span><span class="l">Products</span></div>
   <div class="kpi"><span class="n"><%= orders.length %></span><span class="l">Orders</span></div>
   <div class="kpi"><span class="n"><%= fmt.money(spend, 'USD', 0) %></span><span class="l">Purchases (cost)</span></div>
+  <div class="kpi <%= overdue ? 'bad' : '' %>"><span class="n"><%= s.next_follow_up ? fmt.date(s.next_follow_up) : '—' %></span><span class="l"><%= overdue ? 'Follow-up overdue' : 'Next follow-up' %></span></div>
 </div>
-<div class="grid2">
-  <div>
-    <div class="card">
-      <h2>Contact</h2>
-      <dl class="dl">
-        <% if (s.company_type) { %><dt>Type</dt><dd><%= ty[s.company_type] || s.company_type %><%= s.year_established ? ' · since ' + s.year_established : '' %><%= s.employees ? ' · ' + s.employees + ' staff' : '' %></dd><% } %>
-        <% if (s.registration_no) { %><dt>Registration no.</dt><dd><%= s.registration_no %></dd><% } %>
-        <% if (s.main_products) { %><dt>Main products</dt><dd><%= s.main_products %></dd><% } %>
-        <% if (s.certifications) { %><dt>Certifications</dt><dd><%= s.certifications %></dd><% } %>
-        <dt>Contact</dt><dd><%= s.contact_name || '—' %></dd>
-        <dt>Address</dt><dd class="pre"><%= [s.address, [s.postal_code, s.city].filter(Boolean).join(' ')].filter(Boolean).join('\n') || '—' %></dd>
-        <dt>Phone</dt><dd><%= s.phone || '—' %></dd>
-        <dt>Email</dt><dd><% if (s.email) { %><a href="mailto:<%= s.email %>"><%= s.email %></a><% } else { %>—<% } %></dd>
-        <dt>WeChat</dt><dd><%= s.wechat || '—' %></dd>
-        <dt>Website</dt><dd><% if (s.website) { %><a href="<%= /^https?:/.test(s.website) ? s.website : 'https://' + s.website %>" target="_blank" rel="noopener"><%= s.website %></a><% } else { %>—<% } %></dd>
-        <dt>Payment terms</dt><dd><%= s.payment_terms || '—' %></dd>
-        <dt>Lead time</dt><dd><%= s.lead_time_days ? s.lead_time_days + ' days' : '—' %></dd>
-      </dl>
-      <% if (s.notes) { %><p class="pre"><%= s.notes %></p><% } %>
-    </div>
-    <div class="card">
-      <h2>Products</h2>
-      <% if (!products.length) { %><p class="muted">No products linked yet.</p><% } %>
-      <table class="tbl"><tbody>
-      <% products.forEach(p => { %>
-        <tr><td><a href="/admin/products/<%= p.id %>"><%= p.name %></a><div class="muted small"><%= p.sku || '' %></div></td>
-          <td class="right"><%= fmt.money(p.unit_cost, p.cost_currency, 4) %></td><td>MOQ <%= p.moq ?? '—' %></td><td class="muted small"><%= p.hs_code || '' %></td></tr>
+
+<div class="card">
+  <h2>Portal users <span class="count"><%= mem.filter(x => x.state === 'accepted' && x.active !== false).length %> active<%= mem.some(x => x.state === 'pending') ? ' · ' + mem.filter(x => x.state === 'pending').length + ' invited' : '' %></span></h2>
+  <% if (!s.details_completed_at && mem.some(x => x.state === 'pending' || x.state === 'accepted')) { %>
+    <div class="alert warn">Waiting for the supplier to register — they fill in the company details after accepting the invitation.</div>
+  <% } %>
+  <% if (mem.length) { %>
+  <table class="tbl users">
+    <thead><tr><th>Email (login)</th><th>Name</th><th>Status</th><th>Last sign-in</th><th></th></tr></thead>
+    <tbody>
+    <% mem.forEach(m => { %>
+      <tr class="<%= m.active === false && m.state === 'accepted' ? 'dim' : '' %>">
+        <td><strong><%= m.email %></strong></td>
+        <td><%= m.full_name || '—' %><% if (m.job_title) { %><div class="muted small"><%= m.job_title %></div><% } %></td>
+        <td>
+          <% if (m.state === 'accepted') { %>
+            <% if (m.active === false) { %><span class="badge">Disabled</span><% } else { %><span class="badge ok">Active</span><% } %>
+            <div class="muted small">joined <%= fmt.date(m.accepted_at) %></div>
+          <% } else if (m.state === 'pending') { %>
+            <span class="badge info">Invitation sent</span><div class="muted small"><%= fmt.date(m.sent_at) %> · valid <%= m.days_left %> more day<%= m.days_left === 1 ? '' : 's' %></div>
+          <% } else if (m.state === 'expired') { %>
+            <span class="badge warn">Invitation expired</span><div class="muted small">sent <%= fmt.date(m.sent_at) %></div>
+          <% } else { %><span class="badge">No invitation</span><% } %>
+        </td>
+        <td><% if (m.last_login_at) { %><%= fmt.datetime(m.last_login_at) %><div class="muted small"><%= ago(m.last_login_at) %></div><% } else { %><span class="muted">never</span><% } %></td>
+        <td class="right nowrap">
+          <% if (m.state === 'pending' || m.state === 'expired') { %>
+            <form method="post" action="/admin/suppliers/<%= s.id %>/invite" class="inline"><input type="hidden" name="email" value="<%= m.email %>"><button class="btn small <%= m.state === 'expired' ? 'primary' : '' %>">Resend</button></form>
+            <form method="post" action="/admin/suppliers/<%= s.id %>/invites/cancel" class="inline" onsubmit="return confirm('Cancel the invitation for <%= m.email %>?')"><input type="hidden" name="email" value="<%= m.email %>"><button class="link small danger">Cancel</button></form>
+          <% } else if (m.id) { %>
+            <form method="post" action="/admin/suppliers/<%= s.id %>/users/<%= m.id %>/toggle" class="inline"><button class="link small <%= m.active === false ? '' : 'danger' %>"><%= m.active === false ? 'Enable' : 'Disable' %></button></form>
+          <% } %>
+        </td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table>
+  <% } else { %>
+    <p class="muted">Nobody has portal access yet. Invite the supplier so they register and keep their company details up to date themselves.</p>
+  <% } %>
+  <form method="post" action="/admin/suppliers/<%= s.id %>/invite" class="row tight inviteform">
+    <input type="email" name="email" required placeholder="<%= mem.length ? 'colleague@factory.com' : 'sales@factory.com' %>" value="<%= mem.length ? '' : (s.email || '') %>" aria-label="Email to invite">
+    <button class="btn primary"><%- icon('mail') %> <%= mem.length ? 'Invite another user' : 'Send invitation' %></button>
+    <span class="muted small">The invitation email is valid 14 days.</span>
+  </form>
+</div>
+
+<div class="grid2 even">
+  <div class="card">
+    <h2>Details</h2>
+    <form method="post" action="/admin/suppliers/<%= s.id %>" class="detailsform">
+      <div class="row">
+        <label>Factory / company name <input name="name" required value="<%= placeholder ? '' : v('name') %>" placeholder="<%= placeholder ? 'Filled in by the supplier' : '' %>"></label>
+        <label>Contact person <input name="contact_name" value="<%= v('contact_name') %>"></label>
+      </div>
+      <div class="row">
+        <label>Email <input type="email" name="email" value="<%= v('email') %>"></label>
+        <label>Phone / WhatsApp <input name="phone" value="<%= v('phone') %>"></label>
+        <label>WeChat <input name="wechat" value="<%= v('wechat') %>"></label>
+      </div>
+      <label>Website / Alibaba / 1688 <input name="website" value="<%= v('website') %>"></label>
+      <label>Factory address <textarea name="address" rows="2"><%= v('address') %></textarea></label>
+      <div class="row">
+        <label>City <input name="city" value="<%= v('city') %>"></label>
+        <label>Country <input name="country" value="<%= v('country') %>"></label>
+        <label>Type <select name="company_type"><option value="">—</option><% Object.entries(ty).forEach(([k, l]) => { %><option value="<%= k %>" <%= s.company_type === k ? 'selected' : '' %>><%= l %></option><% }) %></select></label>
+      </div>
+      <div class="row">
+        <label>CRM status <select name="crm_status"><% Object.entries(crm).forEach(([k, l]) => { %><option value="<%= k %>" <%= (s.crm_status || 'active') === k ? 'selected' : '' %>><%= l %></option><% }) %></select></label>
+        <label>Rating <select name="rating"><option value="">—</option><% [5,4,3,2,1].forEach(n => { %><option value="<%= n %>" <%= String(s.rating) === String(n) ? 'selected' : '' %>><%= '★'.repeat(n) %></option><% }) %></select></label>
+        <label>Next follow-up <input type="date" name="next_follow_up" value="<%= v('next_follow_up') %>"></label>
+      </div>
+      <label>Main products / categories supplied <input name="main_products" value="<%= v('main_products') %>"></label>
+      <div class="row">
+        <label>Certifications <input name="certifications" value="<%= v('certifications') %>" placeholder="BSCI, ISO 9001…"></label>
+        <label>Registration no. <input name="registration_no" value="<%= v('registration_no') %>"></label>
+      </div>
+      <div class="row">
+        <label>Payment terms <input name="payment_terms" value="<%= v('payment_terms') %>" placeholder="30% deposit, 70% before shipment"></label>
+        <label>Lead time (days) <input type="number" min="0" name="lead_time_days" value="<%= v('lead_time_days') %>"></label>
+      </div>
+      <label class="check"><input type="checkbox" name="can_export_official" <%= s.can_export_official ? 'checked' : '' %>> Holds export rights — can export officially with a government export declaration</label>
+      <label>Notes <span class="muted small">— internal</span><textarea name="notes" rows="3"><%= v('notes') %></textarea></label>
+      <div class="actions"><button class="btn primary">Save</button></div>
+    </form>
+  </div>
+
+  <div class="card" id="activity">
+    <h2>Activity</h2>
+    <form method="post" action="/admin/suppliers/<%= s.id %>/activity" class="actform">
+      <div class="row">
+        <label>Date <input type="date" name="date" value="<%= today %>"></label>
+        <label>Type <select name="type"><% Object.entries(acts).forEach(([k, l]) => { %><option value="<%= k %>"><%= l %></option><% }) %></select></label>
+      </div>
+      <label>Summary <textarea name="summary" rows="3" placeholder="What was discussed or agreed — prices, samples, next steps…"></textarea></label>
+      <div class="row bottom">
+        <label>Follow up on <input type="date" name="follow_up" min="<%= today %>"></label>
+        <div class="actions"><button class="btn primary">Log activity</button></div>
+      </div>
+    </form>
+    <ul class="actlist">
+      <% if (!evs.length) { %><li class="muted small">No activity yet.</li><% } %>
+      <% evs.forEach(e => { const d = e.detail || {}; const crmEv = e.action.startsWith('crm_'); %>
+        <li class="<%= crmEv ? 'crm' : 'sys' %>">
+          <div class="ahead"><strong><%= evLabel(e) %></strong> <span class="muted small"><%= d.date ? fmt.date(d.date) : fmt.datetime(e.created_at) %><%= e.profiles ? ' · ' + (e.profiles.full_name || e.profiles.email) : '' %></span></div>
+          <% if (d.note && crmEv) { %><p class="pre"><%= d.note %></p><% } else if (d.note) { %><div class="muted small"><%= d.note %></div><% } %>
+          <% if (d.follow_up) { %><div class="small <%= d.follow_up < today ? 'bad' : 'muted' %>">↻ follow up <%= fmt.date(d.follow_up) %></div><% } %>
+        </li>
       <% }) %>
-      </tbody></table>
-    </div>
-    <div class="card">
-      <h2>Orders</h2>
-      <% if (!orders.length) { %><p class="muted">No orders yet.</p><% } %>
-      <table class="tbl"><tbody>
-      <% orders.forEach(o => { %>
-        <tr><td><a href="/admin/orders/<%= o.id %>"><%= o.order_no %></a></td><td><%= o.client_name %></td><td><span class="pill <%= o.status %>"><%= fmt.status(o.status) %></span></td><td class="right"><%= fmt.money(o.cost_total, o.currency) %></td></tr>
-      <% }) %>
-      </tbody></table>
-    </div>
+    </ul>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Products <span class="count"><%= products.length %></span>
+    <span class="hactions"><a class="btn small" href="/admin/products?supplier=<%= s.id %>">Open in product list</a><a class="btn small primary" href="/admin/products/new?supplier_id=<%= s.id %>">+ Product</a></span></h2>
+  <% if (!products.length) { %><p class="muted">No products yet — import the supplier's price list below or add one by hand.</p><% } else { %>
+  <table class="tbl">
+    <thead><tr><th></th><th>Product</th><th>Supplier SKU</th><th>Category</th><th class="right">Unit cost</th><th class="right">MOQ</th><th>HS code</th><th>Carton</th><th>Added</th></tr></thead>
+    <tbody>
+    <% products.forEach(p => { %>
+      <tr>
+        <td class="thumbcell"><% if (photos[p.id]) { %><img class="pthumbsm" src="/admin/documents/<%= photos[p.id] %>/download" alt="" loading="lazy"><% } else { %><span class="pthumbsm empty"></span><% } %></td>
+        <td><a href="/admin/products/<%= p.id %>"><strong><%= p.name %></strong></a><% if (p.sku) { %><div class="muted small"><%= p.sku %></div><% } %></td>
+        <td><%= p.supplier_sku || '—' %></td>
+        <td><%= p.category || '—' %></td>
+        <td class="right"><%= p.unit_cost != null ? fmt.money(p.unit_cost, p.cost_currency, 2) : '—' %></td>
+        <td class="right"><%= p.moq ?? '—' %></td>
+        <td><%= p.hs_code || '—' %></td>
+        <td class="small"><%= p.carton_qty ? p.carton_qty + ' pcs' : '—' %><%= p.carton_cbm ? ' · ' + Number(p.carton_cbm).toFixed(3) + ' cbm' : '' %></td>
+        <td class="muted small"><%= fmt.date(p.created_at) %></td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table>
+  <% } %>
+  <form method="post" action="/admin/products/import" enctype="multipart/form-data" class="importrow">
+    <input type="hidden" name="supplier_id" value="<%= s.id %>">
+    <strong>Import products for this supplier</strong>
+    <input type="file" name="file" required accept=".xlsx,.xlsm,.csv,.pdf,.jpg,.jpeg,.png,.webp" aria-label="Price list file">
+    <button class="btn primary">Import</button>
+    <a href="/templates/lumi-trade-product-import-template.xlsx" download>Excel template</a>
+    <span class="muted small">Excel, CSV, PDF or a photo — you review everything before it's saved.</span>
+  </form>
+</div>
+
+<div class="grid2 even">
+  <div class="card">
+    <h2>Orders <span class="count"><%= orders.length %></span></h2>
+    <% if (!orders.length) { %><p class="muted">No orders yet.</p><% } else { %>
+    <table class="tbl"><thead><tr><th>Order</th><th>Client</th><th>Status</th><th class="right">Cost</th></tr></thead><tbody>
+    <% orders.forEach(o => { %>
+      <tr><td><a href="/admin/orders/<%= o.id %>"><%= o.order_no %></a></td><td><%= o.client_name %></td><td><span class="pill <%= o.status %>"><%= fmt.status(o.status) %></span></td><td class="right"><%= fmt.money(o.cost_total, o.currency) %></td></tr>
+    <% }) %>
+    </tbody></table>
+    <% } %>
   </div>
   <div>
     <%- include('../../partials/docs', { docs, entityType: 'supplier', entityId: s.id, redirect: '/admin/suppliers/' + s.id, kinds: ['certificate','qc_report','other','product_photo'], heading: 'Licences, certificates & files', defaultKind: 'certificate', defaultVisible: false }) %>
   </div>
 </div>
+
+<% if (isAdmin) { %>
+  <form method="post" action="/admin/suppliers/<%= s.id %>/delete" class="dangerzone" onsubmit="return confirm('Delete <%= String(s.name).replace(/'/g, '') %>? Its products are kept without a supplier. This cannot be undone.')">
+    <button class="link danger">Delete supplier</button>
+  </form>
+<% } %>
 <%- include('../../partials/foot') %>

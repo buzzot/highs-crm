@@ -214,7 +214,13 @@ r.post('/settings', requireAdmin, async (req, res) => {
     min_margin_pct: Math.max(0, Number(req.body.min_margin_pct) || 20),
     default_margin_pct: Math.max(0, Number(req.body.default_margin_pct) || 25),
   };
+  const pos = (v, d) => (Number(v) > 0 ? Number(v) : d);
+  const container = {
+    freight_40hq_usd: pos(req.body.freight_40hq_usd, 4500), container_cbm: pos(req.body.container_cbm, 68),
+    container_max_kg: pos(req.body.container_max_kg, 26500), wholesale_markup_pct: Math.max(0, Number(req.body.wholesale_markup_pct) || 45),
+  };
   await admin.from('settings').upsert([
+    { key: 'container', value: container, updated_at: new Date().toISOString() },
     { key: 'fx_rates', value: fx, updated_at: new Date().toISOString() },
     { key: 'pricing', value: pricing, updated_at: new Date().toISOString() },
   ]);

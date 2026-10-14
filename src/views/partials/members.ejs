@@ -12,7 +12,7 @@
         <% if (m.full_name) { %><div class="muted small"><%= m.email %></div><% } %>
         <div class="istate small">
           <% if (m.state === 'accepted') { %>
-            <% if (m.active === false) { %><span class="badge">Disabled</span><% } else { %><span class="badge ok">✓ Active</span><% } %> <span class="muted">joined <%= fmt.date(m.accepted_at) %></span>
+            <% if (m.active === false) { %><span class="badge">Disabled</span><% } else { %><span class="badge ok">✓ Active</span><% } %> <span class="muted">joined <%= fmt.date(m.accepted_at) %> · <%= m.last_login_at ? 'last sign-in ' + fmt.datetime(m.last_login_at) : 'not signed in yet' %></span>
           <% } else if (m.state === 'pending') { %>
             <span class="badge info">Invitation sent</span> <span class="muted"><%= fmt.date(m.sent_at) %> · not accepted yet · link valid <%= m.days_left %> more day<%= m.days_left === 1 ? '' : 's' %></span>
           <% } else if (m.state === 'expired') { %>

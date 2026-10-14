@@ -8,6 +8,14 @@
       <label>Minimum margin % (on product cost) <input type="number" step="0.1" name="min_margin_pct" value="<%= settings.pricing.min_margin_pct %>"></label>
       <label>Default margin % for new quotes <input type="number" step="0.1" name="default_margin_pct" value="<%= settings.pricing.default_margin_pct %>"></label>
     </div>
+    <h3>Product list estimates</h3>
+    <p class="muted small">Used for "Landed", "Units / 40HQ" and "Suggested wholesale" on the product list and in comparisons.</p>
+    <div class="row">
+      <label>40HQ sea freight, USD <input type="number" step="1" name="freight_40hq_usd" value="<%= settings.container.freight_40hq_usd %>"></label>
+      <label>Usable volume, cbm <input type="number" step="0.1" name="container_cbm" value="<%= settings.container.container_cbm %>"></label>
+      <label>Max payload, kg <input type="number" step="1" name="container_max_kg" value="<%= settings.container.container_max_kg %>"></label>
+      <label>Wholesale markup % on landed <input type="number" step="0.1" name="wholesale_markup_pct" value="<%= settings.container.wholesale_markup_pct %>"></label>
+    </div>
     <h3>FX rates</h3>
     <p class="muted small">Pair format FROM_TO, e.g. CNY_USD = USD per 1 CNY. Reverse pairs are derived automatically.</p>
     <div id="fxrows">

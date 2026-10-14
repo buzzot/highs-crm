@@ -1,6 +1,7 @@
 import { Router } from '../../lib/router.js';
 import { admin } from '../../lib/supabase.js';
 import { clean, bool, notFound } from '../../lib/util.js';
+import { requireAdmin } from '../../middleware/auth.js';
 import { inviteUser, memberRows } from '../../lib/invites.js';
 import { log } from '../../lib/activity.js';
 import { COMPANY_TYPES } from '../../lib/supplier-company.js';
@@ -11,7 +12,9 @@ export const placeholderName = email => `(${String(email).split('@')[1] || email
 
 const r = Router();
 const FIELDS = ['name', 'country', 'city', 'address', 'contact_name', 'phone', 'email', 'wechat', 'website', 'payment_terms', 'lead_time_days', 'rating', 'can_export_official', 'notes',
-  'company_type', 'main_products', 'certifications', 'registration_no', 'postal_code', 'year_established', 'employees'];
+  'company_type', 'main_products', 'certifications', 'registration_no', 'postal_code', 'year_established', 'employees', 'crm_status', 'next_follow_up'];
+export const CRM_STATUSES = { prospect: 'Prospect', contacted: 'Contacted', sampling: 'Sampling', approved: 'Approved', active: 'Active supplier', on_hold: 'On hold', blocked: 'Blocked' };
+export const ACTIVITY_TYPES = { call: 'Call', wechat: 'WeChat', email: 'Email', meeting: 'Meeting', visit: 'Factory visit', sample: 'Sample', note: 'Note' };
 const body = b => ({ ...clean(b, FIELDS), can_export_official: bool(b.can_export_official) });
 const like = q => String(q || '').replace(/[,()%]/g, ' ').trim();
 
@@ -64,20 +67,72 @@ r.post('/invite', async (req, res) => {
 
 r.get('/:id', async (req, res) => {
   const id = req.params.id;
-  const [{ data: s }, { data: products }, { data: orders }, { data: docs }, { data: users }, { data: invites }] = await Promise.all([
+  const [{ data: s }, { data: products }, { data: orders }, { data: docs }, { data: users }, { data: invites }, { data: events }] = await Promise.all([
     admin.from('suppliers').select('*').eq('id', id).single(),
     admin.from('products').select('*').eq('supplier_id', id).order('name'),
     admin.from('order_overview').select('*').eq('supplier_id', id).order('created_at', { ascending: false }),
     admin.from('documents').select('*').eq('entity_type', 'supplier').eq('entity_id', id).order('created_at', { ascending: false }),
     admin.from('profiles').select('*').eq('supplier_id', id).order('created_at'),
     admin.from('invitations').select('*').eq('supplier_id', id),
+    admin.from('activity_log').select('*, profiles(full_name, email)').eq('entity_type', 'supplier').eq('entity_id', id).order('created_at', { ascending: false }).limit(50),
   ]);
   if (!s) return notFound(res, 'Supplier');
+  // last sign-in: our own record, else Supabase's (people who signed in before it was recorded)
+  for (const u of users || []) {
+    if (!u.last_login_at && u.accepted_at) {
+      const { data } = await admin.auth.admin.getUserById(u.id).catch(() => ({ data: null }));
+      u.last_login_at = data?.user?.last_sign_in_at || null;
+    }
+  }
+  const ids = (products || []).map(p => p.id);
+  const { data: photos } = ids.length
+    ? await admin.from('documents').select('id, entity_id').eq('entity_type', 'product').eq('kind', 'product_photo').in('entity_id', ids).order('created_at')
+    : { data: [] };
+  const photoOf = {};
+  (photos || []).forEach(d => { photoOf[d.entity_id] ||= d.id; });
   const spend = (orders || []).filter(o => o.status !== 'cancelled').reduce((t, o) => t + Number(o.cost_total || 0), 0);
+  const members = memberRows(users || [], invites || []);
   res.render('admin/suppliers/detail', {
-    title: s.name, s, products: products || [], orders: orders || [], docs: docs || [], spend, types: COMPANY_TYPES,
-    members: memberRows(users || [], invites || []), msg: req.query.msg, err: req.query.err,
+    title: s.name, s, products: products || [], photoOf, orders: orders || [], docs: docs || [], spend, types: COMPANY_TYPES,
+    members, events: events || [], crmStatuses: CRM_STATUSES, activityTypes: ACTIVITY_TYPES,
+    portalBlocked: members.some(m => m.state === 'accepted') && !members.some(m => m.state === 'accepted' && m.active !== false),
+    msg: req.query.msg, err: req.query.err,
   });
+});
+
+// CRM activity: a call, WeChat chat, visit… with an optional follow-up date
+r.post('/:id/activity', async (req, res) => {
+  const type = ACTIVITY_TYPES[req.body.type] ? req.body.type : 'note';
+  const summary = String(req.body.summary || '').trim().slice(0, 2000);
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(req.body.date || '') ? req.body.date : new Date().toISOString().slice(0, 10);
+  const follow = /^\d{4}-\d{2}-\d{2}$/.test(req.body.follow_up || '') ? req.body.follow_up : null;
+  if (!summary) return res.redirect(`/admin/suppliers/${req.params.id}?err=` + encodeURIComponent('Write a short summary of the activity.') + '#activity');
+  await log({ entityType: 'supplier', entityId: req.params.id, action: `crm_${type}`, actorId: req.user.id, detail: { note: summary, date, follow_up: follow } });
+  if (follow) await admin.from('suppliers').update({ next_follow_up: follow }).eq('id', req.params.id);
+  res.redirect(`/admin/suppliers/${req.params.id}?msg=` + encodeURIComponent('Activity logged.') + '#activity');
+});
+
+// block / restore portal access for everyone at this supplier
+r.post('/:id/portal', async (req, res) => {
+  const block = req.body.action === 'block';
+  await admin.from('profiles').update({ active: !block }).eq('supplier_id', req.params.id).not('accepted_at', 'is', null);
+  if (block) await admin.from('invitations').update({ revoked_at: new Date().toISOString() }).eq('supplier_id', req.params.id).is('accepted_at', null).is('revoked_at', null);
+  await log({ entityType: 'supplier', entityId: req.params.id, action: block ? 'portal_blocked' : 'portal_restored', actorId: req.user.id });
+  res.redirect(`/admin/suppliers/${req.params.id}?msg=` + encodeURIComponent(block ? 'Portal access blocked for all users of this supplier.' : 'Portal access restored.'));
+});
+
+// delete — only while nothing depends on the supplier (orders / quotes keep their history)
+r.post('/:id/delete', requireAdmin, async (req, res) => {
+  const id = req.params.id;
+  const [{ count: nOrders }, { count: nQuotes }] = await Promise.all([
+    admin.from('orders').select('id', { count: 'exact', head: true }).eq('supplier_id', id),
+    admin.from('quotes').select('id', { count: 'exact', head: true }).eq('supplier_id', id),
+  ]);
+  if (nOrders || nQuotes) return res.redirect(`/admin/suppliers/${id}?err=` + encodeURIComponent(`Can't delete: this supplier has ${nOrders || 0} order(s) and ${nQuotes || 0} quote(s). Set the status to “Blocked” instead.`));
+  await admin.from('profiles').update({ active: false, supplier_id: null }).eq('supplier_id', id);
+  const { error } = await admin.from('suppliers').delete().eq('id', id);
+  if (error) return res.redirect(`/admin/suppliers/${id}?err=` + encodeURIComponent(error.message));
+  res.redirect('/admin/suppliers?msg=' + encodeURIComponent('Supplier deleted. Its products were kept without a supplier.'));
 });
 
 r.get('/:id/edit', async (req, res) => {
@@ -88,7 +143,7 @@ r.get('/:id/edit', async (req, res) => {
 r.post('/:id', async (req, res) => {
   const { error } = await admin.from('suppliers').update(body(req.body)).eq('id', req.params.id);
   if (error) return res.render('admin/suppliers/form', { title: 'Edit supplier', s: { ...req.body, id: req.params.id }, error: error.message, mode: 'manual', inv: {} });
-  res.redirect(`/admin/suppliers/${req.params.id}`);
+  res.redirect(`/admin/suppliers/${req.params.id}?msg=` + encodeURIComponent('Details saved.'));
 });
 
 // portal access for the supplier's people (several users per supplier)
