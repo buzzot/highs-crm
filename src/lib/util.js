@@ -43,3 +43,6 @@ export const FREIGHT_TYPES = ['origin_handling', 'export_declaration', 'main_fre
 export const DOC_KINDS = ['product_photo', 'packing_photo', 'proforma_invoice', 'commercial_invoice', 'packing_list', 'bill_of_lading', 'airway_bill', 'export_declaration', 'certificate', 'qc_report', 'other'];
 export const INCOTERMS = ['EXW', 'FOB', 'FCA', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DDP'];
 export const CURRENCIES = ['USD', 'EUR', 'GBP', 'CNY'];
+
+/** Where each kind of user lands after signing in. */
+export const homeFor = role => (role === 'client' ? '/portal' : role === 'supplier' ? '/supplier' : '/admin');

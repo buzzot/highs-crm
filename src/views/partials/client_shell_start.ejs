@@ -1,7 +1,15 @@
 <%
-  const org = user.organizations || {};
+  const isSupplier = user.role === 'supplier';
+  const org = isSupplier ? { name: (user.supplier && user.supplier.details_completed_at) ? user.supplier.name : 'Your company' } : (user.organizations || {});
   const initial = s => String(s || '?').trim().charAt(0).toUpperCase();
-  const nav = [
+  const homeHref = isSupplier ? '/supplier' : '/portal';
+  const companyHref = isSupplier ? '/supplier/company' : '/portal/company';
+  const nav = isSupplier ? [
+    ['/supplier', 'Overview', 'home', p => p === '/supplier'],
+    ['/supplier/products', 'My products', 'package', p => p.startsWith('/supplier/products')],
+    ['/supplier/company', 'Company', 'building', p => p.startsWith('/supplier/company')],
+    ['/account', 'Account', 'user', p => p.startsWith('/account')],
+  ] : [
     ['/portal', 'Overview', 'home', p => p === '/portal'],
     ['/portal/requests', 'My requests', 'inbox', p => p.startsWith('/portal/requests') && p !== '/portal/requests/new'],
     ['/portal/requests/new', 'New request', 'plus', p => p === '/portal/requests/new'],
@@ -13,13 +21,13 @@
 %>
 <div class="shell" id="shell">
   <aside class="side">
-    <a class="sbrand" href="/portal">
+    <a class="sbrand" href="<%= homeHref %>">
       <span class="smark">L</span>
-      <span><strong>Lumi Trade</strong><small>Client portal</small></span>
+      <span><strong>Lumi Trade</strong><small><%= isSupplier ? 'Supplier portal' : 'Client portal' %></small></span>
     </a>
-    <a class="sorg" href="/portal/company" title="Company details">
+    <a class="sorg" href="<%= companyHref %>" title="Company details">
       <span class="oav"><%= initial(org.name) %></span>
-      <span><strong><%= org.name || 'Your company' %></strong><small>Company account</small></span>
+      <span><strong><%= org.name || 'Your company' %></strong><small><%= isSupplier ? 'Supplier account' : 'Company account' %></small></span>
     </a>
     <nav class="snav">
       <% nav.forEach(([href, label, ico, on]) => { %>
@@ -37,6 +45,6 @@
   <div class="shell-main">
     <header class="crumbbar">
       <button class="sidetoggle" aria-label="Menu" onclick="document.getElementById('shell').classList.toggle('open')"><%- icon('menu') %></button>
-      <span class="crumbs"><a href="/portal"><%= org.name || 'Lumi Trade' %></a><%- icon('chevron', 'sep') %><strong><%= pageCrumb %></strong></span>
+      <span class="crumbs"><a href="<%= homeHref %>"><%= org.name || 'Lumi Trade' %></a><%- icon('chevron', 'sep') %><strong><%= pageCrumb %></strong></span>
     </header>
     <main class="page cpage">

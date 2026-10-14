@@ -1,0 +1,43 @@
+<%- include('../partials/head') %>
+<div class="pagehead">
+  <div><h1>Hello<%= user.full_name ? ', ' + user.full_name.split(' ')[0] : '' %></h1>
+    <p class="muted"><%= s.name %> · supplier of Lumi Trade</p></div>
+  <a class="btn" href="/supplier/company"><%- icon('edit') %> Update company details</a>
+</div>
+<div class="kpis">
+  <div class="kpi"><span class="n"><%= products.length %></span><span class="l">Products on file</span></div>
+  <div class="kpi"><span class="n"><%= team.length %></span><span class="l">People with access</span></div>
+  <div class="kpi"><span class="n"><%= s.lead_time_days ? s.lead_time_days + ' d' : '—' %></span><span class="l">Usual lead time</span></div>
+</div>
+<div class="grid2">
+  <div class="card">
+    <h2>Your company</h2>
+    <dl class="dl">
+      <dt>Company</dt><dd><%= s.name %><% if (s.company_type) { %> <span class="tag"><%= types[s.company_type] %></span><% } %></dd>
+      <dt>Address</dt><dd class="pre"><%= [s.address, [s.postal_code, s.city].filter(Boolean).join(' '), s.country].filter(Boolean).join('\n') || '—' %></dd>
+      <dt>Contact</dt><dd><%= s.contact_name || '—' %><% if (s.email) { %><div class="muted small"><%= s.email %></div><% } %></dd>
+      <dt>Phone / WeChat</dt><dd><%= [s.phone, s.wechat && 'WeChat ' + s.wechat].filter(Boolean).join(' · ') || '—' %></dd>
+      <dt>Main products</dt><dd><%= s.main_products || '—' %></dd>
+      <dt>Certifications</dt><dd><%= s.certifications || '—' %></dd>
+      <dt>Payment terms</dt><dd><%= s.payment_terms || '—' %></dd>
+      <dt>Export rights</dt><dd><%= s.can_export_official ? 'Yes — official export declaration' : 'No' %></dd>
+    </dl>
+  </div>
+  <div>
+    <div class="card">
+      <h2>Latest products <a class="more" href="/supplier/products">All products →</a></h2>
+      <% if (!products.length) { %><p class="muted">No products on file yet. Your Lumi Trade contact adds them from your price lists.</p><% } %>
+      <ul class="plainlist">
+        <% products.slice(0, 6).forEach(p => { %><li><strong><%= p.name %></strong><% if (p.category) { %> <span class="muted small">· <%= p.category %></span><% } %></li><% }) %>
+      </ul>
+    </div>
+    <div class="card">
+      <h2>People with access</h2>
+      <ul class="plainlist">
+        <% team.forEach(t => { %><li><strong><%= t.full_name || t.email %></strong><% if (t.job_title) { %> <span class="muted small">· <%= t.job_title %></span><% } %><div class="muted small"><%= t.email %></div></li><% }) %>
+      </ul>
+      <p class="muted small">Need access for a colleague? Ask your Lumi Trade contact to invite them.</p>
+    </div>
+  </div>
+</div>
+<%- include('../partials/foot') %>

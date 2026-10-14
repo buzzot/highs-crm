@@ -44,10 +44,10 @@ export async function sendCode(email, purpose = 'login', linkPath = '/login/veri
 }
 
 /** Invitation email: link to the invitation page + confirmation code. */
-export async function sendInvite({ email, token, orgName, inviterName, days }) {
+export async function sendInvite({ email, token, orgName, inviterName, days, kind = 'client' }) {
   const code = newCode();
   await store(email, 'invite', code, days * 864e5);
-  await sendEmail({ to: lc(email), ...inviteEmail({ url: `${appUrl()}/invite/${token}`, code, orgName, inviterName, days }) });
+  await sendEmail({ to: lc(email), ...inviteEmail({ url: `${appUrl()}/invite/${token}`, code, orgName, inviterName, days, kind }) });
 }
 
 /** Password-reset email with a single-use link. */

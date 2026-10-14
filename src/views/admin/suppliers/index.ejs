@@ -1,7 +1,7 @@
 <%- include('../../partials/head') %>
 <div class="pagehead">
   <h1>Suppliers</h1>
-  <a class="btn primary" href="/admin/suppliers/new">+ New supplier</a>
+  <div class="actions"><a class="btn" href="/admin/suppliers/new?mode=manual">+ Enter manually</a><a class="btn primary" href="/admin/suppliers/new">✉ Invite supplier</a></div>
 </div>
 <div class="card">
   <form class="row tight" method="get"><input name="q" value="<%= query.q || '' %>" placeholder="Search name, city, contact…"><button class="btn">Search</button></form>
@@ -11,7 +11,10 @@
     <% if (!suppliers.length) { %><tr><td colspan="8" class="muted">No suppliers found.</td></tr><% } %>
     <% suppliers.forEach(s => { %>
       <tr>
-        <td><a href="/admin/suppliers/<%= s.id %>"><strong><%= s.name %></strong></a></td>
+        <% const ps = typeof portal !== 'undefined' ? portal[s.id] : null; %>
+        <td><a href="/admin/suppliers/<%= s.id %>"><strong><%= s.name %></strong></a>
+          <% if (ps === 'active') { %> <span class="tag ok">portal</span><% } else if (ps === 'invited') { %> <span class="tag warn">invited</span><% } else if (ps === 'expired') { %> <span class="tag">invite expired</span><% } %>
+          <% if (ps && !s.details_completed_at) { %><div class="muted small">awaiting registration</div><% } %></td>
         <td><%= [s.city, s.country].filter(Boolean).join(', ') %></td>
         <td><%= s.contact_name || '—' %><% if (s.wechat) { %><div class="muted small">WeChat <%= s.wechat %></div><% } %></td>
         <td><%= s.lead_time_days ? s.lead_time_days + ' d' : '—' %></td>

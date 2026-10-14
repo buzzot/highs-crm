@@ -1,0 +1,74 @@
+<%- include('../partials/head') %>
+<%
+  const v = k => form[k] ?? '';
+  const err = k => errors[k] ? `<span class="ferr">${errors[k]}</span>` : '';
+  const req = '<span class="reqmark" title="Required">*</span>';
+  const he = k => errors[k] ? 'haserr' : '';
+%>
+<div class="companywrap">
+  <% if (first) { %>
+    <div class="welcome">
+      <span class="wstep">Last step of your registration</span>
+      <h1>Welcome<%= user.full_name ? ', ' + user.full_name.split(' ')[0] : '' %>! Tell us about your company</h1>
+      <p>Lumi Trade uses these details for purchase orders, payments and shipping documents. You can update them later under <em>Company</em>.</p>
+    </div>
+  <% } else { %>
+    <div class="pagehead"><div><h1>Company details</h1><p class="muted">Keep these up to date — we use them on purchase orders and shipping documents.</p></div></div>
+    <% if (saved) { %><div class="alert ok">Saved.</div><% } %>
+  <% } %>
+  <% if (errors._) { %><div class="alert err"><%= errors._ %></div><% } else if (Object.keys(errors).length) { %><div class="alert err">Please complete the highlighted fields.</div><% } %>
+
+  <form method="post" action="/supplier/company" class="card companyform" novalidate>
+    <section>
+      <h3>Company</h3>
+      <label class="<%= he('name') %>">Registered company name <%- req %><input name="name" value="<%= v('name') %>" required autocomplete="organization" placeholder="e.g. Dongguan Milky Way Rubber Products Co., Ltd."><%- err('name') %></label>
+      <div class="row">
+        <label class="<%= he('company_type') %>">Type of company <%- req %>
+          <select name="company_type" required><option value="">— choose —</option><% Object.entries(types).forEach(([k, label]) => { %><option value="<%= k %>" <%= v('company_type') === k ? 'selected' : '' %>><%= label %></option><% }) %></select><%- err('company_type') %></label>
+        <label>Business licence / registration no. <input name="registration_no" value="<%= v('registration_no') %>" placeholder="Unified social credit code"></label>
+      </div>
+      <div class="row">
+        <label class="<%= he('year_established') %>">Year established <input name="year_established" inputmode="numeric" maxlength="4" value="<%= v('year_established') %>" placeholder="2008"><%- err('year_established') %></label>
+        <label>Employees <select name="employees"><option value="">—</option><% ['1–10','11–50','51–200','201–500','500+'].forEach(e => { %><option <%= v('employees') === e ? 'selected' : '' %>><%= e %></option><% }) %></select></label>
+        <label>Website / Alibaba / 1688 <input name="website" value="<%= v('website') %>" placeholder="www.company.com"></label>
+      </div>
+    </section>
+    <section>
+      <h3>Address</h3>
+      <label class="<%= he('address') %>">Factory / office address <%- req %><textarea name="address" rows="2" required autocomplete="street-address"><%= v('address') %></textarea><%- err('address') %></label>
+      <div class="row">
+        <label class="<%= he('city') %>">City <%- req %><input name="city" value="<%= v('city') %>" required placeholder="Dongguan"><%- err('city') %></label>
+        <label>Postal code <input name="postal_code" value="<%= v('postal_code') %>"></label>
+        <label class="<%= he('country') %>">Country <%- req %><input name="country" value="<%= v('country') || 'China' %>" required><%- err('country') %></label>
+      </div>
+    </section>
+    <section>
+      <h3>Contact person</h3>
+      <div class="row">
+        <label class="<%= he('contact_name') %>">Name <%- req %><input name="contact_name" value="<%= v('contact_name') %>" required><%- err('contact_name') %></label>
+        <label class="<%= he('email') %>">Email <%- req %><input type="email" name="email" value="<%= v('email') %>" required><%- err('email') %></label>
+      </div>
+      <div class="row">
+        <label class="<%= he('phone') %>">Phone / WhatsApp <input name="phone" value="<%= v('phone') %>" placeholder="+86 138 0000 0000"><%- err('phone') %></label>
+        <label>WeChat ID <input name="wechat" value="<%= v('wechat') %>"></label>
+      </div>
+      <p class="muted small">Phone or WeChat — at least one.</p>
+    </section>
+    <section>
+      <h3>Products &amp; trade</h3>
+      <label class="<%= he('main_products') %>">Main products <%- req %><textarea name="main_products" rows="2" required placeholder="e.g. Silicone baby products, rubber toys, pet bowls"><%= v('main_products') %></textarea><%- err('main_products') %></label>
+      <label>Certifications <input name="certifications" value="<%= v('certifications') %>" placeholder="e.g. BSCI, ISO 9001, CE, FDA, LFGB"></label>
+      <div class="row">
+        <label>Payment terms <input name="payment_terms" value="<%= v('payment_terms') %>" placeholder="30% deposit, 70% before shipment"></label>
+        <label class="<%= he('lead_time_days') %>">Usual lead time (days) <input name="lead_time_days" inputmode="numeric" value="<%= v('lead_time_days') %>" placeholder="30"><%- err('lead_time_days') %></label>
+      </div>
+      <label class="check"><input type="checkbox" name="can_export_official" <%= form.can_export_official === true || form.can_export_official === 'on' ? 'checked' : '' %>> We have export rights and can issue an official export declaration</label>
+    </section>
+    <div class="actions formend">
+      <span class="muted small"><span class="reqmark">*</span> required</span>
+      <span class="grow"></span>
+      <button class="btn primary lg"><%= first ? 'Complete registration →' : 'Save changes' %></button>
+    </div>
+  </form>
+</div>
+<%- include('../partials/foot') %>

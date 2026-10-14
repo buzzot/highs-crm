@@ -2,6 +2,7 @@ import { Router } from '../lib/router.js';
 import { admin, anon } from '../lib/supabase.js';
 import { setSession, clearSession, requireAuth } from '../middleware/auth.js';
 import { findInvite } from '../lib/invites.js';
+import { homeFor } from '../lib/util.js';
 import { log } from '../lib/activity.js';
 import { sign, unsign, seal, unseal } from '../lib/signed.js';
 import { sendCode, sendReset, checkCode, codeError, twoFactorOn, maskEmail, CODE_TTL_MIN, RESET_TTL_MIN } from '../lib/otp.js';
@@ -13,10 +14,10 @@ const cookieOpts = ttl => ({ httpOnly: true, sameSite: 'lax', secure, maxAge: tt
 const PENDING = 'hb_2fa';          // password OK, waiting for the emailed code
 const INVITE_OK = 'hb_inv';        // invitation email code confirmed, waiting for profile + password
 const safeNext = n => (n && n.startsWith('/') && !n.startsWith('//') ? n : null);
-const home = role => (role === 'client' ? '/portal' : '/admin');
+const home = homeFor;
 
 r.get('/login', (req, res) => {
-  if (req.user) return res.redirect(req.user.role === 'client' ? '/portal' : '/admin');
+  if (req.user) return res.redirect(homeFor(req.user.role));
   const lost = req.cookies.hb_just && !req.cookies.hb_session
     ? 'You were signed in, but your browser did not keep the sign-in cookie. Allow cookies for this site (and turn off strict tracking protection), then try again.' : null;
   if (lost) console.error('[login] session cookie was set but not sent back by the browser');
@@ -115,7 +116,7 @@ r.post('/auth/accept', async (req, res) => {
   const { data: signed } = await anon.auth.signInWithPassword({ email: data.user.email, password });
   if (signed?.session) setSession(res, signed.session);
   const { data: profile } = await admin.from('profiles').select('role').eq('id', data.user.id).single();
-  res.redirect(profile?.role === 'client' ? '/portal' : '/admin');
+  res.redirect(homeFor(profile?.role));
 });
 
 /**
@@ -200,10 +201,11 @@ r.post('/invite/:token', async (req, res) => {
   const now = new Date().toISOString();
   await admin.from('profiles').update({
     full_name: form.full_name, job_title: form.job_title || null, phone: form.phone || null, wechat: form.wechat || null,
-    role: inv.role, org_id: inv.org_id, active: true, accepted_at: now,
+    role: inv.role, org_id: inv.org_id, ...(inv.supplier_id ? { supplier_id: inv.supplier_id } : {}), active: true, accepted_at: now,
   }).eq('id', userId);
   await admin.from('invitations').update({ accepted_at: now }).eq('id', inv.id);
   if (inv.org_id) await log({ entityType: 'organization', entityId: inv.org_id, action: 'invite_accepted', actorId: userId, detail: { note: inv.email } });
+  if (inv.supplier_id) await log({ entityType: 'supplier', entityId: inv.supplier_id, action: 'invite_accepted', actorId: userId, detail: { note: inv.email } });
 
   // the email code already proved ownership of the address → sign straight in
   const { data: signed } = await anon.auth.signInWithPassword({ email: inv.email, password });

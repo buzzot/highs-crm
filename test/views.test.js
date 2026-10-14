@@ -50,3 +50,12 @@ test('client portal never renders cost, margin or supplier fields', () => {
     assert.doesNotMatch(html, /Brightway|margin|unit cost|internal/i, `${name} leaks internal data`);
   }
 });
+
+test('supplier portal never renders margins, sell prices or client names', () => {
+  for (const [name, entry] of Object.entries(pages)) {
+    if (!name.startsWith('supplier/')) continue;
+    const [tpl, locals] = resolve(name, entry);
+    const html = render(path.join(views, tpl + '.ejs'), locals);
+    assert.doesNotMatch(html, /margin|landed|Acme|sell price|internal/i, `${name} leaks internal data`);
+  }
+});

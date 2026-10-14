@@ -48,19 +48,23 @@ export function layout(o) {
 
 const text = (...lines) => lines.filter(l => l != null).join('\n');
 
-export function inviteEmail({ url, code, orgName, inviterName, days }) {
-  const where = orgName ? `the ${orgName} portal at Lumi Trade` : 'the Lumi Trade team';
+export function inviteEmail({ url, code, orgName, inviterName, days, kind = 'client' }) {
+  const supplier = kind === 'supplier';
+  const where = supplier ? 'the Lumi Trade supplier portal' : orgName ? `the ${orgName} portal at Lumi Trade` : 'the Lumi Trade team';
+  const what = supplier
+    ? 'Register your company: confirm this email, fill in your company and contact details and create a password. After that you can keep your details and product information up to date.'
+    : 'Send sourcing requests, approve quotes and follow every order and shipment in one place.';
   return {
-    subject: orgName ? `You're invited to the ${orgName} portal` : "You're invited to Lumi Trade",
+    subject: supplier ? 'Lumi Trade invites you to register as a supplier' : orgName ? `You're invited to the ${orgName} portal` : "You're invited to Lumi Trade",
     html: layout({
       preheader: `Your invitation code is ${code}.`,
-      eyebrow: 'Invitation', title: 'You’re invited to Lumi Trade',
-      introHtml: `${inviterName ? `<strong>${esc(inviterName)}</strong> invited you to ` : 'You have been invited to '}${esc(where)}. Send sourcing requests, approve quotes and follow every order and shipment in one place.`,
+      eyebrow: supplier ? 'Supplier invitation' : 'Invitation', title: supplier ? 'Register as a Lumi Trade supplier' : 'You’re invited to Lumi Trade',
+      introHtml: `${inviterName ? `<strong>${esc(inviterName)}</strong> invited you to ` : 'You have been invited to '}${esc(where)}. ${what}`,
       code, codeLabel: 'On the next page, enter this confirmation code:',
-      buttonText: 'Accept invitation', buttonUrl: url,
+      buttonText: supplier ? 'Register now' : 'Accept invitation', buttonUrl: url,
       fineHtml: `The invitation link and code work for <strong>${days} days</strong>. Didn't expect this? You can ignore this email.`,
     }),
-    text: text(`You're invited to ${where}.`, '', `Confirmation code: ${code}`, `Accept the invitation: ${url}`, '', `Valid for ${days} days.`),
+    text: text(`You're invited to ${where}.`, '', `Confirmation code: ${code}`, `${supplier ? 'Register' : 'Accept the invitation'}: ${url}`, '', `Valid for ${days} days.`),
   };
 }
 

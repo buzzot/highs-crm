@@ -1,8 +1,27 @@
 <%- include('../../partials/head') %>
+<% const m = typeof mode !== 'undefined' ? mode : 'manual'; const iv = typeof inv !== 'undefined' ? inv : {}; %>
 <div class="card narrow-md">
   <a class="back" href="<%= s.id ? '/admin/suppliers/' + s.id : '/admin/suppliers' %>">← Back</a>
   <h1><%= title %></h1>
   <% if (error) { %><div class="alert err"><%= error %></div><% } %>
+  <% if (!s.id) { %>
+    <div class="tabs modeTabs">
+      <a href="/admin/suppliers/new" class="<%= m === 'invite' ? 'on' : '' %>"><%- icon('mail') %> Invite by email</a>
+      <a href="/admin/suppliers/new?mode=manual" class="<%= m === 'manual' ? 'on' : '' %>"><%- icon('edit') %> Enter details myself</a>
+    </div>
+  <% } %>
+  <% if (!s.id && m === 'invite') { %>
+    <p class="muted">The supplier gets an invitation email. They confirm their email with a 6-digit code, fill in their company and personal details and create a password. This email becomes their login.</p>
+    <form method="post" action="/admin/suppliers/invite">
+      <div class="row">
+        <label>Contact email (login) <span class="reqmark">*</span><input type="email" name="email" required autofocus value="<%= iv.email || '' %>" placeholder="sales@factory.com"></label>
+        <label>Company name <span class="muted small">— optional</span><input name="name" value="<%= iv.name || '' %>" placeholder="Filled in by the supplier"></label>
+        <label>Contact person <span class="muted small">— optional</span><input name="contact_name" value="<%= iv.contact_name || '' %>"></label>
+      </div>
+      <label class="check"><input type="checkbox" name="send" <%= iv.email && !iv.send ? '' : 'checked' %>> Email the invitation now (valid 14 days)</label>
+      <div class="actions"><button class="btn primary"><%- icon('mail') %> Add supplier &amp; send invitation</button></div>
+    </form>
+  <% } else { %>
   <form method="post" action="<%= s.id ? '/admin/suppliers/' + s.id : '/admin/suppliers' %>">
     <label>Company name <input name="name" required value="<%= s.name || '' %>"></label>
     <div class="row">
@@ -11,6 +30,13 @@
       <label>Website / 1688 / Alibaba <input name="website" value="<%= s.website || '' %>"></label>
     </div>
     <label>Address <textarea name="address" rows="2"><%= s.address || '' %></textarea></label>
+    <div class="row">
+      <label>Type <select name="company_type"><option value="">—</option><% [['factory','Factory / manufacturer'],['trading','Trading company'],['both','Factory with own trading arm']].forEach(([k, l]) => { %><option value="<%= k %>" <%= s.company_type === k ? 'selected' : '' %>><%= l %></option><% }) %></select></label>
+      <label>Registration no. <input name="registration_no" value="<%= s.registration_no || '' %>"></label>
+      <label>Year established <input name="year_established" inputmode="numeric" value="<%= s.year_established || '' %>"></label>
+    </div>
+    <label>Main products <input name="main_products" value="<%= s.main_products || '' %>"></label>
+    <label>Certifications <input name="certifications" value="<%= s.certifications || '' %>" placeholder="BSCI, ISO 9001…"></label>
     <div class="row">
       <label>Contact person <input name="contact_name" value="<%= s.contact_name || '' %>"></label>
       <label>Phone <input name="phone" value="<%= s.phone || '' %>"></label>
@@ -26,5 +52,6 @@
     <label>Notes <textarea name="notes" rows="4"><%= s.notes || '' %></textarea></label>
     <div class="actions"><button class="btn primary">Save</button></div>
   </form>
+  <% } %>
 </div>
 <%- include('../../partials/foot') %>

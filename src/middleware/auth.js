@@ -52,6 +52,10 @@ export async function loadUser(req, res, next) {
     clearSession(res, `Signed in, but the account could not be loaded — ${why}`); return next();
   }
 
+  if (profile.role === 'supplier' && profile.supplier_id) {
+    const { data: sup } = await admin.from('suppliers').select('id, name, country, details_completed_at').eq('id', profile.supplier_id).maybeSingle();
+    profile.supplier = sup || null;
+  }
   req.user = profile;
   req.accessToken = tokens.a;
   req.db = asUser(tokens.a);
@@ -66,6 +70,8 @@ export function requireAuth(req, res, next) {
 
 export function requireStaff(req, res, next) {
   if (!req.user) return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl));
+  if (req.user.role === 'client') return res.redirect('/portal');
+  if (req.user.role === 'supplier') return res.redirect('/supplier');
   if (!['admin', 'staff'].includes(req.user.role)) return res.status(403).render('error', { title: 'Forbidden', message: 'Staff only.' });
   next();
 }
@@ -77,8 +83,18 @@ export function requireAdmin(req, res, next) {
 
 export function requireClient(req, res, next) {
   if (!req.user) return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl));
+  if (req.user.role === 'supplier') return res.redirect('/supplier');
   if (req.user.role !== 'client' || !req.user.org_id) return res.redirect('/admin');
   // first sign-in for this company: details must be completed before anything else
   if (!req.user.detailsGateOff && !req.user.organizations?.details_completed_at && !req.path.startsWith('/company')) return res.redirect('/portal/company?first=1');
+  next();
+}
+
+export function requireSupplier(req, res, next) {
+  if (!req.user) return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl));
+  if (req.user.role !== 'supplier' || !req.user.supplier_id) return res.redirect(req.user.role === 'client' ? '/portal' : '/admin');
+  if (!req.user.supplier) return res.status(403).render('error', { title: 'Not available', message: 'Your supplier account is not linked to a company. Please contact Lumi Trade.' });
+  // first sign-in: the company details must be filled in before anything else
+  if (!req.user.supplier.details_completed_at && !req.path.startsWith('/company')) return res.redirect('/supplier/company?first=1');
   next();
 }

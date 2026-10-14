@@ -6,9 +6,11 @@ import { fileURLToPath } from 'node:url';
 import { loadUser } from './middleware/auth.js';
 import authRoutes from './routes/auth.js';
 import portalRoutes from './routes/portal.js';
+import supplierRoutes from './routes/supplier.js';
 import adminRoutes from './routes/admin/index.js';
 import { fmt } from './lib/format.js';
 import { icon } from './lib/icons.js';
+import { homeFor } from './lib/util.js';
 import { showValue, deliveryLabel } from './lib/request-revisions.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -31,7 +33,7 @@ app.use(loadUser);
 
 app.get('/', (req, res) => {
   if (!req.user) return res.redirect('/login');
-  res.redirect(req.user.role === 'client' ? '/portal' : '/admin');
+  res.redirect(homeFor(req.user.role));
 });
 app.get('/health', (req, res) => res.json({ ok: true }));
 // Config self-check (no secrets shown): which project/role each key belongs to, and can the server read the DB?
@@ -64,6 +66,7 @@ app.get('/health/db', async (req, res) => {
 });
 app.use('/', authRoutes);
 app.use('/portal', portalRoutes);
+app.use('/supplier', supplierRoutes);
 app.use('/admin', adminRoutes);
 
 app.use((req, res) => res.status(404).render('error', { title: 'Not found', message: 'Page not found.' }));

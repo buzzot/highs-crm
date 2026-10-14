@@ -1,0 +1,23 @@
+<%- include('../partials/head') %>
+<div class="pagehead"><div><h1>My products</h1><p class="muted">Products Lumi Trade buys from you, as we have them on file. Something wrong or outdated? Send us your latest price list.</p></div></div>
+<div class="card">
+  <% if (!products.length) { %><p class="muted">No products on file yet.</p><% } else { %>
+  <table class="tbl">
+    <thead><tr><th></th><th>Product</th><th>Your SKU</th><th>Category</th><th class="right">Price</th><th>MOQ</th><th>Carton</th></tr></thead>
+    <tbody>
+    <% products.forEach(p => { %>
+      <tr>
+        <td class="thumbcell"><% if (photoOf[p.id]) { %><img class="pthumbsm" src="/supplier/photos/<%= photoOf[p.id] %>" alt="" loading="lazy"><% } %></td>
+        <td><strong><%= p.name %></strong><% if (p.hs_code) { %><div class="muted small">HS <%= p.hs_code %></div><% } %></td>
+        <td><%= p.supplier_sku || '—' %></td>
+        <td><%= p.category || '—' %></td>
+        <td class="right"><%= p.unit_cost != null ? fmt.money(p.unit_cost, p.cost_currency, 2) : '—' %></td>
+        <td><%= p.moq ?? '—' %></td>
+        <td class="small"><%= p.carton_qty ? p.carton_qty + ' pcs' : '' %><% if (p.carton_length_cm) { %><div class="muted"><%= [p.carton_length_cm, p.carton_width_cm, p.carton_height_cm].map(Number).join('×') %> cm<%= p.carton_weight_kg ? ' · ' + Number(p.carton_weight_kg) + ' kg' : '' %></div><% } %></td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table>
+  <% } %>
+</div>
+<%- include('../partials/foot') %>

@@ -10,6 +10,7 @@ const day = n => d(n).slice(0, 10);
 export const settings = { fx: { CNY_USD: 0.138, USD_CNY: 7.25, EUR_USD: 1.08 }, pricing: { min_margin_pct: 20, default_margin_pct: 25 } };
 
 const staffUser = { id: 'u1', email: 'anna@lumitrade.example', full_name: 'Anna Lee', role: 'admin', org_id: null };
+const supplierUser = { id: 'u7', email: 'marsel@lulyboo.com', full_name: 'Li Kuan', role: 'supplier', org_id: null, supplier_id: 's1', supplier: { id: 's1', name: 'Shenzhen Brightway Electronics', details_completed_at: '2026-10-09T10:00:00Z' } };
 const clientUser = { id: 'u9', email: 'tom@acme.example', full_name: 'Tom Baker', role: 'client', org_id: 'o1', organizations: { id: 'o1', name: 'Acme Retail LLC' } };
 
 const org = { id: 'o1', name: 'Acme Retail LLC', country: 'USA', tax_id: 'US-88-1234567', default_currency: 'USD', address: '120 Market St\nSan Francisco, CA', notes: 'Prefers sea LCL, monthly reorders.', active: true, created_at: d(-200) };
@@ -102,9 +103,11 @@ export const pages = {
     { id: 'u10', email: 'jane@acme.example', full_name: 'Jane Doe', active: false, state: 'accepted', accepted_at: d(-90) },
   ], requests, orders: ordersList }),
   'admin/clients/staff': base(staffUser, '/admin/clients/staff/list', { title: 'Staff', staff: [{ ...staffUser, active: true, state: 'accepted', accepted_at: d(-400) }, { id: null, email: 'new@highs.example', role: 'staff', state: 'pending', sent_at: d(0), days_left: 14 }] }),
-  'admin/suppliers/index': base(staffUser, '/admin/suppliers', { title: 'Suppliers', suppliers: [{ ...sup, products: [{ count: 6 }], orders: [{ count: 4 }] }, { ...sup, id: 's2', name: 'Yiwu Sunhome Houseware', city: 'Yiwu', rating: 3, can_export_official: false, products: [{ count: 2 }], orders: [{ count: 1 }] }] }),
-  'admin/suppliers/form': base(staffUser, '/admin/suppliers/new', { title: 'New supplier', s: { country: 'China' }, error: null }),
-  'admin/suppliers/detail': base(staffUser, '/admin/suppliers/s1', { title: sup.name, s: sup, products: [prod], orders: ordersList, docs: [{ id: 'd9', kind: 'certificate', title: 'BSCI-2025.pdf', mime_type: 'application/pdf', client_visible: false, created_at: d(-60) }], spend: 18436 }),
+  'admin/suppliers/index': base(staffUser, '/admin/suppliers', { title: 'Suppliers', portal: { s1: 'active', s2: 'invited' }, suppliers: [{ ...sup, products: [{ count: 6 }], orders: [{ count: 4 }] }, { ...sup, id: 's2', name: 'Yiwu Sunhome Houseware', city: 'Yiwu', rating: 3, can_export_official: false, products: [{ count: 2 }], orders: [{ count: 1 }] }] }),
+  'admin/suppliers/form': base(staffUser, '/admin/suppliers/new', { title: 'New supplier', s: { country: 'China' }, error: null, mode: 'invite', inv: {} }),
+  'admin/suppliers/form_manual': ['admin/suppliers/form', base(staffUser, '/admin/suppliers/new', { title: 'New supplier', s: { country: 'China' }, error: null, mode: 'manual', inv: {} })],
+  'admin/suppliers/form_edit': ['admin/suppliers/form', base(staffUser, '/admin/suppliers/s1/edit', { title: 'Edit supplier', s: { ...sup, company_type: 'factory', main_products: 'LED lamps' }, error: null, mode: 'manual', inv: {} })],
+  'admin/suppliers/detail': base(staffUser, '/admin/suppliers/s1', { title: sup.name, types: { factory: 'Factory / manufacturer' }, members: [{ id: 'u7', email: 'marsel@lulyboo.com', full_name: 'Li Kuan', state: 'accepted', active: true, accepted_at: d(-4) }, { id: null, email: 'sales@brightway.example', state: 'pending', sent_at: d(-1), days_left: 13 }], s: { ...sup, company_type: 'factory', main_products: 'LED desk lamps', details_completed_at: d(-4) }, products: [prod], orders: ordersList, docs: [{ id: 'd9', kind: 'certificate', title: 'BSCI-2025.pdf', mime_type: 'application/pdf', client_visible: false, created_at: d(-60) }], spend: 18436 }),
   'admin/products/index': base(staffUser, '/admin/products', { title: 'Products', products: [{ ...prod, suppliers: { id: 's1', name: sup.name } }, { ...prod2, suppliers: null }], categories: ['Houseware', 'Lighting'], suppliers: lists.suppliers, thumb: { p1: 'doc1' } }),
   'admin/products/form': base(staffUser, '/admin/products/new', { title: 'New product', p: { cost_currency: 'CNY' }, specText: '', suppliers: lists.suppliers, photos: [{ id: 'doc1', title: 'front.jpg' }, { id: 'doc2', title: 'box.jpg' }], error: null }),
   'admin/products/detail': base(staffUser, '/admin/products/p1', { title: prod.name, p: { ...prod, suppliers: sup }, docs, quotes: [{ ...quote, requests: { id: 'r1', ref: request.ref, organizations: { name: 'Acme Retail LLC' } } }], specText: 'Power: 10 W\nMaterial: Aluminium' }),
@@ -154,6 +157,11 @@ export const pages = {
   'auth/verify': base(null, '/login/verify', { title: 'Enter your code', email: 'ma•••@gmail.com', error: null, msg: null }),
   'auth/reset': base(null, '/reset/x/y', { title: 'Choose a new password', error: null, valid: true }),
   'auth/forgot': base(null, '/forgot', { title: 'Check your inbox', sent: true, email: 'mars4wo@gmail.com', error: null, minutes: 30 }),
+  'auth/invite_supplier': ['auth/invite', base(null, '/invite/x', { title: 'Accept invitation', state: 'valid', step: 'code', msg: null, inv: { email: 'sales@factory.example', token: 'tok', role: 'supplier', expires_at: d(13), supplier: { name: '(factory.example)', details_completed_at: null } }, error: null, form: {} })],
+  'supplier/dashboard': base(supplierUser, '/supplier', { title: 'Overview', s: { ...sup, company_type: 'factory', main_products: 'LED desk lamps', certifications: 'BSCI, CE' }, products: [prod, prod2], team: [{ full_name: 'Li Kuan', email: 'marsel@lulyboo.com', job_title: 'Sales manager' }], types: { factory: 'Factory / manufacturer', trading: 'Trading company', both: 'Factory with own trading arm' } }),
+  'supplier/company': base({ ...supplierUser, supplier: { id: 's1', name: '(factory.example)', details_completed_at: null } }, '/supplier/company', { title: 'Company details', form: { contact_name: 'Li Kuan', email: 'marsel@lulyboo.com' }, errors: { name: 'Enter the company name.', main_products: 'Tell us what you make or sell.' }, first: true, saved: false, types: { factory: 'Factory / manufacturer', trading: 'Trading company', both: 'Factory with own trading arm' } }),
+  'supplier/company_saved': ['supplier/company', base(supplierUser, '/supplier/company', { title: 'Company details', form: { ...sup, company_type: 'factory', can_export_official: true }, errors: {}, first: false, saved: true, types: { factory: 'Factory / manufacturer', trading: 'Trading company', both: 'Factory with own trading arm' } })],
+  'supplier/products': base(supplierUser, '/supplier/products', { title: 'My products', products: [{ ...prod, supplier_sku: 'BW-1' }, prod2], photoOf: { [prod.id]: 'ph1' } }),
   'auth/account': base({ ...clientUser, job_title: 'Buyer', phone: '+1 555 0100' }, '/account', { title: 'My account', saved: false }),
   error: base(staffUser, '/x', { title: 'Not found', message: 'Page not found.' }),
 };

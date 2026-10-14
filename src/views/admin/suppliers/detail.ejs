@@ -4,6 +4,22 @@
     <p class="muted"><%= [s.city, s.country].filter(Boolean).join(', ') %> <% if (s.rating) { %>· <span class="stars"><%= '★'.repeat(s.rating) %></span><% } %> <% if (s.can_export_official) { %>· <span class="tag ok">official exporter</span><% } %></p></div>
   <div class="actions"><a class="btn" href="/admin/suppliers/<%= s.id %>/edit">Edit</a><a class="btn" href="/admin/products/import">⇪ Import price list</a><a class="btn primary" href="/admin/products/new?supplier_id=<%= s.id %>">+ Product</a></div>
 </div>
+<% const mem = typeof members !== 'undefined' ? members : []; const ty = typeof types !== 'undefined' ? types : {}; %>
+<div class="card portalcard">
+  <h2>Portal access <span class="count"><%= mem.filter(x => x.state === 'accepted' && x.active !== false).length %> active<%= mem.some(x => x.state === 'pending') ? ' · ' + mem.filter(x => x.state === 'pending').length + ' invited' : '' %></span></h2>
+  <% if (s.details_completed_at) { %>
+    <p class="muted small">✓ Company details completed by the supplier on <%= fmt.date(s.details_completed_at) %>.</p>
+  <% } else if (mem.some(x => x.state === 'pending' || x.state === 'accepted')) { %>
+    <div class="alert warn">Waiting for the supplier to register — they fill in the company details after accepting the invitation.</div>
+  <% } else { %>
+    <p class="muted small">Invite the supplier so they can register and keep their company details up to date themselves.</p>
+  <% } %>
+  <%- include('../../partials/members', { members: mem, inviteAction: '/admin/suppliers/' + s.id + '/invite', cancelAction: '/admin/suppliers/' + s.id + '/invites/cancel', toggleBase: '/admin/suppliers/' + s.id + '/users' }) %>
+  <form method="post" action="/admin/suppliers/<%= s.id %>/invite" class="row tight inviteform">
+    <input type="email" name="email" required placeholder="<%= mem.length ? 'colleague@factory.com' : (s.email || 'sales@factory.com') %>" value="<%= mem.length ? '' : (s.email || '') %>">
+    <button class="btn primary"><%- icon('mail') %> <%= mem.length ? 'Invite another person' : 'Send invitation' %></button>
+  </form>
+</div>
 <div class="kpis">
   <div class="kpi"><span class="n"><%= products.length %></span><span class="l">Products</span></div>
   <div class="kpi"><span class="n"><%= orders.length %></span><span class="l">Orders</span></div>
@@ -14,8 +30,12 @@
     <div class="card">
       <h2>Contact</h2>
       <dl class="dl">
+        <% if (s.company_type) { %><dt>Type</dt><dd><%= ty[s.company_type] || s.company_type %><%= s.year_established ? ' · since ' + s.year_established : '' %><%= s.employees ? ' · ' + s.employees + ' staff' : '' %></dd><% } %>
+        <% if (s.registration_no) { %><dt>Registration no.</dt><dd><%= s.registration_no %></dd><% } %>
+        <% if (s.main_products) { %><dt>Main products</dt><dd><%= s.main_products %></dd><% } %>
+        <% if (s.certifications) { %><dt>Certifications</dt><dd><%= s.certifications %></dd><% } %>
         <dt>Contact</dt><dd><%= s.contact_name || '—' %></dd>
-        <dt>Address</dt><dd class="pre"><%= s.address || '—' %></dd>
+        <dt>Address</dt><dd class="pre"><%= [s.address, [s.postal_code, s.city].filter(Boolean).join(' ')].filter(Boolean).join('\n') || '—' %></dd>
         <dt>Phone</dt><dd><%= s.phone || '—' %></dd>
         <dt>Email</dt><dd><% if (s.email) { %><a href="mailto:<%= s.email %>"><%= s.email %></a><% } else { %>—<% } %></dd>
         <dt>WeChat</dt><dd><%= s.wechat || '—' %></dd>

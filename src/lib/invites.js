@@ -12,18 +12,23 @@ export { INVITE_DAYS, memberRows } from './members.js';
  * Resend from your own domain. The login is created here (without a password); the person sets the
  * password on the invitation page after confirming the code. Re-inviting revokes earlier open invitations.
  */
-export async function inviteUser({ email, role = 'client', orgId = null, invitedBy = null }) {
+export async function inviteUser({ email, role = 'client', orgId = null, supplierId = null, invitedBy = null }) {
   email = String(email || '').trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error('Enter a valid email address.');
   if (role === 'client' && !orgId) throw new Error('Client invites need an organization.');
+  if (role === 'supplier' && !supplierId) throw new Error('Supplier invites need a supplier.');
+  if (role === 'supplier') orgId = null;
 
-  const { data: existing } = await admin.from('profiles').select('id, role, org_id, accepted_at, organizations!profiles_org_id_fkey(name)').ilike('email', email).maybeSingle();
+  const { data: existing } = await admin.from('profiles').select('*, organizations!profiles_org_id_fkey(name)').ilike('email', email).maybeSingle();
   if (existing?.accepted_at) {
     if (role === 'client' && existing.org_id && existing.org_id !== orgId) {
       throw new Error(`${email} already uses the portal for ${existing.organizations?.name || 'another client'}.`);
     }
-    if (role === 'client' && existing.role !== 'client') throw new Error(`${email} is a staff account.`);
+    if (role === 'client' && existing.role !== 'client') throw new Error(`${email} is a ${existing.role} account.`);
+    if (role === 'supplier' && existing.role !== 'supplier') throw new Error(`${email} is already used by a ${existing.role} account.`);
+    if (role === 'supplier' && existing.supplier_id && existing.supplier_id !== supplierId) throw new Error(`${email} already uses the portal for another supplier.`);
   }
+  if (!existing?.accepted_at && existing && existing.role !== role && ['admin', 'staff'].includes(existing.role)) throw new Error(`${email} is a staff account.`);
 
   await admin.from('invitations').update({ revoked_at: new Date().toISOString() })
     .ilike('email', email).is('accepted_at', null).is('revoked_at', null);
@@ -31,24 +36,25 @@ export async function inviteUser({ email, role = 'client', orgId = null, invited
   const token = randomBytes(24).toString('base64url');
   const expiresAt = new Date(Date.now() + INVITE_DAYS * 864e5).toISOString();
   const { error: iErr } = await admin.from('invitations')
-    .insert({ email, role, org_id: orgId, invited_by: invitedBy, token, expires_at: expiresAt });
+    .insert({ email, role, org_id: orgId, ...(supplierId ? { supplier_id: supplierId } : {}), invited_by: invitedBy, token, expires_at: expiresAt });
   if (iErr) throw iErr;
 
   // the login (no password yet) — the database trigger links it to the invitation (role + client)
   const now = new Date().toISOString();
   if (existing) {
-    await admin.from('profiles').update({ role, org_id: orgId, active: true, invited_at: now }).eq('id', existing.id);
+    await admin.from('profiles').update({ role, org_id: orgId, ...(supplierId ? { supplier_id: supplierId } : {}), active: true, invited_at: now }).eq('id', existing.id);
   } else {
     const { error } = await admin.auth.admin.createUser({ email, email_confirm: true });
     if (error && !/already|registered|exists/i.test(error.message)) throw error;
     await admin.from('profiles').update({ invited_at: now }).ilike('email', email);
   }
 
-  const [{ data: org }, { data: inviter }] = await Promise.all([
+  const [{ data: org }, { data: sup }, { data: inviter }] = await Promise.all([
     orgId ? admin.from('organizations').select('name').eq('id', orgId).single() : { data: null },
+    supplierId ? admin.from('suppliers').select('name, details_completed_at').eq('id', supplierId).single() : { data: null },
     invitedBy ? admin.from('profiles').select('full_name').eq('id', invitedBy).single() : { data: null },
   ]);
-  await sendInvite({ email, token, orgName: org?.name || null, inviterName: inviter?.full_name || null, days: INVITE_DAYS });
+  await sendInvite({ email, token, orgName: org?.name || (sup?.details_completed_at ? sup.name : null), inviterName: inviter?.full_name || null, days: INVITE_DAYS, kind: role === 'supplier' ? 'supplier' : 'client' });
   return { resent: !!existing, expiresAt };
 }
 
@@ -57,6 +63,10 @@ export async function findInvite(token) {
   if (!token || token.length < 20) return { state: 'invalid' };
   const { data: inv } = await admin.from('invitations').select('*, organizations(name)').eq('token', token).maybeSingle();
   if (!inv) return { state: 'invalid' };
+  if (inv.supplier_id) {
+    const { data: sup } = await admin.from('suppliers').select('name, details_completed_at').eq('id', inv.supplier_id).maybeSingle();
+    inv.supplier = sup || null;
+  }
   if (inv.accepted_at) return { state: 'accepted', inv };
   if (inv.revoked_at) return { state: 'revoked', inv };
   if (inv.expires_at && new Date(inv.expires_at) < new Date()) return { state: 'expired', inv };
