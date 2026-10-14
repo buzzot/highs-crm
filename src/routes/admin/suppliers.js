@@ -2,6 +2,7 @@ import { Router } from '../../lib/router.js';
 import { admin } from '../../lib/supabase.js';
 import { clean, bool, notFound } from '../../lib/util.js';
 import { requireAdmin } from '../../middleware/auth.js';
+import { ACTIVITY_TYPES as BASE_TYPES, readActivity, withLastLogin } from '../../lib/crm.js';
 import { inviteUser, memberRows } from '../../lib/invites.js';
 import { log } from '../../lib/activity.js';
 import { COMPANY_TYPES } from '../../lib/supplier-company.js';
@@ -14,7 +15,7 @@ const r = Router();
 const FIELDS = ['name', 'country', 'city', 'address', 'contact_name', 'phone', 'email', 'wechat', 'website', 'payment_terms', 'lead_time_days', 'rating', 'can_export_official', 'notes',
   'company_type', 'main_products', 'certifications', 'registration_no', 'postal_code', 'year_established', 'employees', 'crm_status', 'next_follow_up'];
 export const CRM_STATUSES = { prospect: 'Prospect', contacted: 'Contacted', sampling: 'Sampling', approved: 'Approved', active: 'Active supplier', on_hold: 'On hold', blocked: 'Blocked' };
-export const ACTIVITY_TYPES = { call: 'Call', wechat: 'WeChat', email: 'Email', meeting: 'Meeting', visit: 'Factory visit', sample: 'Sample', note: 'Note' };
+export const ACTIVITY_TYPES = { ...BASE_TYPES, visit: 'Factory visit' };
 const body = b => ({ ...clean(b, FIELDS), can_export_official: bool(b.can_export_official) });
 const like = q => String(q || '').replace(/[,()%]/g, ' ').trim();
 
@@ -77,13 +78,7 @@ r.get('/:id', async (req, res) => {
     admin.from('activity_log').select('*, profiles(full_name, email)').eq('entity_type', 'supplier').eq('entity_id', id).order('created_at', { ascending: false }).limit(50),
   ]);
   if (!s) return notFound(res, 'Supplier');
-  // last sign-in: our own record, else Supabase's (people who signed in before it was recorded)
-  for (const u of users || []) {
-    if (!u.last_login_at && u.accepted_at) {
-      const { data } = await admin.auth.admin.getUserById(u.id).catch(() => ({ data: null }));
-      u.last_login_at = data?.user?.last_sign_in_at || null;
-    }
-  }
+  await withLastLogin(users);
   const ids = (products || []).map(p => p.id);
   const { data: photos } = ids.length
     ? await admin.from('documents').select('id, entity_id').eq('entity_type', 'product').eq('kind', 'product_photo').in('entity_id', ids).order('created_at')
@@ -102,11 +97,8 @@ r.get('/:id', async (req, res) => {
 
 // CRM activity: a call, WeChat chat, visit… with an optional follow-up date
 r.post('/:id/activity', async (req, res) => {
-  const type = ACTIVITY_TYPES[req.body.type] ? req.body.type : 'note';
-  const summary = String(req.body.summary || '').trim().slice(0, 2000);
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(req.body.date || '') ? req.body.date : new Date().toISOString().slice(0, 10);
-  const follow = /^\d{4}-\d{2}-\d{2}$/.test(req.body.follow_up || '') ? req.body.follow_up : null;
-  if (!summary) return res.redirect(`/admin/suppliers/${req.params.id}?err=` + encodeURIComponent('Write a short summary of the activity.') + '#activity');
+  const { type, summary, date, follow, error } = readActivity(req.body);
+  if (error) return res.redirect(`/admin/suppliers/${req.params.id}?err=` + encodeURIComponent('Write a short summary of the activity.') + '#activity');
   await log({ entityType: 'supplier', entityId: req.params.id, action: `crm_${type}`, actorId: req.user.id, detail: { note: summary, date, follow_up: follow } });
   if (follow) await admin.from('suppliers').update({ next_follow_up: follow }).eq('id', req.params.id);
   res.redirect(`/admin/suppliers/${req.params.id}?msg=` + encodeURIComponent('Activity logged.') + '#activity');

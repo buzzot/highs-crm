@@ -1,0 +1,47 @@
+<%#
+  Portal users with invitation status and last sign-in, plus the invite box.
+  locals: members (memberRows), base (e.g. /admin/clients/<id>) — posts to base/invite, base/invites/cancel, base/users/<uid>/toggle
+          emptyText, firstPlaceholder, firstValue, otherPlaceholder
+%>
+<%
+  const ago = d => { if (!d) return ''; const days = Math.floor((Date.now() - new Date(d)) / 864e5); return days <= 0 ? 'today' : days === 1 ? 'yesterday' : days < 30 ? days + ' days ago' : fmt.date(d); };
+%>
+<% if (members.length) { %>
+<table class="tbl users">
+  <thead><tr><th>Email (login)</th><th>Name</th><th>Status</th><th>Last sign-in</th><th></th></tr></thead>
+  <tbody>
+  <% members.forEach(m => { %>
+    <tr class="<%= m.active === false && m.state === 'accepted' ? 'dim' : '' %>">
+      <td><strong><%= m.email %></strong></td>
+      <td><%= m.full_name || '—' %><% if (m.job_title) { %><div class="muted small"><%= m.job_title %></div><% } %></td>
+      <td>
+        <% if (m.state === 'accepted') { %>
+          <% if (m.active === false) { %><span class="badge">Disabled</span><% } else { %><span class="badge ok">Active</span><% } %>
+          <div class="muted small">joined <%= fmt.date(m.accepted_at) %></div>
+        <% } else if (m.state === 'pending') { %>
+          <span class="badge info">Invitation sent</span><div class="muted small"><%= fmt.date(m.sent_at) %> · valid <%= m.days_left %> more day<%= m.days_left === 1 ? '' : 's' %></div>
+        <% } else if (m.state === 'expired') { %>
+          <span class="badge warn">Invitation expired</span><div class="muted small">sent <%= fmt.date(m.sent_at) %></div>
+        <% } else { %><span class="badge">No invitation</span><% } %>
+      </td>
+      <td><% if (m.last_login_at) { %><%= fmt.datetime(m.last_login_at) %><div class="muted small"><%= ago(m.last_login_at) %></div><% } else { %><span class="muted">never</span><% } %></td>
+      <td class="right nowrap">
+        <% if (m.state === 'pending' || m.state === 'expired') { %>
+          <form method="post" action="<%= base %>/invite" class="inline"><input type="hidden" name="email" value="<%= m.email %>"><button class="btn small <%= m.state === 'expired' ? 'primary' : '' %>">Resend</button></form>
+          <form method="post" action="<%= base %>/invites/cancel" class="inline" onsubmit="return confirm('Cancel the invitation for <%= m.email %>?')"><input type="hidden" name="email" value="<%= m.email %>"><button class="link small danger">Cancel</button></form>
+        <% } else if (m.id) { %>
+          <form method="post" action="<%= base %>/users/<%= m.id %>/toggle" class="inline"><button class="link small <%= m.active === false ? '' : 'danger' %>"><%= m.active === false ? 'Enable' : 'Disable' %></button></form>
+        <% } %>
+      </td>
+    </tr>
+  <% }) %>
+  </tbody>
+</table>
+<% } else { %>
+  <p class="muted"><%= emptyText %></p>
+<% } %>
+<form method="post" action="<%= base %>/invite" class="row tight inviteform">
+  <input type="email" name="email" required placeholder="<%= members.length ? otherPlaceholder : firstPlaceholder %>" value="<%= members.length ? '' : firstValue %>" aria-label="Email to invite">
+  <button class="btn primary"><%- icon('mail') %> <%= members.length ? 'Invite another user' : 'Send invitation' %></button>
+  <span class="muted small">The invitation email is valid 14 days.</span>
+</form>

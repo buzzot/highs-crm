@@ -1,0 +1,30 @@
+<%#
+  Activity log (calls, WeChat, visits…) with follow-up dates, plus system events.
+  locals: events (activity_log rows with profiles), action (POST url), types ({ key: label }), today (YYYY-MM-DD)
+%>
+<%
+  const SYS = { supplier_invited: 'Supplier added by invitation', invite_accepted: 'Invitation accepted', details_completed: 'Company details completed', details_updated: 'Company details updated',
+    portal_blocked: 'Portal access blocked', portal_restored: 'Portal access restored', changes_submitted: 'Client changed a request', created: 'Created' };
+  const label = e => e.action.startsWith('crm_') ? (types[e.action.slice(4)] || 'Note') : (SYS[e.action] || fmt.status(e.action));
+%>
+<form method="post" action="<%= action %>" class="actform">
+  <div class="row">
+    <label>Date <input type="date" name="date" value="<%= today %>"></label>
+    <label>Type <select name="type"><% Object.entries(types).forEach(([k, l]) => { %><option value="<%= k %>"><%= l %></option><% }) %></select></label>
+  </div>
+  <label>Summary <textarea name="summary" rows="3" placeholder="What was discussed or agreed — prices, samples, next steps…"></textarea></label>
+  <div class="row bottom">
+    <label>Follow up on <input type="date" name="follow_up" min="<%= today %>"></label>
+    <div class="actions"><button class="btn primary">Log activity</button></div>
+  </div>
+</form>
+<ul class="actlist">
+  <% if (!events.length) { %><li class="muted small">No activity yet.</li><% } %>
+  <% events.forEach(e => { const d = e.detail || {}; const crmEv = e.action.startsWith('crm_'); %>
+    <li class="<%= crmEv ? 'crm' : 'sys' %>">
+      <div class="ahead"><strong><%= label(e) %></strong> <span class="muted small"><%= d.date ? fmt.date(d.date) : fmt.datetime(e.created_at) %><%= e.profiles ? ' · ' + (e.profiles.full_name || e.profiles.email) : '' %></span></div>
+      <% if (d.note && crmEv) { %><p class="pre"><%= d.note %></p><% } else if (d.note) { %><div class="muted small"><%= d.note %></div><% } %>
+      <% if (d.follow_up) { %><div class="small <%= d.follow_up < today ? 'bad' : 'muted' %>">↻ follow up <%= fmt.date(d.follow_up) %></div><% } %>
+    </li>
+  <% }) %>
+</ul>

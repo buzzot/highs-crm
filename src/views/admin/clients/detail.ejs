@@ -1,57 +1,119 @@
 <%- include('../../partials/head') %>
+<%
+  const k = typeof kpi !== 'undefined' ? kpi : { openRequests: 0, activeOrders: 0, sales: 0, profit: 0, lastLogin: null };
+  const evs = typeof events !== 'undefined' ? events : [];
+  const types = typeof activityTypes !== 'undefined' ? activityTypes : {};
+  const today = new Date().toISOString().slice(0, 10);
+  const v = f => org[f] ?? '';
+  const cur = org.default_currency || 'USD';
+  const active = org.active !== false;
+%>
 <div class="pagehead">
-  <div><a class="back" href="/admin/clients">← Clients</a><h1><%= org.name %></h1>
-    <p class="muted"><%= [org.country, org.tax_id && ('Tax ID ' + org.tax_id), org.default_currency].filter(Boolean).join(' · ') %></p></div>
-  <div class="actions"><a class="btn" href="/admin/clients/<%= org.id %>/edit">Edit</a><a class="btn primary" href="/admin/orders/new?org_id=<%= org.id %>">+ Order</a></div>
+  <div>
+    <a class="back" href="/admin/clients">← Clients</a>
+    <h1><%= org.name %></h1>
+    <p class="muted suphead">
+      <span class="pill <%= active ? 'crm-active' : 'crm-blocked' %>"><%= active ? 'Active client' : 'Inactive' %></span>
+      <%= [org.city, org.country].filter(Boolean).join(', ') || 'location not set' %>
+      · <%= cur %>
+      · client since <%= fmt.date(org.created_at) %>
+      · <% if (org.details_completed_at) { %><span class="oktext">✓ details completed <%= fmt.date(org.details_completed_at) %></span><% } else { %><span class="warntext">details pending — asked on first sign-in</span><% } %>
+    </p>
+  </div>
+  <div class="actions">
+    <a class="btn primary" href="/admin/orders/new?org_id=<%= org.id %>">+ Order</a>
+  </div>
 </div>
-<div class="grid2">
-  <div>
-    <div class="card">
-      <h2>Orders</h2>
-      <% if (!orders.length) { %><p class="muted">No orders yet.</p><% } %>
-      <table class="tbl"><tbody>
-      <% orders.forEach(o => { %>
-        <tr><td><a href="/admin/orders/<%= o.id %>"><%= o.order_no %></a></td><td><span class="pill <%= o.status %>"><%= fmt.status(o.status) %></span></td>
-          <td class="right"><%= fmt.money(o.subtotal, o.currency) %></td><td class="right"><%= fmt.pct(o.margin_pct) %></td><td class="muted small"><%= fmt.date(o.created_at) %></td></tr>
-      <% }) %>
-      </tbody></table>
-    </div>
-    <div class="card">
-      <h2>Requests</h2>
-      <% if (!requests.length) { %><p class="muted">No requests yet.</p><% } %>
-      <table class="tbl"><tbody>
-      <% requests.forEach(q => { %>
-        <tr><td><a href="/admin/sourcing/<%= q.id %>"><%= q.ref %></a></td><td><%= q.title %></td><td><span class="pill <%= q.status %>"><%= fmt.status(q.status) %></span></td><td class="muted small"><%= fmt.date(q.created_at) %></td></tr>
-      <% }) %>
-      </tbody></table>
-    </div>
+
+<div class="kpis kpis4">
+  <div class="kpi"><span class="n"><%= k.openRequests %></span><span class="l">Open requests</span></div>
+  <div class="kpi"><span class="n"><%= k.activeOrders %></span><span class="l">Orders in progress</span></div>
+  <div class="kpi"><span class="n"><%= fmt.money(k.sales, cur, 0) %></span><span class="l">Sales · <%= fmt.money(k.profit, cur, 0) %> gross profit</span></div>
+  <div class="kpi"><span class="n"><%= k.lastLogin ? fmt.date(k.lastLogin) : '—' %></span><span class="l">Last portal sign-in</span></div>
+</div>
+
+<div class="card">
+  <h2>Portal users <span class="count"><%= members.filter(x => x.state === 'accepted' && x.active !== false).length %> active<%= members.some(x => x.state === 'pending') ? ' · ' + members.filter(x => x.state === 'pending').length + ' invited' : '' %></span></h2>
+  <%- include('../../partials/users_table', { members, base: '/admin/clients/' + org.id, emptyText: 'Nobody from this client has portal access yet. Invite them — they confirm their email, fill in the company details and create a password.', firstPlaceholder: 'buyer@client.com', firstValue: org.email || '', otherPlaceholder: 'colleague@client.com' }) %>
+</div>
+
+<div class="grid2 even">
+  <div class="card">
+    <h2>Company details</h2>
+    <form method="post" action="/admin/clients/<%= org.id %>/details" class="detailsform">
+      <label>Registered company name <input name="name" required value="<%= v('name') %>"></label>
+      <div class="row">
+        <label>Registration no. <input name="registration_no" value="<%= v('registration_no') %>"></label>
+        <label>Tax / VAT ID <input name="tax_id" value="<%= v('tax_id') %>"></label>
+      </div>
+      <label>Address <textarea name="address" rows="2"><%= v('address') %></textarea></label>
+      <div class="row">
+        <label>City <input name="city" value="<%= v('city') %>"></label>
+        <label>Postal code <input name="postal_code" value="<%= v('postal_code') %>"></label>
+        <label>Country <input name="country" value="<%= v('country') %>"></label>
+      </div>
+      <label>Delivery address <span class="muted small">— if different (warehouse, forwarder)</span><textarea name="delivery_address" rows="2"><%= v('delivery_address') %></textarea></label>
+      <div class="row">
+        <label>Phone <input name="phone" value="<%= v('phone') %>"></label>
+        <label>Email <input type="email" name="email" value="<%= v('email') %>"></label>
+      </div>
+      <div class="row">
+        <label>Website <input name="website" value="<%= v('website') %>"></label>
+        <label>Currency <select name="default_currency"><% ['USD','EUR','GBP','CNY'].forEach(c => { %><option <%= cur === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+      </div>
+      <label>Notes <span class="muted small">— internal, never shown to the client</span><textarea name="notes" rows="3"><%= v('notes') %></textarea></label>
+      <label class="check"><input type="checkbox" name="active" <%= active ? 'checked' : '' %>> Active client</label>
+      <div class="actions"><button class="btn primary">Save</button></div>
+    </form>
   </div>
-  <div>
-    <div class="card">
-      <h2>Users <span class="count"><%= members.filter(m => m.state === 'accepted').length %> active<%= members.some(m => m.state === 'pending') ? ' · ' + members.filter(m => m.state === 'pending').length + ' invited' : '' %></span></h2>
-      <%- include('../../partials/members', { members, inviteAction: '/admin/clients/' + org.id + '/invite', cancelAction: '/admin/clients/' + org.id + '/invites/cancel', toggleBase: '/admin/clients/' + org.id + '/users' }) %>
-      <form method="post" action="/admin/clients/<%= org.id %>/invite" class="row tight">
-        <input type="email" name="email" placeholder="name@org.com" required>
-        <button class="btn primary">Send invite</button>
-      </form>
-      <p class="muted small">They get an email with a link to set their password (valid 14 days), then land in the client portal.</p>
-    </div>
-    <div class="card">
-      <h2>Company details
-        <% if (org.details_completed_at) { %><span class="badge ok">✓ completed by client <%= fmt.date(org.details_completed_at) %></span><% } else { %><span class="badge warn">waiting for client — asked on first sign-in</span><% } %></h2>
-      <dl class="dl">
-        <dt>Registration no.</dt><dd><%= org.registration_no || '—' %></dd>
-        <dt>Tax / VAT ID</dt><dd><%= org.tax_id || '—' %></dd>
-        <dt>Address</dt><dd class="pre"><%= [org.address, [org.postal_code, org.city].filter(Boolean).join(' '), org.country].filter(Boolean).join('\n') || '—' %></dd>
-        <dt>Delivery address</dt><dd class="pre"><%= org.delivery_address || 'same as above' %></dd>
-        <dt>Phone</dt><dd><%= org.phone || '—' %></dd>
-        <dt>Email</dt><dd><% if (org.email) { %><a href="mailto:<%= org.email %>"><%= org.email %></a><% } else { %>—<% } %></dd>
-        <dt>Website</dt><dd><% if (org.website) { %><a href="<%= org.website %>" target="_blank" rel="noopener"><%= org.website %></a><% } else { %>—<% } %></dd>
-        <dt>Currency</dt><dd><%= org.default_currency %></dd>
-        <dt>Notes</dt><dd class="pre"><%= org.notes || '—' %></dd>
-        <dt>Since</dt><dd><%= fmt.date(org.created_at) %></dd>
-      </dl>
-    </div>
+
+  <div class="card" id="activity">
+    <h2>Activity</h2>
+    <%- include('../../partials/crm_activity', { events: evs, action: '/admin/clients/' + org.id + '/activity', types, today }) %>
   </div>
+</div>
+
+<div class="card">
+  <h2>Requests <span class="count"><%= requests.length %></span></h2>
+  <% if (!requests.length) { %><p class="muted">No requests yet — the client sends them from the portal.</p><% } else { %>
+  <table class="tbl">
+    <thead><tr><th>Ref</th><th>Request</th><th class="right">Products</th><th>Needed by</th><th>Quotes</th><th>Status</th><th>Received</th></tr></thead>
+    <tbody>
+    <% requests.forEach(q => { const n = q.request_items?.[0]?.count; const sent = (q.quotes || []).filter(x => x.status === 'sent').length; %>
+      <tr>
+        <td><a href="/admin/sourcing/<%= q.id %>"><%= q.ref %></a></td>
+        <td><strong><%= q.title %></strong></td>
+        <td class="right"><%= n || 1 %></td>
+        <td><%= fmt.date(q.needed_by) %></td>
+        <td><%= (q.quotes || []).length %><% if (sent) { %> <span class="muted small">(<%= sent %> sent)</span><% } %></td>
+        <td><span class="pill <%= q.status %>"><%= fmt.status(q.status) %></span></td>
+        <td class="muted small"><%= fmt.date(q.created_at) %></td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table>
+  <% } %>
+</div>
+
+<div class="card">
+  <h2>Orders <span class="count"><%= orders.length %></span><span class="hactions"><a class="btn small primary" href="/admin/orders/new?org_id=<%= org.id %>">+ Order</a></span></h2>
+  <% if (!orders.length) { %><p class="muted">No orders yet.</p><% } else { %>
+  <table class="tbl">
+    <thead><tr><th>Order</th><th>Supplier</th><th>Status</th><th class="right">Value</th><th class="right">Margin</th><th>Ship date</th><th>Created</th></tr></thead>
+    <tbody>
+    <% orders.forEach(o => { %>
+      <tr>
+        <td><a href="/admin/orders/<%= o.id %>"><strong><%= o.order_no %></strong></a></td>
+        <td><%= o.supplier_name || '—' %></td>
+        <td><span class="pill <%= o.status %>"><%= fmt.status(o.status) %></span></td>
+        <td class="right num"><%= fmt.money(o.subtotal, o.currency) %></td>
+        <td class="right num <%= o.margin_pct != null && o.margin_pct < 20 ? 'bad' : '' %>"><%= fmt.pct(o.margin_pct) %></td>
+        <td><%= fmt.date(o.expected_ship_date) %></td>
+        <td class="muted small"><%= fmt.date(o.created_at) %></td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table>
+  <% } %>
 </div>
 <%- include('../../partials/foot') %>

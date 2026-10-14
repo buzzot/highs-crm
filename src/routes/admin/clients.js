@@ -2,6 +2,10 @@ import { Router } from '../../lib/router.js';
 import { admin } from '../../lib/supabase.js';
 import { inviteUser, memberRows } from '../../lib/invites.js';
 import { requireAdmin } from '../../middleware/auth.js';
+import { log } from '../../lib/activity.js';
+import { ACTIVITY_TYPES, readActivity, withLastLogin } from '../../lib/crm.js';
+
+const ORG_FIELDS = ['name', 'registration_no', 'tax_id', 'address', 'postal_code', 'city', 'country', 'delivery_address', 'phone', 'email', 'website', 'default_currency', 'notes'];
 
 const r = Router();
 const clean = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, v === '' ? null : v]));
@@ -37,15 +41,46 @@ r.post('/', async (req, res) => {
 });
 
 r.get('/:id', async (req, res) => {
-  const [{ data: client }, { data: users }, { data: invites }, { data: requests }, { data: orders }] = await Promise.all([
-    admin.from('organizations').select('*').eq('id', req.params.id).single(),
-    admin.from('profiles').select('*').eq('org_id', req.params.id).order('created_at'),
-    admin.from('invitations').select('*').eq('org_id', req.params.id),
-    admin.from('requests').select('*').eq('org_id', req.params.id).order('created_at', { ascending: false }),
-    admin.from('order_overview').select('*').eq('org_id', req.params.id).order('created_at', { ascending: false }),
+  const id = req.params.id;
+  const [{ data: client }, { data: users }, { data: invites }, { data: requests }, { data: orders }, { data: events }] = await Promise.all([
+    admin.from('organizations').select('*').eq('id', id).single(),
+    admin.from('profiles').select('*').eq('org_id', id).order('created_at'),
+    admin.from('invitations').select('*').eq('org_id', id),
+    admin.from('requests').select('*, request_items(count), quotes(id, status)').eq('org_id', id).order('created_at', { ascending: false }),
+    admin.from('order_overview').select('*').eq('org_id', id).order('created_at', { ascending: false }),
+    admin.from('activity_log').select('*, profiles(full_name, email)').eq('entity_type', 'organization').eq('entity_id', id).order('created_at', { ascending: false }).limit(50),
   ]);
   if (!client) return res.status(404).render('error', { title: 'Not found', message: 'Client not found.' });
-  res.render('admin/clients/detail', { title: client.name, org: client, members: memberRows(users || [], invites || []), requests: requests || [], orders: orders || [], msg: req.query.msg, err: req.query.err });
+  await withLastLogin(users);
+  const live = (orders || []).filter(o => o.status !== 'cancelled');
+  const kpi = {
+    openRequests: (requests || []).filter(q => ['new', 'reviewing', 'quoted'].includes(q.status)).length,
+    activeOrders: live.filter(o => !['delivered', 'closed'].includes(o.status)).length,
+    sales: live.reduce((t, o) => t + Number(o.subtotal || 0), 0),
+    profit: live.reduce((t, o) => t + Number(o.gross_profit ?? (Number(o.subtotal || 0) - Number(o.cost_total || 0))), 0),
+    lastLogin: (users || []).map(u => u.last_login_at).filter(Boolean).sort().pop() || null,
+  };
+  res.render('admin/clients/detail', {
+    title: client.name, org: client, members: memberRows(users || [], invites || []), requests: requests || [], orders: orders || [],
+    events: events || [], activityTypes: ACTIVITY_TYPES, kpi, msg: req.query.msg, err: req.query.err,
+  });
+});
+
+r.post('/:id/activity', async (req, res) => {
+  const { type, summary, date, follow, error } = readActivity(req.body);
+  if (error) return res.redirect(`/admin/clients/${req.params.id}?err=` + encodeURIComponent(error) + '#activity');
+  await log({ entityType: 'organization', entityId: req.params.id, action: `crm_${type}`, actorId: req.user.id, detail: { note: summary, date, follow_up: follow } });
+  res.redirect(`/admin/clients/${req.params.id}?msg=` + encodeURIComponent('Activity logged.') + '#activity');
+});
+
+// details edited right on the client page
+r.post('/:id/details', async (req, res) => {
+  const patch = Object.fromEntries(ORG_FIELDS.filter(k => k in req.body).map(k => [k, String(req.body[k] ?? '').trim() || null]));
+  if (!patch.name) return res.redirect(`/admin/clients/${req.params.id}?err=` + encodeURIComponent('Company name is required.'));
+  patch.default_currency ||= 'USD';
+  patch.active = req.body.active === 'on';
+  const { error } = await admin.from('organizations').update(patch).eq('id', req.params.id);
+  res.redirect(`/admin/clients/${req.params.id}?` + (error ? 'err=' + encodeURIComponent(error.message) : 'msg=' + encodeURIComponent('Details saved.')));
 });
 
 r.get('/:id/edit', async (req, res) => {
