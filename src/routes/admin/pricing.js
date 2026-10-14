@@ -3,6 +3,8 @@ import { admin } from '../../lib/supabase.js';
 import { calcQuote } from '../../lib/pricing.js';
 import { verifyQuote } from '../../lib/ai.js';
 import { log } from '../../lib/activity.js';
+import { sendEmail } from '../../lib/mailer.js';
+import { quoteSentEmail } from '../../lib/email-templates.js';
 import { requireAdmin } from '../../middleware/auth.js';
 import { clean, bool, back, notFound, getSettings, fxRate, INCOTERMS, CURRENCIES } from '../../lib/util.js';
 
@@ -189,7 +191,16 @@ r.post('/quotes/:id/send', async (req, res) => {
   await admin.from('requests').update({ status: 'quoted' }).eq('id', q.request_id);
   await log({ entityType: 'request', entityId: q.request_id, action: 'quote_sent', actorId: req.user.id, clientVisible: true, detail: { quote_id: q.id } });
   if (override) await log({ entityType: 'request', entityId: q.request_id, action: 'margin_override', actorId: req.user.id, detail: { quote_id: q.id, margin: calc.marginPct, reason: req.body.reason } });
-  back(res, `/admin/pricing/quotes/${q.id}`, { msg: 'Quote sent — the client can now see it in their portal.' });
+  // email the client: the person who made the request, otherwise everyone active in that company
+  let sentTo = [];
+  try {
+    const { data: rq } = await admin.from('requests').select('id, ref, title, org_id, created_by').eq('id', q.request_id).single();
+    let { data: people } = rq.created_by ? await admin.from('profiles').select('email').eq('id', rq.created_by).eq('active', true) : { data: [] };
+    if (!people?.length) ({ data: people } = await admin.from('profiles').select('email').eq('org_id', rq.org_id).eq('role', 'client').eq('active', true));
+    sentTo = [...new Set((people || []).map(p => p.email).filter(Boolean))];
+    if (sentTo.length) await sendEmail({ to: sentTo, ...quoteSentEmail({ request: rq, validUntil: q.valid_until, leadTimeDays: q.lead_time_days, url: `${(process.env.APP_URL || '').replace(/\/+$/, '')}/portal/requests/${rq.id}` }) });
+  } catch (e) { console.error(`[quote] email to client failed: ${e.message}`); return back(res, `/admin/pricing/quotes/${q.id}`, { msg: 'Quote sent — the client can see it in their portal, but the email notification failed.' }); }
+  back(res, `/admin/pricing/quotes/${q.id}`, { msg: `Quote sent — the client can see it in their portal${sentTo.length ? ` and was notified by email (${sentTo.join(', ')}).` : '.'}` });
 });
 
 r.post('/quotes/:id/duplicate', async (req, res) => {

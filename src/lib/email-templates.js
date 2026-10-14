@@ -111,6 +111,20 @@ export function changeSubmittedEmail({ request, orgName, who, url }) {
   };
 }
 
+// ---- offer sent to the client ----
+export function quoteSentEmail({ request, validUntil, leadTimeDays, url }) {
+  const facts = [validUntil ? `valid until ${validUntil}` : null, leadTimeDays ? `lead time ${leadTimeDays} days` : null].filter(Boolean).join(' · ');
+  return {
+    subject: `Your offer for ${request.ref} is ready`,
+    html: layout({
+      preheader: `We prepared an offer for ${request.ref}.`, eyebrow: 'New offer', title: 'Your offer is ready',
+      introHtml: `We prepared an offer for <strong>${esc(request.ref)} · ${esc(request.title)}</strong>${facts ? ` (${esc(facts)})` : ''}. Open it in your portal to review the price and accept it.`,
+      buttonText: 'View the offer', buttonUrl: url, fineHtml: 'Questions? Just reply to this email.',
+    }),
+    text: `Your offer for ${request.ref} is ready${facts ? ` (${facts})` : ''}. View it: ${url}`,
+  };
+}
+
 export function changeDecidedEmail({ request, approved, note, url }) {
   return {
     subject: approved ? `Your changes to ${request.ref} were approved` : `Your changes to ${request.ref} were not accepted`,
