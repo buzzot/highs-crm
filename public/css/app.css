@@ -898,3 +898,35 @@ body { font-size: 14px; letter-spacing: -.003em; }
 .airank ul.cons li::before { content: '– '; color: var(--bad); font-weight: 700; }
 .aiextra { margin-top: 14px; }
 .aiextra ul { margin: 0; padding-left: 18px; font-size: 13px; display: grid; gap: 4px; }
+
+/* ---------- lighter type: contrast by colour, not by weight ---------- */
+strong, b { font-weight: 500; color: var(--ink); }
+h1 { font-weight: 600; letter-spacing: -.02em; }
+h2, .card h2 { font-weight: 600; }
+h1, h2 { color: var(--ink); }
+a strong, a b { color: inherit; }
+.tbl th { font-weight: 500; color: var(--muted); }
+.tbl td strong, .tbl td a strong { font-weight: 500; }
+.tbl td a { color: var(--brand); }
+.tbl td a:hover { color: var(--accent); }
+.tbl td .muted a { color: var(--accent); }
+.btn { font-weight: 500; }
+.pill, .badge, .tag, .pill.lg { font-weight: 500; }
+.kpi .n, .results .big .n { font-weight: 600; color: var(--brand); }
+.kpi.bad .n { color: var(--bad); }
+.mhead, .route .city { font-weight: 600; }
+.snav a.on, .tabs2 a.on { font-weight: 500; }
+.rqbadge, .wstep, .eyebrow, .tbl.cmp tr.group td, .rowissues .src { font-weight: 600; }
+.diffgroup { font-weight: 600; }
+.rqrow .rqname { font-weight: 500; }
+.tbl.cmp td.win { font-weight: 500; }
+.cmphead .cmpname { font-weight: 600; }
+.aibadge, .rankchip { font-weight: 600; }
+.arhead .place, .arhead .score { font-weight: 600; }
+.arhead .score { color: var(--accent); }
+.plist .pname a strong { font-weight: 500; color: var(--brand); }
+.plist td.right.num strong { font-weight: 600; color: var(--brand); }
+.tbl.users td strong { font-weight: 500; }
+.dl dt { color: var(--muted); }
+.dl dd { color: var(--ink); }
+label { color: var(--ink-2); }
