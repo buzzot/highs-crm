@@ -144,16 +144,41 @@ const EXTRACT_TOOL = {
   },
 };
 
+// Some models reject a forced tool choice ("tool"/"any"), e.g. when extended thinking is always on.
+// Then we offer the tool with tool_choice "auto", tell the model it must use it, and as a last resort
+// read JSON from the text answer. Remembered per process so later calls skip the failing attempt.
+let forcedUnsupported = false;
+const isToolChoiceError = e => e?.status === 400 && /tool_choice/i.test(e?.message || '');
+
+function jsonFromText(text) {
+  const s = text.indexOf('{'), e = text.lastIndexOf('}');
+  if (s < 0 || e <= s) return null;
+  try { return JSON.parse(text.slice(s, e + 1)); } catch { return null; }
+}
+
 async function forcedTool({ tool, content, system, maxTokens = 16000 }) {
   const client = new Anthropic();
-  const msg = await client.messages.stream({
-    model: MODEL, max_tokens: maxTokens, system,
-    tools: [tool], tool_choice: { type: 'tool', name: tool.name },
+  const run = forced => client.messages.stream({
+    model: MODEL, max_tokens: maxTokens,
+    system: forced ? system : `${system}\n\nYou MUST answer by calling the \`${tool.name}\` tool exactly once with the complete result. Do not answer in plain text.`,
+    tools: [tool], tool_choice: forced ? { type: 'tool', name: tool.name } : { type: 'auto' },
     messages: [{ role: 'user', content }],
   }).finalMessage();
-  const use = msg.content.find(c => c.type === 'tool_use');
-  if (!use) throw new Error('AI returned no structured result.');
-  return { input: use.input, truncated: msg.stop_reason === 'max_tokens', model: MODEL };
+
+  let msg;
+  if (!forcedUnsupported) {
+    try { msg = await run(true); } catch (e) {
+      if (!isToolChoiceError(e)) throw e;
+      forcedUnsupported = true;
+      console.warn(`[ai] ${MODEL} does not support a forced tool choice — using tool_choice "auto"`);
+    }
+  }
+  if (!msg) msg = await run(false);
+
+  const use = msg.content.find(c => c.type === 'tool_use' && c.name === tool.name);
+  const input = use?.input || jsonFromText(msg.content.map(c => (c.type === 'text' ? c.text : '')).join(''));
+  if (!input) throw new Error('AI returned no structured result. Try again, or use the Excel template.');
+  return { input, truncated: msg.stop_reason === 'max_tokens', model: MODEL };
 }
 
 /**
