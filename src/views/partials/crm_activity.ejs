@@ -4,7 +4,7 @@
 %>
 <%
   const SYS = { supplier_invited: 'Supplier added by invitation', invite_accepted: 'Invitation accepted', details_completed: 'Company details completed', details_updated: 'Company details updated',
-    portal_blocked: 'Portal access blocked', portal_restored: 'Portal access restored', changes_submitted: 'Client changed a request', created: 'Created' };
+    portal_blocked: 'Portal access blocked', portal_restored: 'Portal access restored', crm_status: 'Status changed', changes_submitted: 'Client changed a request', created: 'Created' };
   const label = e => e.action.startsWith('crm_') ? (types[e.action.slice(4)] || 'Note') : (SYS[e.action] || fmt.status(e.action));
 %>
 <form method="post" action="<%= action %>" class="actform">

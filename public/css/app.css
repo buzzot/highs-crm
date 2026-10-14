@@ -938,3 +938,12 @@ label { color: var(--ink-2); }
 .usagebars .ub:hover .bar { opacity: 1; }
 .usagebars .lbl { font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .grid2 > .stack > .card { margin-bottom: 18px; } .grid2 > .stack > div > .card { margin-bottom: 18px; }
+/* supplier CRM status on the list */
+.crmtabs { margin-bottom: 12px; }
+select.pillselect[class*="crm-"] { border: 0; font-weight: 500; padding: 3px 26px 3px 10px; cursor: pointer; }
+select.pillselect.crm-prospect { background-color: var(--line-2); color: var(--ink-2); }
+select.pillselect.crm-contacted { background-color: var(--info-soft); color: var(--info); }
+select.pillselect.crm-sampling { background-color: #f1e9fb; color: #6b3fa0; }
+select.pillselect.crm-approved, select.pillselect.crm-active { background-color: var(--ok-soft); color: var(--ok); }
+select.pillselect.crm-on_hold { background-color: var(--warn-soft); color: var(--warn); }
+select.pillselect.crm-blocked { background-color: var(--bad-soft); color: var(--bad); }

@@ -1,27 +1,59 @@
 <%- include('../../partials/head') %>
+<%
+  const c = typeof counts !== 'undefined' ? counts : { all: suppliers.length };
+  const st = typeof status !== 'undefined' ? status : 'all';
+  const crm = typeof crmStatuses !== 'undefined' ? crmStatuses : {};
+  const td = typeof today !== 'undefined' ? today : new Date().toISOString().slice(0, 10);
+  const here = '/admin/suppliers' + (st !== 'all' || query.q ? '?' + new URLSearchParams(Object.fromEntries([['status', st !== 'all' ? st : ''], ['q', query.q || '']].filter(([, v]) => v))).toString() : '');
+  const tab = (key, label) => `<a href="/admin/suppliers?status=${key}${query.q ? '&q=' + encodeURIComponent(query.q) : ''}" class="${st === key ? 'on' : ''}">${label} <span>${c[key] || 0}</span></a>`;
+%>
 <div class="pagehead">
-  <h1>Suppliers</h1>
-  <div class="actions"><a class="btn" href="/admin/suppliers/new?mode=manual">+ Enter manually</a><a class="btn primary" href="/admin/suppliers/new">✉ Invite supplier</a></div>
+  <div><h1>Suppliers</h1><p class="muted"><%= c.all %> suppliers<%= c.followup ? ' · ' + c.followup + ' follow-up' + (c.followup === 1 ? '' : 's') + ' due' : '' %></p></div>
+  <div class="actions"><a class="btn" href="/admin/suppliers/new?mode=manual">+ Enter manually</a><a class="btn primary" href="/admin/suppliers/new"><%- icon('mail') %> Invite supplier</a></div>
 </div>
-<div class="card">
-  <form class="row tight" method="get"><input name="q" value="<%= query.q || '' %>" placeholder="Search name, city, contact…"><button class="btn">Search</button></form>
+
+<div class="tabs2 crmtabs">
+  <%- tab('all', 'All') %>
+  <% Object.entries(crm).forEach(([k, l]) => { if (c[k] || st === k) { %><%- tab(k, l) %><% } }) %>
+  <% if (c.followup) { %><%- tab('followup', 'Follow-up due') %><% } %>
+</div>
+
+<form class="filterbar" method="get">
+  <% if (st !== 'all') { %><input type="hidden" name="status" value="<%= st %>"><% } %>
+  <input name="q" value="<%= query.q || '' %>" placeholder="Search name, city, contact, email, products…">
+  <button class="btn">Search</button>
+  <% if (query.q) { %><a class="link small" href="/admin/suppliers<%= st !== 'all' ? '?status=' + st : '' %>">Clear</a><% } %>
+</form>
+
+<div class="card tablecard">
   <table class="tbl">
-    <thead><tr><th>Supplier</th><th>Location</th><th>Contact</th><th>Lead time</th><th>Rating</th><th>Export licence</th><th>Products</th><th>Orders</th></tr></thead>
+    <thead><tr><th>Supplier</th><th>Status</th><th>Location</th><th>Contact</th><th>Next follow-up</th><th>Rating</th><th class="right">Lead time</th><th class="right">Products</th><th class="right">Orders</th></tr></thead>
     <tbody>
-    <% if (!suppliers.length) { %><tr><td colspan="8" class="muted">No suppliers found.</td></tr><% } %>
-    <% suppliers.forEach(s => { %>
+    <% if (!suppliers.length) { %><tr><td colspan="9" class="muted">No suppliers found.</td></tr><% } %>
+    <% suppliers.forEach(s => { const ps = typeof portal !== 'undefined' ? portal[s.id] : null; const due = s.next_follow_up && s.next_follow_up <= td; %>
       <tr>
-        <% const ps = typeof portal !== 'undefined' ? portal[s.id] : null; %>
-        <td><a href="/admin/suppliers/<%= s.id %>"><strong><%= s.name %></strong></a>
-          <% if (ps === 'active') { %> <span class="tag ok">portal</span><% } else if (ps === 'invited') { %> <span class="tag warn">invited</span><% } else if (ps === 'expired') { %> <span class="tag">invite expired</span><% } %>
-          <% if (ps && !s.details_completed_at) { %><div class="muted small">awaiting registration</div><% } %></td>
-        <td><%= [s.city, s.country].filter(Boolean).join(', ') %></td>
-        <td><%= s.contact_name || '—' %><% if (s.wechat) { %><div class="muted small">WeChat <%= s.wechat %></div><% } %></td>
-        <td><%= s.lead_time_days ? s.lead_time_days + ' d' : '—' %></td>
-        <td class="stars"><%= s.rating ? '★'.repeat(s.rating) + '☆'.repeat(5 - s.rating) : '—' %></td>
-        <td><%= s.can_export_official ? '✓ official' : '—' %></td>
-        <td><%= s.products?.[0]?.count ?? 0 %></td>
-        <td><%= s.orders?.[0]?.count ?? 0 %></td>
+        <td>
+          <a href="/admin/suppliers/<%= s.id %>"><strong><%= s.name %></strong></a>
+          <div class="muted small">
+            <% if (ps === 'active') { %><span class="oktext">portal active</span><% } else if (ps === 'invited') { %><span class="warntext">invited<%= s.details_completed_at ? '' : ' · awaiting registration' %></span><% } else if (ps === 'expired') { %>invitation expired<% } else { %>no portal access<% } %>
+            <%= s.can_export_official ? ' · official exporter' : '' %>
+          </div>
+        </td>
+        <td>
+          <form method="post" action="/admin/suppliers/<%= s.id %>/status" class="autosubmit inline">
+            <input type="hidden" name="back" value="<%= here %>">
+            <select name="crm_status" class="pillselect crm-<%= s.crm_status || 'active' %>" aria-label="CRM status of <%= s.name %>">
+              <% Object.entries(crm).forEach(([k, l]) => { %><option value="<%= k %>" <%= (s.crm_status || 'active') === k ? 'selected' : '' %>><%= l %></option><% }) %>
+            </select>
+          </form>
+        </td>
+        <td><%= [s.city, s.country].filter(Boolean).join(', ') || '—' %></td>
+        <td><%= s.contact_name || '—' %><% if (s.wechat || s.email) { %><div class="muted small"><%= s.wechat ? 'WeChat ' + s.wechat : s.email %></div><% } %></td>
+        <td class="<%= due ? 'bad' : '' %>"><%= s.next_follow_up ? fmt.date(s.next_follow_up) : '—' %><%= due ? ' · due' : '' %></td>
+        <td class="stars"><%= s.rating ? '★'.repeat(s.rating) : '—' %></td>
+        <td class="right num"><%= s.lead_time_days ? s.lead_time_days + ' d' : '—' %></td>
+        <td class="right num"><%= s.products?.[0]?.count ?? 0 %></td>
+        <td class="right num"><%= s.orders?.[0]?.count ?? 0 %></td>
       </tr>
     <% }) %>
     </tbody>

@@ -1,5 +1,6 @@
 <%- include('../../partials/head') %>
-<% const m = typeof mode !== 'undefined' ? mode : 'manual'; const iv = typeof inv !== 'undefined' ? inv : {}; %>
+<% const m = typeof mode !== 'undefined' ? mode : 'manual'; const iv = typeof inv !== 'undefined' ? inv : {};
+   const crmList = typeof crmStatuses !== 'undefined' ? crmStatuses : { prospect: 'Prospect', contacted: 'Contacted', sampling: 'Sampling', approved: 'Approved', active: 'Active supplier', on_hold: 'On hold', blocked: 'Blocked' }; %>
 <div class="card narrow-md">
   <a class="back" href="<%= s.id ? '/admin/suppliers/' + s.id : '/admin/suppliers' %>">← Back</a>
   <h1><%= title %></h1>
@@ -17,6 +18,7 @@
         <label>Contact email (login) <span class="reqmark">*</span><input type="email" name="email" required autofocus value="<%= iv.email || '' %>" placeholder="sales@factory.com"></label>
         <label>Company name <span class="muted small">— optional</span><input name="name" value="<%= iv.name || '' %>" placeholder="Filled in by the supplier"></label>
         <label>Contact person <span class="muted small">— optional</span><input name="contact_name" value="<%= iv.contact_name || '' %>"></label>
+        <label>CRM status <select name="crm_status"><% Object.entries(crmList).forEach(([k, l]) => { %><option value="<%= k %>" <%= (iv.crm_status || 'contacted') === k ? 'selected' : '' %>><%= l %></option><% }) %></select></label>
       </div>
       <label class="check"><input type="checkbox" name="send" <%= iv.email && !iv.send ? '' : 'checked' %>> Email the invitation now (valid 14 days)</label>
       <div class="actions"><button class="btn primary"><%- icon('mail') %> Add supplier &amp; send invitation</button></div>
@@ -46,6 +48,7 @@
     <div class="row">
       <label>Payment terms <input name="payment_terms" value="<%= s.payment_terms || '' %>" placeholder="30% deposit, 70% before shipment"></label>
       <label>Lead time (days) <input type="number" name="lead_time_days" min="0" value="<%= s.lead_time_days ?? '' %>"></label>
+      <label>CRM status <select name="crm_status"><% Object.entries(crmList).forEach(([k, l]) => { %><option value="<%= k %>" <%= (s.crm_status || 'prospect') === k ? 'selected' : '' %>><%= l %></option><% }) %></select></label>
       <label>Rating <select name="rating"><option value="">—</option><% [5,4,3,2,1].forEach(n => { %><option value="<%= n %>" <%= String(s.rating) === String(n) ? 'selected' : '' %>><%= '★'.repeat(n) %></option><% }) %></select></label>
     </div>
     <label class="check"><input type="checkbox" name="can_export_official" <%= s.can_export_official === true || s.can_export_official === 'on' ? 'checked' : '' %>> Holds export rights — can export officially with a government export declaration</label>

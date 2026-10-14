@@ -22,7 +22,7 @@ const like = q => String(q || '').replace(/[,()%]/g, ' ').trim();
 r.get('/', async (req, res) => {
   let q = admin.from('suppliers').select('*, products(count), orders(count)').order('name');
   const s = like(req.query.q);
-  if (s) q = q.or(`name.ilike.%${s}%,city.ilike.%${s}%,contact_name.ilike.%${s}%`);
+  if (s) q = q.or(`name.ilike.%${s}%,city.ilike.%${s}%,contact_name.ilike.%${s}%,email.ilike.%${s}%,main_products.ilike.%${s}%`);
   const [{ data }, { data: users }, { data: invites }] = await Promise.all([
     q,
     admin.from('profiles').select('supplier_id, accepted_at, active').eq('role', 'supplier'),
@@ -32,15 +32,35 @@ r.get('/', async (req, res) => {
   const portal = {};
   for (const u of users || []) if (u.supplier_id && u.accepted_at && u.active) portal[u.supplier_id] = 'active';
   for (const i of invites || []) if (i.supplier_id && !portal[i.supplier_id]) portal[i.supplier_id] = new Date(i.expires_at) > new Date() ? 'invited' : 'expired';
-  res.render('admin/suppliers/index', { title: 'Suppliers', suppliers: data || [], portal });
+  const all = data || [];
+  const counts = { all: all.length };
+  for (const x of all) counts[x.crm_status || 'active'] = (counts[x.crm_status || 'active'] || 0) + 1;
+  const today = new Date().toISOString().slice(0, 10);
+  counts.followup = all.filter(x => x.next_follow_up && x.next_follow_up <= today).length;
+  const status = req.query.status || 'all';
+  const list = status === 'all' ? all : status === 'followup' ? all.filter(x => x.next_follow_up && x.next_follow_up <= today) : all.filter(x => (x.crm_status || 'active') === status);
+  res.render('admin/suppliers/index', { title: 'Suppliers', suppliers: list, portal, counts, status, crmStatuses: CRM_STATUSES, today, msg: req.query.msg });
+});
+
+// change the CRM status straight from the list
+r.post('/:id/status', async (req, res) => {
+  if (CRM_STATUSES[req.body.crm_status]) {
+    const { data: before } = await admin.from('suppliers').select('crm_status').eq('id', req.params.id).single();
+    await admin.from('suppliers').update({ crm_status: req.body.crm_status }).eq('id', req.params.id);
+    if (before && before.crm_status !== req.body.crm_status) {
+      await log({ entityType: 'supplier', entityId: req.params.id, action: 'crm_status', actorId: req.user.id, detail: { note: `${CRM_STATUSES[before.crm_status] || before.crm_status} → ${CRM_STATUSES[req.body.crm_status]}` } });
+    }
+  }
+  const backTo = String(req.body.back || '');
+  res.redirect(backTo.startsWith('/admin/suppliers') ? backTo : '/admin/suppliers');
 });
 
 r.get('/new', (req, res) => res.render('admin/suppliers/form', {
-  title: 'New supplier', s: { country: 'China' }, error: null, mode: req.query.mode === 'manual' ? 'manual' : 'invite', inv: {},
+  title: 'New supplier', s: { country: 'China', crm_status: 'prospect' }, error: null, mode: req.query.mode === 'manual' ? 'manual' : 'invite', inv: { crm_status: 'contacted' }, crmStatuses: CRM_STATUSES,
 }));
 r.post('/', async (req, res) => {
   const { data, error } = await admin.from('suppliers').insert(body(req.body)).select('id').single();
-  if (error) return res.render('admin/suppliers/form', { title: 'New supplier', s: req.body, error: error.message, mode: 'manual', inv: {} });
+  if (error) return res.render('admin/suppliers/form', { title: 'New supplier', s: req.body, error: error.message, mode: 'manual', inv: {}, crmStatuses: CRM_STATUSES });
   res.redirect(`/admin/suppliers/${data.id}`);
 });
 
@@ -49,12 +69,13 @@ r.post('/invite', async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   const name = String(req.body.name || '').trim();
   const contact = String(req.body.contact_name || '').trim();
-  const again = error => res.status(400).render('admin/suppliers/form', { title: 'New supplier', s: { country: 'China' }, error, mode: 'invite', inv: req.body });
+  const again = error => res.status(400).render('admin/suppliers/form', { title: 'New supplier', s: { country: 'China' }, error, mode: 'invite', inv: req.body, crmStatuses: CRM_STATUSES });
+  const crmStatus = CRM_STATUSES[req.body.crm_status] ? req.body.crm_status : 'contacted';
   if (!EMAIL.test(email)) return again('Enter the supplier’s email address.');
   const { data: dupe } = await admin.from('suppliers').select('id, name').ilike('email', email).limit(1).maybeSingle();
   if (dupe) return again(`${email} already belongs to supplier “${dupe.name}”. Open it and invite from there.`);
   const { data: sup, error } = await admin.from('suppliers')
-    .insert({ name: name || placeholderName(email), email, contact_name: contact || null, country: 'China' }).select('id').single();
+    .insert({ name: name || placeholderName(email), email, contact_name: contact || null, country: 'China', crm_status: crmStatus }).select('id').single();
   if (error) return again(error.message);
   await log({ entityType: 'supplier', entityId: sup.id, action: 'supplier_invited', actorId: req.user.id, detail: { note: email } });
   if (!bool(req.body.send)) return res.redirect(`/admin/suppliers/${sup.id}?msg=` + encodeURIComponent('Supplier added. Send the invitation when you are ready.'));
@@ -130,11 +151,11 @@ r.post('/:id/delete', requireAdmin, async (req, res) => {
 r.get('/:id/edit', async (req, res) => {
   const { data: s } = await admin.from('suppliers').select('*').eq('id', req.params.id).single();
   if (!s) return notFound(res, 'Supplier');
-  res.render('admin/suppliers/form', { title: 'Edit supplier', s, error: null, mode: 'manual', inv: {} });
+  res.render('admin/suppliers/form', { title: 'Edit supplier', s, error: null, mode: 'manual', inv: {}, crmStatuses: CRM_STATUSES });
 });
 r.post('/:id', async (req, res) => {
   const { error } = await admin.from('suppliers').update(body(req.body)).eq('id', req.params.id);
-  if (error) return res.render('admin/suppliers/form', { title: 'Edit supplier', s: { ...req.body, id: req.params.id }, error: error.message, mode: 'manual', inv: {} });
+  if (error) return res.render('admin/suppliers/form', { title: 'Edit supplier', s: { ...req.body, id: req.params.id }, error: error.message, mode: 'manual', inv: {}, crmStatuses: CRM_STATUSES });
   res.redirect(`/admin/suppliers/${req.params.id}?msg=` + encodeURIComponent('Details saved.'));
 });
 
