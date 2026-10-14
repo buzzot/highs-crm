@@ -1,5 +1,5 @@
 <%- include('../../partials/head') %>
-<% const steps = ['confirmed','deposit_paid','in_production','qc','packed','shipped','in_transit','customs','delivered','closed']; const idx = steps.indexOf(order.status); const cur = order.currency; %>
+<% const steps = ['new','confirmed','deposit_paid','in_production','qc','packed','shipped','in_transit','customs','delivered','closed']; const idx = steps.indexOf(order.status); const cur = order.currency; %>
 <div class="pagehead">
   <div><a class="back" href="/admin/orders">← Orders</a><h1>Order <%= order.order_no %></h1>
     <p class="muted"><a href="/admin/clients/<%= order.org_id %>"><%= order.client_name %></a>
@@ -145,6 +145,46 @@
           });
         })();
       </script>
+    </div>
+
+    <% const payL = typeof payments !== 'undefined' ? payments : []; const pz = typeof pay !== 'undefined' ? pay : {}; const dueAmt = Number(pz.amount_due || 0); const toConfirm = payL.filter(x => x.status === 'submitted').length; %>
+    <div class="card <%= toConfirm ? 'pending' : '' %>" id="payments">
+      <h2>Payments <% if (dueAmt > 0) { %><span class="pill pay-<%= pz.payment_status %>"><%= ({ unpaid: 'Unpaid', partial: 'Partially paid', paid: 'Paid' })[pz.payment_status] %></span><% } %></h2>
+      <% if (!dueAmt) { %><p class="muted small">The amount to pay is set when the proforma invoice is sent to the client.</p>
+      <% } else { %>
+        <div class="pay-kpis">
+          <div><span class="muted small">Invoice total</span><strong><%= fmt.money(dueAmt, order.currency) %></strong></div>
+          <div><span class="muted small">Reported / received</span><strong><%= fmt.money(pz.amount_paid, order.currency) %></strong></div>
+          <div><span class="muted small">Open</span><strong class="<%= dueAmt - Number(pz.amount_paid) > 0.004 ? 'bad' : 'ok' %>"><%= fmt.money(Math.max(0, dueAmt - Number(pz.amount_paid)), order.currency) %></strong></div>
+          <div><span class="muted small">Next due</span><strong><%= pz.payment_due_date ? fmt.date(pz.payment_due_date) : '—' %></strong></div>
+        </div>
+        <% (pz.payment_schedule || []).forEach(x => { %><div class="muted small"><%= x.label %> <%= Number(x.percent) %>% · <%= fmt.money(x.amount, order.currency) %><%= x.due ? ' · due ' + fmt.date(x.due) : '' %></div><% }) %>
+      <% } %>
+      <% payL.forEach(x => { %>
+        <div class="quote">
+          <div class="qhead"><strong><%= fmt.money(x.amount, x.currency) %></strong> <span class="muted small"><%= x.label || '' %> · paid <%= fmt.date(x.paid_on || x.created_at) %><%= x.reference ? ' · ref ' + x.reference : '' %></span>
+            <span class="pill <%= ({ submitted: 'pending', confirmed: 'ok', rejected: 'bad' })[x.status] %>"><%= ({ submitted: 'To confirm', confirmed: 'Confirmed', rejected: 'Rejected' })[x.status] %></span></div>
+          <% if (x.note) { %><p class="muted small">Client: <%= x.note %></p><% } %>
+          <% if (x.admin_note) { %><p class="muted small">Note: <%= x.admin_note %></p><% } %>
+          <% (x.proof_doc_ids || []).forEach(did => { const dd = docs.find(z => z.id === did); if (dd) { %><a class="fchip" href="/admin/documents/<%= dd.id %>/download" target="_blank"><%- icon('file') %>&nbsp;Proof of payment</a> <% } }) %>
+          <% if (x.status === 'submitted') { %>
+            <form method="post" action="/admin/orders/<%= order.id %>/payments/<%= x.id %>" class="actions">
+              <input name="note" placeholder="Note to the client (required if rejecting)">
+              <button class="btn primary" name="decision" value="confirm">Confirm received</button>
+              <button class="btn" name="decision" value="reject">Reject</button>
+            </form>
+          <% } %>
+        </div>
+      <% }) %>
+      <details><summary class="muted small">Record a payment received outside the portal</summary>
+        <form method="post" action="/admin/orders/<%= order.id %>/payments" class="row">
+          <label>Amount (<%= order.currency %>) <input name="amount" type="number" step="0.01" min="0.01" required></label>
+          <label>Date <input name="paid_on" type="date" value="<%= new Date().toISOString().slice(0, 10) %>"></label>
+          <label>Instalment <input name="label" placeholder="Deposit / Balance"></label>
+          <label>Reference <input name="reference"></label>
+          <button class="btn">Record</button>
+        </form>
+      </details>
     </div>
 
     <% const piList = typeof pis !== 'undefined' ? pis : []; const poL = typeof pos !== 'undefined' ? pos : []; %>

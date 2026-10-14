@@ -1,9 +1,12 @@
 <%- include('../partials/head') %>
-<% const steps = ['confirmed','deposit_paid','in_production','qc','packed','shipped','in_transit','customs','delivered','closed']; const idx = steps.indexOf(order.status); %>
+<% const steps = ['new','confirmed','deposit_paid','in_production','qc','packed','shipped','in_transit','customs','delivered','closed']; const idx = steps.indexOf(order.status); %>
 <div class="pagehead">
   <div><a class="back" href="/portal/orders">← Orders</a><h1>Order <%= order.order_no %></h1></div>
-  <span class="pill lg <%= order.status %>"><%= fmt.status(order.status) %></span>
+  <div class="headactions"><% if (Number(order.amount_due) > 0) { %><span class="pill lg pay-<%= order.payment_status %>"><%= ({ unpaid: 'Unpaid', partial: 'Partially paid', paid: 'Paid' })[order.payment_status] %></span><% } %>
+  <span class="pill lg <%= order.status %>"><%= fmt.status(order.status) %></span></div>
 </div>
+<% if (typeof msg !== 'undefined' && msg) { %><div class="alert ok"><%= msg %></div><% } %>
+<% if (typeof err !== 'undefined' && err) { %><div class="alert err"><%= err %></div><% } %>
 <div class="card">
   <ol class="steps">
     <% steps.forEach((s, i) => { %><li class="<%= i < idx ? 'done' : i === idx ? 'now' : '' %>"><%= fmt.status(s) %></li><% }) %>
@@ -18,6 +21,52 @@
       <tr class="total"><td colspan="3">Goods total</td><td><%= fmt.money(order.subtotal, order.currency) %></td></tr>
       </tbody></table>
       <% if (order.client_notes) { %><p class="pre"><%= order.client_notes %></p><% } %>
+    </div>
+    <% const due = Number(order.amount_due) > 0; const sched = order.payment_schedule || []; const left = due ? Math.round((Number(order.amount_due) - Number(order.amount_paid)) * 100) / 100 : 0; %>
+    <div class="card" id="pay">
+      <h2>Payment</h2>
+      <% if (!due) { %><p class="muted">The payment details will appear here when we send you the proforma invoice.</p>
+      <% } else { %>
+        <div class="pay-kpis">
+          <div><span class="muted small">Invoice total</span><strong><%= fmt.money(order.amount_due, order.currency) %></strong></div>
+          <div><span class="muted small">Reported paid</span><strong><%= fmt.money(order.amount_paid, order.currency) %></strong></div>
+          <div><span class="muted small">Still to pay</span><strong class="<%= left > 0 ? 'bad' : 'ok' %>"><%= fmt.money(left, order.currency) %></strong></div>
+          <% if (open && open.due) { %><div><span class="muted small">Next payment due</span><strong><%= fmt.date(open.due) %></strong></div><% } %>
+        </div>
+        <% if (sched.length) { %>
+        <table class="tbl compact"><thead><tr><th>Instalment</th><th class="right">%</th><th class="right">Amount</th><th>Due</th></tr></thead><tbody>
+        <% sched.forEach(x => { %><tr><td><%= x.label %></td><td class="right"><%= Number(x.percent) %>%</td><td class="right num"><%= fmt.money(x.amount, order.currency) %></td><td><%= x.due ? fmt.date(x.due) : '—' %></td></tr><% }) %>
+        </tbody></table>
+        <% } %>
+        <% if (payments.length) { %>
+        <h3>Your payments</h3>
+        <table class="tbl compact"><tbody>
+        <% payments.forEach(x => { %><tr>
+          <td><%= fmt.date(x.paid_on || x.created_at) %></td>
+          <td class="right num"><%= fmt.money(x.amount, x.currency) %></td>
+          <td><%= x.label || '' %><% if (x.reference) { %> <span class="muted small">· <%= x.reference %></span><% } %></td>
+          <td><% proofDocs.filter(d => (x.proof_doc_ids || []).includes(d.id)).forEach(d => { %><a href="/portal/documents/<%= d.id %>/download" target="_blank"><%- icon('file') %> proof</a> <% }) %></td>
+          <td><span class="pill <%= ({ submitted: 'pending', confirmed: 'ok', rejected: 'bad' })[x.status] %>"><%= ({ submitted: 'To confirm', confirmed: 'Confirmed', rejected: 'Not accepted' })[x.status] %></span><% if (x.status === 'rejected' && x.admin_note) { %><div class="muted small"><%= x.admin_note %></div><% } %></td>
+        </tr><% }) %>
+        </tbody></table>
+        <% } %>
+        <% if (left > 0.004) { %>
+        <h3>I have paid</h3>
+        <p class="muted small">Follow the payment terms and bank details on the proforma invoice (see Documents). After paying, upload the proof and enter the amount — we confirm it as soon as it reaches our account.</p>
+        <form method="post" action="/portal/orders/<%= order.id %>/payments" enctype="multipart/form-data" class="payform">
+          <div class="row">
+            <label>Amount paid (<%= order.currency %>) <input name="amount" type="number" step="0.01" min="0.01" max="<%= left %>" value="<%= open ? open.amount : left %>" required></label>
+            <label>Payment date <input name="paid_on" type="date" value="<%= new Date().toISOString().slice(0, 10) %>"></label>
+            <label>Bank reference <span class="muted small">optional</span><input name="reference" maxlength="120"></label>
+          </div>
+          <div class="row">
+            <label>Proof of payment <span class="muted small">bank receipt, screenshot or PDF</span><input type="file" name="proofs" multiple accept="image/*,application/pdf" required></label>
+            <label>Note <span class="muted small">optional</span><input name="note" maxlength="500"></label>
+          </div>
+          <button class="btn primary">Submit payment</button>
+        </form>
+        <% } else { %><p class="ok">Fully paid — thank you.</p><% } %>
+      <% } %>
     </div>
     <div class="card">
       <h2>Shipments</h2>

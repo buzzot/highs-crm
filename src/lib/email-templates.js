@@ -150,12 +150,14 @@ export function poRejectedEmail({ po, note, url }) {
   };
 }
 
-export function piEmail({ pi, order, company, total, currency, message, url }) {
+export function piEmail({ pi, order, company, total, currency, schedule = [], message, url }) {
+  const fm = n => Number(n).toLocaleString('en-US', { minimumFractionDigits: 2 });
+  const sched = schedule.length ? '<br><br>Payment schedule:<br>' + schedule.map(x => `${esc(x.label)} (${Number(x.percent)}%): <strong>${esc(currency)} ${fm(x.amount)}</strong>${x.due ? ' · due ' + esc(x.due) : ''}`).join('<br>') + '<br><br>After paying, open your order, upload the proof of payment and enter the amount.' : '';
   return {
     subject: `Proforma invoice ${pi.pi_no} · order ${order.order_no}`,
     html: layout({
       preheader: `Proforma invoice ${pi.pi_no} for order ${order.order_no}`, eyebrow: 'Proforma invoice', title: `Order ${esc(order.order_no)} is confirmed`,
-      introHtml: `Thank you for your purchase order. Please find the proforma invoice <strong>${esc(pi.pi_no)}</strong> attached (${esc(currency)} ${Number(total).toLocaleString('en-US', { minimumFractionDigits: 2 })}).` + (message ? `<br><br>${esc(message).replace(/\n/g, '<br>')}` : ''),
+      introHtml: `Thank you for your purchase order. Please find the proforma invoice <strong>${esc(pi.pi_no)}</strong> attached (${esc(currency)} ${Number(total).toLocaleString('en-US', { minimumFractionDigits: 2 })}).` + sched + (message ? `<br><br>${esc(message).replace(/\n/g, '<br>')}` : ''),
       buttonText: 'Open your order', buttonUrl: url, fineHtml: `${esc(company?.name || 'Lumi Trade')} · reply to this email with any questions.`,
     }),
     text: `Proforma invoice ${pi.pi_no} for order ${order.order_no} is attached (${currency} ${total}). ${message || ''} ${url}`,
@@ -254,4 +256,33 @@ export function bookingEmail({ order, info = {}, t, ref, quoteSummary, amount, e
     'IMPORTANT: please reply to this email. Replies sent as a new email are not received by our system.', '重要：请直接回复本邮件。新建邮件发送的内容我们无法收到。', '',
     'Best regards,', 'Logistics Department', 'Lumi Trade'].filter(l => l !== null).join('\n');
   return { subject: `Booking confirmation · ${order.order_no}${route ? ' · ' + route : ''}`, html, text: txt };
+}
+
+export function paymentSubmittedEmail({ order, amount, who, orgName, status, url }) {
+  const amt = `${order.currency} ${Number(amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+  return {
+    subject: `Payment ${amt} reported for order ${order.order_no}`,
+    html: layout({
+      preheader: `${who} reported a payment`, eyebrow: 'Payment to confirm', title: 'A client reported a payment',
+      introHtml: `<strong>${esc(who)}</strong> from <strong>${esc(orgName || 'a client')}</strong> reported a payment of <strong>${esc(amt)}</strong> for order <strong>${esc(order.order_no)}</strong> and uploaded the proof. Check it against the bank statement, then confirm or reject it. Order payment status now: ${status === 'paid' ? 'paid' : 'partially paid'}.`,
+      buttonText: 'Open the order', buttonUrl: url, fineHtml: 'You get this email because you handle this request or are an admin.',
+    }),
+    text: `${who} (${orgName}) reported a payment of ${amt} for order ${order.order_no}. Confirm: ${url}`,
+  };
+}
+
+export function paymentDecidedEmail({ order, amount, confirmed, note, url }) {
+  const amt = `${order.currency} ${Number(amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+  return {
+    subject: confirmed ? `Payment ${amt} received · order ${order.order_no}` : `Payment ${amt} could not be confirmed · order ${order.order_no}`,
+    html: layout({
+      preheader: confirmed ? 'We received your payment.' : 'Please check the note from our team.',
+      eyebrow: 'Payment', title: confirmed ? 'Payment received' : 'We could not confirm the payment',
+      introHtml: confirmed
+        ? `We confirmed your payment of <strong>${esc(amt)}</strong> for order <strong>${esc(order.order_no)}</strong>. Thank you!`
+        : `We could not confirm your payment of <strong>${esc(amt)}</strong> for order <strong>${esc(order.order_no)}</strong>.` + (note ? `<br><br><em>“${esc(note)}”</em>` : '') + '<br><br>Please check the transfer and upload the proof again.',
+      buttonText: 'Open your order', buttonUrl: url, fineHtml: 'Questions? Just reply to this email.',
+    }),
+    text: confirmed ? `Payment ${amt} for order ${order.order_no} confirmed. ${url}` : `Payment ${amt} for order ${order.order_no} could not be confirmed. ${note || ''} ${url}`,
+  };
 }

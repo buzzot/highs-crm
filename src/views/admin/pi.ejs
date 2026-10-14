@@ -38,6 +38,16 @@
   <div class="card">
     <h2>Payment</h2>
     <label>Payment terms <textarea name="payment_terms" rows="2"><%= d.payment_terms || '' %></textarea></label>
+    <p class="muted small">Payment schedule — what the client sees as amounts to pay and due dates. Percentages should add up to 100. Leave a row empty to remove it.</p>
+    <table class="tbl compact sched"><thead><tr><th>Instalment</th><th>%</th><th class="right">Amount (<%= d.currency %>)</th><th>Due date</th></tr></thead><tbody>
+    <% const sch = (d.schedule && d.schedule.length ? d.schedule : []).slice(0, 4); while (sch.length < 4) sch.push({ label: '', percent: '', due: '' }); %>
+    <% sch.forEach((x, i) => { %><tr>
+      <td><input name="sched[<%= i %>][label]" value="<%= x.label || '' %>" placeholder="e.g. Deposit"></td>
+      <td><input name="sched[<%= i %>][percent]" type="number" step="0.01" min="0" max="100" value="<%= x.percent || '' %>"></td>
+      <td class="right num"><%= x.percent ? fmt.money(total * x.percent / 100, d.currency) : '' %></td>
+      <td><input name="sched[<%= i %>][due]" type="date" value="<%= x.due || '' %>"></td>
+    </tr><% }) %>
+    </tbody></table>
     <label>Bank details <textarea name="bank" rows="4"><%= d.bank || '' %></textarea></label>
     <label>Notes <textarea name="notes" rows="2"><%= d.notes || '' %></textarea></label>
   </div>

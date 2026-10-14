@@ -36,7 +36,7 @@ export function fxRate(settings, from, to) {
   return 1;
 }
 
-export const ORDER_STEPS = ['confirmed', 'deposit_paid', 'in_production', 'qc', 'packed', 'shipped', 'in_transit', 'customs', 'delivered', 'closed'];
+export const ORDER_STEPS = ['new', 'confirmed', 'deposit_paid', 'in_production', 'qc', 'packed', 'shipped', 'in_transit', 'customs', 'delivered', 'closed'];
 export const ORDER_STATUSES = [...ORDER_STEPS, 'cancelled'];
 export const REQUEST_STATUSES = ['new', 'reviewing', 'quoted', 'accepted', 'declined', 'cancelled'];
 export const SHIPMENT_STATUSES = ['planned', 'booked', 'picked_up', 'departed', 'arrived', 'customs', 'delivered'];

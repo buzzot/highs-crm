@@ -1058,3 +1058,16 @@ fieldset.plain { border: 0; padding: 0; margin: 0; min-width: 0; }
 .polines td:nth-child(2) { min-width: 240px; }
 .polines td.num, .polines tfoot td { white-space: nowrap; }
 .poform .card { margin-bottom: 16px; }
+
+/* payments */
+.pill.pay-unpaid { background: var(--bad-soft, #fdecec); color: var(--bad, #b42318); }
+.pill.pay-partial { background: var(--warn-soft); color: var(--warn); }
+.pill.pay-paid { background: var(--ok-soft); color: var(--ok); }
+.pill.pending { background: var(--warn-soft); color: var(--warn); }
+.pill.bad { background: var(--bad-soft, #fdecec); color: var(--bad, #b42318); }
+.pay-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.pay-kpis div { display: flex; flex-direction: column; gap: 2px; }
+.pay-kpis strong { font-weight: 500; font-size: 18px; font-variant-numeric: tabular-nums; }
+.pay-kpis strong.bad { color: var(--bad, #b42318); } .pay-kpis strong.ok { color: var(--ok); }
+.payform { margin-top: 6px; }
+.sched input { width: 100%; } .sched td:nth-child(2) input { max-width: 90px; }

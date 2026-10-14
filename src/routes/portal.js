@@ -8,7 +8,9 @@ import { companyAiOn } from '../lib/ai-access.js';
 import { getCompany, poFromQuote, poPdf, totalOf, text as txt } from '../lib/purchase.js';
 import { staffEmails } from '../lib/request-changes.js';
 import { sendEmail } from '../lib/mailer.js';
-import { poSubmittedEmail } from '../lib/email-templates.js';
+import { poSubmittedEmail, paymentSubmittedEmail } from '../lib/email-templates.js';
+import { nextInstalment } from '../lib/payments.js';
+import { recalcOrder } from '../lib/payments-db.js';
 const appUrl = () => (process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
 import { uploadDocument, signedUrl } from '../lib/storage.js';
 import { parseItems, validateItems, requestTitle, splitFiles, UNITS } from '../lib/request-items.js';
@@ -27,7 +29,7 @@ const r = Router();
 // Explicit column lists: clients have column-level grants only (see migration 0002).
 const REQ = 'id, ref, title, description, quantity, target_unit_price, target_currency, destination_country, destination_city, needed_by, delivery_mode, status, created_at, updated_at';
 const QUOTE = 'id, request_id, request_item_id, quantity, sell_currency, unit_price, freight_estimate, duties_estimate, other_costs, landed_unit_price, incoterm, lead_time_days, valid_until, status, notes, created_at';
-const ORDER = 'id, order_no, request_id, status, currency, subtotal, client_notes, expected_ship_date, created_at, updated_at';
+const ORDER = 'id, order_no, request_id, status, currency, subtotal, client_notes, expected_ship_date, payment_status, amount_due, amount_paid, payment_due_date, payment_schedule, created_at, updated_at';
 const ITEM = 'id, description, quantity, unit_price, hs_code';
 const SHIP = 'id, order_id, mode, incoterm, origin_port, destination_port, container_no, tracking_no, bl_no, export_declaration_no, export_official, etd, eta, atd, ata, status, gross_weight_kg, volume_cbm, cartons, created_at';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 40 } });
@@ -69,7 +71,7 @@ r.get('/', async (req, res) => {
   const kpi = {
     openRequests: (allReq || []).filter(x => ['new', 'reviewing'].includes(x.status)).length,
     quotesWaiting: (allReq || []).filter(x => x.status === 'quoted').length,
-    inProgress: (allOrd || []).filter(x => ['confirmed', 'deposit_paid', 'in_production', 'qc', 'packed'].includes(x.status)).length,
+    inProgress: (allOrd || []).filter(x => ['new', 'confirmed', 'deposit_paid', 'in_production', 'qc', 'packed'].includes(x.status)).length,
     onTheWay: (allOrd || []).filter(x => ['shipped', 'in_transit', 'customs'].includes(x.status)).length,
   };
   res.render('portal/dashboard', { title: 'Overview', requests: requests || [], orders: orders || [], openCount: open.length, kpi });
@@ -356,7 +358,7 @@ r.get('/orders', async (req, res) => {
   const all = data || [];
   const groups = {
     all: () => true,
-    production: x => ['confirmed', 'deposit_paid', 'in_production', 'qc', 'packed'].includes(x.status),
+    production: x => ['new', 'confirmed', 'deposit_paid', 'in_production', 'qc', 'packed'].includes(x.status),
     shipping: x => ['shipped', 'in_transit', 'customs'].includes(x.status),
     delivered: x => ['delivered', 'closed'].includes(x.status),
   };
@@ -378,7 +380,48 @@ r.get('/orders/:id', async (req, res) => {
   ]);
   const shipIds = new Set((shipments || []).map(s => s.id));
   const documents = (docs || []).filter(d => (d.entity_type === 'order' && d.entity_id === order.id) || (d.entity_type === 'shipment' && shipIds.has(d.entity_id)));
-  res.render('portal/order_detail', { title: order.order_no, order, shipments: shipments || [], documents, events: events || [], packing: packing || [] });
+  const { data: payments } = await admin.from('order_payments').select('*').eq('order_id', order.id).eq('org_id', req.user.org_id).order('created_at');
+  const proofIds = new Set((payments || []).flatMap(x => x.proof_doc_ids || []));
+  const open = order.payment_status === 'paid' ? null : nextInstalment(order.payment_schedule, order.amount_paid);
+  res.render('portal/order_detail', { title: order.order_no, order, shipments: shipments || [], documents: documents.filter(d => !proofIds.has(d.id)), events: events || [], packing: packing || [], payments: payments || [], proofDocs: documents.filter(d => proofIds.has(d.id)), open, msg: req.query.msg, err: req.query.err });
+});
+
+// the client reports a payment: amount, date, proof of payment (confirmed by Lumi Trade afterwards)
+r.post('/orders/:id/payments', upload.array('proofs', 5), async (req, res) => {
+  const { data: order } = await req.db.from('orders').select(ORDER).eq('id', req.params.id).single();
+  if (!order) return res.status(404).render('error', { title: 'Not found', message: 'Order not found.' });
+  const go = (text, k = 'err') => res.redirect(`/portal/orders/${order.id}?${k}=${encodeURIComponent(text)}#pay`);
+  if (!(Number(order.amount_due) > 0)) return go('Payment details are not available yet — we will send the proforma invoice first.');
+  const amount = Math.round(Number(String(req.body.amount || '').replace(',', '.')) * 100) / 100;
+  if (!(amount > 0)) return go('Enter the amount you paid.');
+  const left = Math.round((Number(order.amount_due) - Number(order.amount_paid)) * 100) / 100;
+  if (amount > left + 0.005) return go(`The amount is more than what is still open (${left.toFixed(2)} ${order.currency}).`);
+  const files = req.files || [];
+  if (!files.length) return go('Attach the proof of payment (bank receipt, screenshot or PDF).');
+  const paidOn = /^\d{4}-\d{2}-\d{2}$/.test(req.body.paid_on || '') ? req.body.paid_on : new Date().toISOString().slice(0, 10);
+  const inst = nextInstalment(order.payment_schedule, order.amount_paid);
+  const { data: pay, error } = await admin.from('order_payments').insert({
+    order_id: order.id, org_id: req.user.org_id, amount, currency: order.currency, paid_on: paidOn, label: inst?.label || null,
+    reference: String(req.body.reference || '').trim().slice(0, 120) || null, note: String(req.body.note || '').trim().slice(0, 1000) || null, created_by: req.user.id,
+  }).select().single();
+  if (error) return go(error.message);
+  const ids = [];
+  for (const file of files) {
+    try {
+      const doc = await uploadDocument({ file, entityType: 'order', entityId: order.id, kind: 'payment_proof', title: `Proof of payment ${order.order_no} · ${amount.toFixed(2)} ${order.currency}`, clientVisible: true, uploadedBy: req.user.id });
+      ids.push(doc.id);
+    } catch (e) { console.error(`[payment] ${pay.id}: upload ${file.originalname} failed: ${e.message}`); }
+  }
+  if (!ids.length) { await admin.from('order_payments').delete().eq('id', pay.id); return go('The proof could not be uploaded. Please try again.'); }
+  await admin.from('order_payments').update({ proof_doc_ids: ids }).eq('id', pay.id);
+  const now = await recalcOrder(order.id);
+  await log({ entityType: 'order', entityId: order.id, action: 'payment_submitted', actorId: req.user.id, clientVisible: true, detail: { note: `${amount.toFixed(2)} ${order.currency}` } });
+  try {
+    const { data: rq } = order.request_id ? await admin.from('requests').select('id, ref, title, assigned_to').eq('id', order.request_id).single() : { data: null };
+    const to = await staffEmails(rq || {});
+    if (to.length) await sendEmail({ to, ...paymentSubmittedEmail({ order, amount, who: req.user.full_name || req.user.email, orgName: (await admin.from('organizations').select('name').eq('id', req.user.org_id).maybeSingle()).data?.name, status: now?.payment_status, url: `${appUrl()}/admin/orders/${order.id}` }) });
+  } catch (e) { console.error(`[payment] email to staff failed: ${e.message}`); }
+  go(now?.payment_status === 'paid' ? 'Payment submitted — thank you. The order is fully paid once we confirm it.' : 'Payment submitted — thank you. We will confirm it shortly.', 'msg');
 });
 
 r.get('/documents/:id/download', async (req, res) => {

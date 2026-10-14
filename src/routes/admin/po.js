@@ -6,6 +6,8 @@ import { back, notFound } from '../../lib/util.js';
 import { uploadDocument } from '../../lib/storage.js';
 import { sendEmail } from '../../lib/mailer.js';
 import { poRejectedEmail, piEmail } from '../../lib/email-templates.js';
+import { DEFAULT_SCHEDULE, parseSchedule, withAmounts } from '../../lib/payments.js';
+import { recalcOrder } from '../../lib/payments-db.js';
 import { getCompany, poPdf, piPdf, totalOf, parseLines, text } from '../../lib/purchase.js';
 
 const appUrl = () => (process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
@@ -73,7 +75,7 @@ po.post('/:id/approve', async (req, res) => {
     const single = patch.lines.length === 1;
     const qtyAll = patch.lines.reduce((t, l) => t + Number(l.quantity), 0);
     const { data: order, error } = await admin.from('orders').insert({
-      org_id: p.org_id, request_id: p.request_id, quote_id: q?.id || null, supplier_id: q?.supplier_id || null, currency: p.currency,
+      org_id: p.org_id, request_id: p.request_id, quote_id: q?.id || null, supplier_id: q?.supplier_id || null, currency: p.currency, status: 'new',
       subtotal: total, cost_total: unitCostSell != null ? r2(unitCostSell * qtyAll) : 0,
       client_notes: p.client_notes, internal_notes: patch.admin_comment,
       expected_ship_date: patch.lead_time_days ? new Date(Date.now() + patch.lead_time_days * 864e5).toISOString().slice(0, 10) : null,
@@ -133,7 +135,7 @@ pi.post('/order/:oid', async (req, res) => {
   const { data: row, error } = await admin.from('proforma_invoices').insert({
     order_id: order.id, po_id: p?.id || null, created_by: req.user.id,
     data: { buyer, lines: p?.lines?.length ? p.lines : (items || []).map(lineFromItem), currency: order.currency, incoterm: p?.incoterm || quote?.incoterm || '', lead_time_days: p?.lead_time_days || quote?.lead_time_days || null,
-      po_ref: p?.client?.ref || '', payment_terms: company.payment_terms, bank: company.bank, notes: '', valid_until: valid },
+      po_ref: p?.client?.ref || '', schedule: DEFAULT_SCHEDULE, payment_terms: company.payment_terms, bank: company.bank, notes: '', valid_until: valid },
   }).select('id').single();
   if (error) return back(res, `/admin/orders/${order.id}`, { err: error.message });
   await log({ entityType: 'order', entityId: order.id, action: 'pi_created', actorId: req.user.id });
@@ -147,7 +149,7 @@ async function loadPi(id) {
 const piData = (b, old) => ({
   ...old, buyer: { ...old.buyer, company: s(b.company, 200), contact: s(b.contact, 120), email: s(b.email, 200), phone: s(b.phone, 60), address: s(b.address, 500), delivery_address: s(b.delivery_address, 500) },
   lines: parseLines(b), incoterm: s(b.incoterm, 20), lead_time_days: Number(b.lead_time_days) > 0 ? Math.round(Number(b.lead_time_days)) : null, po_ref: s(b.po_ref, 60),
-  payment_terms: s(b.payment_terms, 600), bank: s(b.bank, 1000), notes: s(b.notes, 2000), valid_until: dayOnly(b.valid_until) || old.valid_until,
+  schedule: parseSchedule(b), payment_terms: s(b.payment_terms, 600), bank: s(b.bank, 1000), notes: s(b.notes, 2000), valid_until: dayOnly(b.valid_until) || old.valid_until,
 });
 
 pi.get('/:id', async (req, res) => {
@@ -183,13 +185,17 @@ pi.post('/:id/send', async (req, res) => {
   const company = await getCompany(admin);
   const pdf = piPdf(row, p.orders, company);
   try {
-    await sendEmail({ to, ...piEmail({ pi: row, order: p.orders, company, total: totalOf(data.lines), currency: data.currency, message: s(req.body.message, 1500), url: `${appUrl()}/portal/orders/${p.orders.id}` }),
+    await sendEmail({ to, ...piEmail({ pi: row, order: p.orders, company, total: totalOf(data.lines), currency: data.currency, schedule: withAmounts(data.schedule, totalOf(data.lines)), message: s(req.body.message, 1500), url: `${appUrl()}/portal/orders/${p.orders.id}` }),
       attachments: [{ filename: `${p.pi_no}.pdf`, content: pdf.toString('base64') }] });
   } catch (e) { await admin.from('proforma_invoices').update({ data }).eq('id', p.id); return back(res, `/admin/pi/${p.id}`, { err: `Email failed: ${e.message}` }); }
   try {
     await uploadDocument({ file: { originalname: `${p.pi_no}.pdf`, mimetype: 'application/pdf', buffer: pdf, size: pdf.length }, entityType: 'order', entityId: p.orders.id, kind: 'proforma_invoice', title: `Proforma invoice ${p.pi_no}`, clientVisible: true, uploadedBy: req.user.id });
   } catch (e) { console.error(`[pi] store pdf: ${e.message}`); }
   await admin.from('proforma_invoices').update({ data, status: 'sent', sent_at: sentAt, sent_by: req.user.id, updated_at: sentAt }).eq('id', p.id);
+  // the order now carries what the client has to pay, and when
+  const total = totalOf(data.lines), schedule = withAmounts(data.schedule, total);
+  await admin.from('orders').update({ amount_due: total, payment_schedule: schedule }).eq('id', p.orders.id);
+  await recalcOrder(p.orders.id);
   await log({ entityType: 'order', entityId: p.orders.id, action: 'proforma_sent', actorId: req.user.id, clientVisible: true, detail: { note: `${p.pi_no} → ${to.join(', ')}` } });
   back(res, `/admin/pi/${p.id}`, { msg: `Proforma invoice sent to ${to.join(', ')} and saved in the order's documents.` });
 });

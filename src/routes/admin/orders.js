@@ -11,6 +11,9 @@ import { rfqWorkbook } from '../../lib/quote-form.js';
 import { extractPacking, aiEnabled } from '../../lib/ai.js';
 import { uploadDocument } from '../../lib/storage.js';
 import { sendEmail } from '../../lib/mailer.js';
+import { paymentDecidedEmail } from '../../lib/email-templates.js';
+import { recalcOrder } from '../../lib/payments-db.js';
+const appUrl = () => (process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
 import { rfqEmail } from '../../lib/email-templates.js';
 import { replyAddress, subjectTag } from '../../lib/freight.js';
 
@@ -81,11 +84,54 @@ r.get('/:id', async (req, res) => {
     admin.from('proforma_invoices').select('id, pi_no, status, sent_at').eq('order_id', id).order('created_at'),
     admin.from('purchase_orders').select('id, po_no, status').eq('order_id', id),
   ]);
+  const [{ data: pay }, { data: payRows }] = await Promise.all([
+    admin.from('orders').select('payment_status, amount_due, amount_paid, payment_due_date, payment_schedule').eq('id', id).single(),
+    admin.from('order_payments').select('*').eq('order_id', id).order('created_at'),
+  ]);
   res.render('admin/orders/detail', {
+    pay: pay || {}, payments: payRows || [],
     pis: pis || [], pos: pos || [], title: order.order_no, order, items: items || [], shipments: shipments || [], packing: packing || [], events: events || [],
     docs: docs || [], suppliers: suppliers || [], products: products || [], statuses: ORDER_STATUSES,
     land: landed(order, items), msg: req.query.msg, err: req.query.err,
   });
+});
+
+// payments: confirm / reject what the client reported, or record one received directly
+r.post('/:id/payments/:pid', async (req, res) => {
+  const id = req.params.id;
+  const { data: pay } = await admin.from('order_payments').select('*, orders(id, order_no, currency, status, org_id)').eq('id', req.params.pid).eq('order_id', id).maybeSingle();
+  if (!pay) return notFound(res, 'Payment');
+  const confirm = req.body.decision === 'confirm';
+  const note = String(req.body.note || '').trim().slice(0, 1000);
+  if (!confirm && !note) return back(res, `/admin/orders/${id}`, { err: 'Write a short note for the client — why the payment was not accepted.' });
+  await admin.from('order_payments').update({ status: confirm ? 'confirmed' : 'rejected', admin_note: note || null, decided_by: req.user.id, decided_at: new Date().toISOString() }).eq('id', pay.id);
+  await recalcOrder(id);
+  if (confirm && ['new', 'confirmed'].includes(pay.orders.status)) {
+    await admin.from('orders').update({ status: 'deposit_paid' }).eq('id', id);
+    await log({ entityType: 'order', entityId: id, action: 'status_deposit_paid', actorId: req.user.id, clientVisible: true });
+  }
+  await log({ entityType: 'order', entityId: id, action: confirm ? 'payment_confirmed' : 'payment_rejected', actorId: req.user.id, clientVisible: true, detail: { note: `${Number(pay.amount).toFixed(2)} ${pay.currency}${note ? ' — ' + note : ''}` } });
+  let sent = '';
+  try {
+    const { data: users } = await admin.from('profiles').select('email').eq('org_id', pay.org_id).eq('role', 'client').eq('active', true);
+    const to = pay.created_by ? [(await admin.from('profiles').select('email').eq('id', pay.created_by).maybeSingle()).data?.email].filter(Boolean) : (users || []).map(u => u.email);
+    if (to.length) { await sendEmail({ to, ...paymentDecidedEmail({ order: pay.orders, amount: pay.amount, confirmed: confirm, note, url: `${appUrl()}/portal/orders/${id}#pay` }) }); sent = ` The client was emailed (${to.join(', ')}).`; }
+  } catch (e) { console.error(`[payment] email to client failed: ${e.message}`); }
+  back(res, `/admin/orders/${id}`, { msg: (confirm ? 'Payment confirmed.' : 'Payment rejected.') + sent });
+});
+
+r.post('/:id/payments', async (req, res) => {
+  const id = req.params.id;
+  const { data: o } = await admin.from('orders').select('id, org_id, currency, amount_due').eq('id', id).single();
+  if (!o) return notFound(res, 'Order');
+  const amount = Math.round(Number(String(req.body.amount || '').replace(',', '.')) * 100) / 100;
+  if (!(amount > 0)) return back(res, `/admin/orders/${id}`, { err: 'Enter the amount received.' });
+  const paidOn = /^\d{4}-\d{2}-\d{2}$/.test(req.body.paid_on || '') ? req.body.paid_on : new Date().toISOString().slice(0, 10);
+  const { error } = await admin.from('order_payments').insert({ order_id: id, org_id: o.org_id, amount, currency: o.currency, paid_on: paidOn, label: String(req.body.label || '').trim().slice(0, 40) || null, reference: String(req.body.reference || '').trim().slice(0, 120) || null, status: 'confirmed', created_by: req.user.id, decided_by: req.user.id, decided_at: new Date().toISOString() });
+  if (error) return back(res, `/admin/orders/${id}`, { err: error.message });
+  await recalcOrder(id);
+  await log({ entityType: 'order', entityId: id, action: 'payment_confirmed', actorId: req.user.id, clientVisible: true, detail: { note: `${amount.toFixed(2)} ${o.currency}` } });
+  back(res, `/admin/orders/${id}`, { msg: 'Payment recorded.' });
 });
 
 // status change with optional client-visible note
