@@ -257,7 +257,7 @@ const PRODUCT_INFO_TOOL = {
     properties: {
       name: { ...strOrNull, description: 'Short product name in English (type + key attribute, e.g. "Stainless steel tumbler 500 ml")' },
       sku: { ...strOrNull, description: 'Model / SKU / part / article number exactly as printed, or null' },
-      description: { ...strOrNull, description: 'Specifications as short lines: material, size, colour, capacity, power, packaging, certifications, any links. Only what is visible.' },
+      description: { ...strOrNull, description: 'Only the main specs printed or clearly visible (e.g. material, size, colour, capacity), as one short line or a few short lines. No comments, analysis, marketing text or guesses. null if nothing useful.' },
     },
     required: ['name', 'sku', 'description'],
   },
@@ -267,7 +267,8 @@ const PRODUCT_INFO_TOOL = {
 export async function extractProductInfo({ files = [], name = '', description = '' }, entity = null) {
   const system = `You help a sourcing company understand what a client wants to buy. Look at the attached photo(s) / PDF of ONE product
 (catalogue page, competitor listing, screenshot, product photo, label) and fill in name, SKU/model number and details.
-Never invent facts that are not visible; use null when unknown. Translate Chinese to English. Keep the details concise (short lines).
+Never invent facts that are not visible; use null when unknown. Translate Chinese to English.
+Be brief: the details field holds only the main data (key specs), at most about 5 short items. No comments, no analysis, no advice, no sentences like "this appears to be", no repeating the name or SKU.
 If the client already typed a name or details, keep their meaning and only improve or complete it with what the files show.`;
   const content = [];
   for (const f of files.slice(0, 4)) {
