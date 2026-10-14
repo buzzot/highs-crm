@@ -4,6 +4,30 @@
     <p class="muted"><a href="/admin/clients/<%= request.organizations.id %>"><%= request.organizations.name %></a> · submitted by <%= request.creator?.full_name || request.creator?.email || '—' %> · <%= fmt.date(request.created_at) %></p></div>
   <span class="pill lg <%= request.status %>"><%= fmt.status(request.status) %></span>
 </div>
+<% const pend = typeof pending !== 'undefined' ? pending : null; %>
+<% if (pend) { %>
+  <div class="card pending">
+    <h2><%- icon('clock') %> Client changed this request — approval needed <span class="pill pending">Pending</span></h2>
+    <p class="muted"><%= pend.creator?.full_name || pend.creator?.email || 'Client' %> · <%= fmt.datetime(pend.updated_at || pend.created_at) %>.
+      Approving applies the changes, marks outdated draft/sent quotes as <em>superseded</em> and moves the request to <em>reviewing</em> for an updated offer. Accepted quotes and orders are never touched.</p>
+    <%- include('../../partials/request_diff', { d: pendingDiff, cur: pend.data.target_currency || request.target_currency }) %>
+    <% if (pendingDocs.length) { %>
+      <div class="rqthumbs">
+        <% pendingDocs.forEach(d => { const url = '/admin/documents/' + d.id + '/download'; %>
+          <% if ((d.mime_type || '').startsWith('image/')) { %><a href="<%= url %>" target="_blank" title="<%= d.title %>"><img src="<%= url %>" alt="<%= d.title %>" loading="lazy"></a>
+          <% } else { %><a class="fchip" href="<%= url %>" target="_blank"><%- icon('file') %>&nbsp;<%= d.title %></a><% } %>
+        <% }) %>
+      </div>
+    <% } %>
+    <form method="post" action="/admin/sourcing/<%= request.id %>/changes/<%= pend.id %>">
+      <label>Note to the client <span class="muted small">— optional, included in the email</span><input name="note" placeholder="e.g. New quantity noted — updated offer within 2 days"></label>
+      <div class="actions">
+        <button class="btn primary" name="decision" value="approve">Approve changes</button>
+        <button class="btn" name="decision" value="reject">Reject</button>
+      </div>
+    </form>
+  </div>
+<% } %>
 <div class="grid2">
   <div>
     <div class="card">
@@ -11,6 +35,7 @@
       <dl class="dl">
         <dt>Destination</dt><dd><%= [request.destination_city, request.destination_country].filter(Boolean).join(', ') || '—' %></dd>
         <dt>Needed by</dt><dd><%= fmt.date(request.needed_by) %></dd>
+        <dt>Delivery</dt><dd><%= deliveryLabel(request.delivery_mode) %></dd>
         <dt>Price currency</dt><dd><%= request.target_currency || '—' %></dd>
       </dl>
       <%- include('../../partials/request_items', { request, items, docs, base: '/admin', quotes, staff: true }) %>

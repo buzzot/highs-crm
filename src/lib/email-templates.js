@@ -93,3 +93,32 @@ export function resetEmail({ url, email, minutes }) {
     text: text(`Reset your Lumi Trade password (${email}):`, url, '', `The link works for ${minutes} minutes and only once.`),
   };
 }
+
+// ---- client edits of a sourcing request ----
+export function changeSubmittedEmail({ request, orgName, who, url }) {
+  return {
+    subject: `${orgName || 'A client'} changed ${request.ref} — approval needed`,
+    html: layout({
+      preheader: `${who} edited ${request.ref}`, eyebrow: 'Request changed', title: 'Approve the changes',
+      introHtml: `<strong>${esc(who)}</strong> from <strong>${esc(orgName || 'a client')}</strong> edited <strong>${esc(request.ref)} · ${esc(request.title)}</strong>. Review what changed and approve it to prepare an updated offer.`,
+      buttonText: 'Review changes', buttonUrl: url, fineHtml: 'You get this email because you handle this request or are an admin.',
+    }),
+    text: `${who} (${orgName}) edited ${request.ref}. Review: ${url}`,
+  };
+}
+
+export function changeDecidedEmail({ request, approved, note, url }) {
+  return {
+    subject: approved ? `Your changes to ${request.ref} were approved` : `Your changes to ${request.ref} were not accepted`,
+    html: layout({
+      preheader: approved ? 'We are preparing an updated offer.' : 'See the note from our team.',
+      eyebrow: approved ? 'Changes approved' : 'Changes not accepted', title: approved ? 'Updated offer on the way' : 'Changes not accepted',
+      introHtml: (approved
+        ? `Your changes to <strong>${esc(request.ref)} · ${esc(request.title)}</strong> are now part of the request. We are preparing an updated offer.`
+        : `We could not accept your changes to <strong>${esc(request.ref)} · ${esc(request.title)}</strong>. The request stays as it was.`)
+        + (note ? `<br><br><em>“${esc(note)}”</em>` : ''),
+      buttonText: 'Open the request', buttonUrl: url, fineHtml: 'Questions? Just reply to this email.',
+    }),
+    text: `${approved ? 'Approved' : 'Not accepted'}: your changes to ${request.ref}. ${note || ''} ${url}`,
+  };
+}

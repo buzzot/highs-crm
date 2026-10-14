@@ -20,8 +20,10 @@ export function parseItems(body) {
     const quantity = num(v.quantity);
     const target = num(v.target_unit_price);
     if (!name && !description && quantity == null && target == null) continue; // empty block
+    const uuid = x => (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(x || '')) ? String(x) : null);
     rows.push({
       key: String(key).replace(/[^\w-]/g, ''),
+      ...(uuid(v.id) ? { id: uuid(v.id) } : {}), ...(uuid(v.tmp) ? { tmp: uuid(v.tmp) } : {}),
       name, description: description || null,
       quantity: quantity != null ? Math.round(quantity) : null,
       unit: UNITS.includes(v.unit) ? v.unit : 'pcs',

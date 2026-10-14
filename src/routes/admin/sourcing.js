@@ -3,6 +3,8 @@ import { admin } from '../../lib/supabase.js';
 import { log } from '../../lib/activity.js';
 import { summarizeRequest } from '../../lib/ai.js';
 import { back, notFound, REQUEST_STATUSES } from '../../lib/util.js';
+import { snapshot, diff } from '../../lib/request-revisions.js';
+import { applyRevision, rejectRevision, notifyClientOfDecision } from '../../lib/request-changes.js';
 
 const r = Router();
 const like = q => String(q || '').replace(/[,()%]/g, ' ').trim();
@@ -18,10 +20,10 @@ r.get('/', async (req, res) => {
   if (req.query.mine) q = q.eq('assigned_to', req.user.id);
   const s = like(req.query.q);
   if (s) q = q.or(`title.ilike.%${s}%,ref.ilike.%${s}%`);
-  const [{ data }, { data: counts }] = await Promise.all([q, admin.from('requests').select('status')]);
+  const [{ data }, { data: counts }, { data: pend }] = await Promise.all([q, admin.from('requests').select('status'), admin.from('request_revisions').select('request_id').eq('status', 'pending')]);
   const byStatus = {};
   (counts || []).forEach(x => { byStatus[x.status] = (byStatus[x.status] || 0) + 1; });
-  res.render('admin/sourcing/index', { title: 'Sourcing', requests: data || [], byStatus, statuses: REQUEST_STATUSES, status: status || 'open' });
+  res.render('admin/sourcing/index', { title: 'Sourcing', requests: data || [], pendingIds: (pend || []).map(x => x.request_id), byStatus, statuses: REQUEST_STATUSES, status: status || 'open' });
 });
 
 r.get('/:id', async (req, res) => {
@@ -36,8 +38,12 @@ r.get('/:id', async (req, res) => {
     admin.from('request_items').select('*').eq('request_id', id).order('position'),
   ]);
   if (!request) return notFound(res, 'Request');
+  const { data: pending } = await admin.from('request_revisions').select('*, creator:profiles!request_revisions_created_by_fkey(full_name, email)').eq('request_id', id).eq('status', 'pending').maybeSingle();
+  const allDocs = docs || [];
   res.render('admin/sourcing/detail', {
-    title: request.ref, request, quotes: quotes || [], docs: docs || [], items: items || [], events: events || [], staff: staff || [],
+    title: request.ref, request, quotes: quotes || [], docs: allDocs.filter(d => !d.revision_id), items: items || [],
+    pending: pending || null, pendingDiff: pending ? diff(snapshot(request, items || []), pending.data) : null,
+    pendingDocs: pending ? allDocs.filter(d => d.revision_id === pending.id) : [], events: events || [], staff: staff || [],
     orders: orders || [], statuses: REQUEST_STATUSES, msg: req.query.msg, err: req.query.err,
   });
 });
@@ -58,9 +64,27 @@ r.post('/:id', async (req, res) => {
   back(res, `/admin/sourcing/${id}`, { msg: 'Saved.' });
 });
 
+// Approve or reject a client's change to the request
+r.post('/:id/changes/:rid', async (req, res) => {
+  const { data: rev } = await admin.from('request_revisions').select('*').eq('id', req.params.rid).eq('request_id', req.params.id).single();
+  if (!rev) return notFound(res, 'Change');
+  if (rev.status !== 'pending') return back(res, `/admin/sourcing/${req.params.id}`, { err: `This change was already ${rev.status}.` });
+  const note = String(req.body.note || '').trim().slice(0, 1000);
+  const approve = req.body.decision === 'approve';
+  try {
+    if (approve) await applyRevision(rev, req.user.id, note); else await rejectRevision(rev, req.user.id, note);
+  } catch (e) {
+    console.error(`[revision] ${rev.id}: ${e.message}`);
+    return back(res, `/admin/sourcing/${req.params.id}`, { err: `Could not ${approve ? 'apply' : 'reject'} the change: ${e.message}` });
+  }
+  const { data: request } = await admin.from('requests').select('id, ref, title').eq('id', req.params.id).single();
+  notifyClientOfDecision(request, rev, approve, note).catch(e => console.error(`[revision] notify client: ${e.message}`));
+  back(res, `/admin/sourcing/${req.params.id}`, { msg: approve ? 'Changes applied. Outdated quotes are marked superseded — prepare the updated offer.' : 'Changes rejected; the client was notified.' });
+});
+
 // AI sourcing brief from the client's free-text request
 r.post('/:id/brief', async (req, res) => {
-  const { data: request } = await admin.from('requests').select('title, description, quantity, target_unit_price, target_currency, destination_country, needed_by').eq('id', req.params.id).single();
+  const { data: request } = await admin.from('requests').select('title, description, quantity, target_unit_price, target_currency, destination_country, needed_by, delivery_mode').eq('id', req.params.id).single();
   if (!request) return notFound(res, 'Request');
   const { data: products } = await admin.from('request_items').select('name, description, quantity, unit, target_unit_price').eq('request_id', req.params.id).order('position');
   if (products?.length) request.products = products;

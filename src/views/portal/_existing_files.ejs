@@ -1,0 +1,12 @@
+<%# Files already attached (edit form). Ticking "remove" detaches them once the change is approved. locals: list %>
+<% if (list.length) { %>
+  <div class="fgrid existing">
+    <% list.forEach(f => { const url = '/portal/documents/' + f.id + '/download'; %>
+      <label class="fitem">
+        <% if ((f.mime_type || '').startsWith('image/')) { %><img src="<%= url %>" alt="" loading="lazy"><% } else { %><span class="fext"><%= (f.title || '').split('.').pop().slice(0, 4).toUpperCase() || 'FILE' %></span><% } %>
+        <span class="fmeta"><span class="fname"><%= f.title %></span><span class="fsize"><%= f.pending ? 'added in this change' : 'attached' %></span></span>
+        <span class="frm"><input type="checkbox" name="remove_docs" value="<%= f.id %>" <%= f.removing ? "checked" : "" %>> remove</span>
+      </label>
+    <% }) %>
+  </div>
+<% } %>

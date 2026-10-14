@@ -5,12 +5,20 @@ import { admin } from '../lib/supabase.js';
 import { log } from '../lib/activity.js';
 import { uploadDocument, signedUrl } from '../lib/storage.js';
 import { parseItems, validateItems, requestTitle, splitFiles, UNITS } from '../lib/request-items.js';
+import { EDITABLE, DELIVERY, snapshot, buildRevision, diff } from '../lib/request-revisions.js';
+import { dropRevisionFiles, notifyStaffOfChange } from '../lib/request-changes.js';
+const deliveryOf = v => (DELIVERY[v] ? v : null);
+const headerFrom = (f, items) => ({
+  title: requestTitle(f.title, items), description: String(f.description || '').trim() || null,
+  destination_country: String(f.destination_country || '').trim() || null, destination_city: String(f.destination_city || '').trim() || null,
+  needed_by: f.needed_by || null, delivery_mode: deliveryOf(f.delivery_mode), target_currency: CURRENCY_OK.includes(f.target_currency) ? f.target_currency : 'USD',
+});
 const CURRENCY_OK = ['USD', 'EUR', 'GBP', 'CNY'];
 import { validateCompany, COMPANY_FIELDS } from '../lib/company.js';
 
 const r = Router();
 // Explicit column lists: clients have column-level grants only (see migration 0002).
-const REQ = 'id, ref, title, description, quantity, target_unit_price, target_currency, destination_country, destination_city, needed_by, status, created_at, updated_at';
+const REQ = 'id, ref, title, description, quantity, target_unit_price, target_currency, destination_country, destination_city, needed_by, delivery_mode, status, created_at, updated_at';
 const QUOTE = 'id, request_id, request_item_id, quantity, sell_currency, unit_price, freight_estimate, duties_estimate, other_costs, landed_unit_price, incoterm, lead_time_days, valid_until, status, notes, created_at';
 const ORDER = 'id, order_no, request_id, status, currency, subtotal, client_notes, expected_ship_date, created_at, updated_at';
 const ITEM = 'id, description, quantity, unit_price, hs_code';
@@ -94,6 +102,7 @@ r.post('/requests', upload.any(), async (req, res) => {
     quantity: single?.quantity ?? null, target_unit_price: single?.target_unit_price ?? null,
     target_currency: CURRENCY_OK.includes(f.target_currency) ? f.target_currency : 'USD',
     destination_country: f.destination_country, destination_city: f.destination_city, needed_by: f.needed_by || null,
+    delivery_mode: deliveryOf(f.delivery_mode),
   }).select('id').single();
   if (error) return again(error.message);
 
@@ -121,13 +130,129 @@ r.post('/requests', upload.any(), async (req, res) => {
 r.get('/requests/:id', async (req, res) => {
   const { data: request } = await req.db.from('requests').select(REQ).eq('id', req.params.id).single();
   if (!request) return res.status(404).render('error', { title: 'Not found', message: 'Request not found.' });
-  const [{ data: quotes }, { data: docs }, { data: events }, { data: items }] = await Promise.all([
+  const [{ data: quotes }, { data: docs }, { data: events }, { data: items }, { data: revs }] = await Promise.all([
     req.db.from('quotes').select(QUOTE).eq('request_id', request.id).order('created_at', { ascending: false }),
     req.db.from('documents').select('*').eq('entity_type', 'request').eq('entity_id', request.id).order('created_at'),
     req.db.from('activity_log').select('*').eq('entity_type', 'request').eq('entity_id', request.id).order('created_at', { ascending: false }),
     req.db.from('request_items').select('*').eq('request_id', request.id).order('position'),
+    req.db.from('request_revisions').select('*').eq('request_id', request.id).order('created_at', { ascending: false }).limit(1),
   ]);
-  res.render('portal/request_detail', { title: request.ref, request, quotes: quotes || [], docs: docs || [], events: events || [], items: items || [] });
+  const last = revs?.[0] || null;
+  const pending = last?.status === 'pending' ? last : null;
+  const pendingDiff = pending ? diff(snapshot(request, items || []), pending.data) : null;
+  res.render('portal/request_detail', {
+    title: request.ref, request, quotes: quotes || [], docs: (docs || []).filter(d => !d.revision_id), events: events || [], items: items || [],
+    pending, pendingDiff, lastDecision: last && ['approved', 'rejected'].includes(last.status) ? last : null, canEdit: EDITABLE.includes(request.status),
+  });
+});
+
+// ---- client edits a request; an admin approves the change ----
+async function editState(req, id) {
+  const { data: request } = await req.db.from('requests').select(`${REQ}, org_id`).eq('id', id).single();
+  if (!request) return {};
+  const [{ data: items }, { data: docs }, { data: pend }] = await Promise.all([
+    req.db.from('request_items').select('*').eq('request_id', id).order('position'),
+    req.db.from('documents').select('id, title, mime_type, request_item_id, revision_id').eq('entity_type', 'request').eq('entity_id', id).order('created_at'),
+    req.db.from('request_revisions').select('*').eq('request_id', id).eq('status', 'pending').maybeSingle(),
+  ]);
+  return { request, items: items || [], docs: docs || [], pending: pend || null };
+}
+
+function editView(res, st, extra = {}) {
+  const { request, items, docs, pending } = st;
+  const base = pending ? pending.data : snapshot(request, items);
+  const legacy = !items.length && !pending; // request made before multi-product support
+  const formItems = legacy ? [{ name: request.title, description: request.description, quantity: request.quantity, unit: 'pcs', target_unit_price: request.target_unit_price }] : base.items;
+  const removing = new Set(pending?.data.remove_doc_ids || []);
+  const newDocItem = Object.fromEntries((pending?.data.new_docs || []).map(n => [n.doc, n.item]));
+  const files = docs
+    .filter(d => !d.revision_id || d.revision_id === pending?.id)
+    .map(d => ({ id: d.id, title: d.title, mime_type: d.mime_type, pending: !!d.revision_id, removing: removing.has(d.id),
+      item: d.revision_id ? (newDocItem[d.id] || null) : (d.request_item_id || null) }));
+  res.render('portal/request_form', {
+    title: `Edit ${request.ref}`, mode: 'edit', request, error: null, units: UNITS, files,
+    form: { ...base, title: base.title, description: legacy ? null : base.description }, items: formItems, ...extra,
+  });
+}
+
+r.get('/requests/:id/edit', async (req, res) => {
+  const st = await editState(req, req.params.id);
+  if (!st.request) return res.status(404).render('error', { title: 'Not found', message: 'Request not found.' });
+  if (!EDITABLE.includes(st.request.status)) return res.redirect(`/portal/requests/${st.request.id}?err=` + encodeURIComponent('This request can no longer be changed. Send us a new request instead.'));
+  editView(res, st);
+});
+
+r.post('/requests/:id/edit', upload.any(), async (req, res) => {
+  const st = await editState(req, req.params.id);
+  const { request, items: curItems, docs, pending } = st;
+  if (!request) return res.status(404).render('error', { title: 'Not found', message: 'Request not found.' });
+  if (!EDITABLE.includes(request.status)) return res.redirect(`/portal/requests/${request.id}`);
+  const f = req.body;
+  const parsed = parseItems(f);
+  const bad = validateItems(parsed) || ((req.files || []).length > 40 ? 'Too many files — up to 40 per change.' : null);
+  if (bad) return editView(res.status(400), st, { error: bad, form: { ...f }, items: parsed.length ? parsed : [{}] });
+
+  const data = buildRevision(headerFrom(f, parsed), parsed, curItems.map(i => i.id));
+  const refOfKey = Object.fromEntries(data.items.map(it => [it.key, it.id || it.tmp]));
+  const liveRefs = new Set(data.items.map(it => it.id || it.tmp));
+  const ticked = new Set([].concat(f.remove_docs || []).map(String));
+
+  // files already approved that the client wants gone (applied on approval)
+  data.remove_doc_ids = docs.filter(d => !d.revision_id && ticked.has(d.id)).map(d => d.id);
+  // files from the earlier pending version: keep unless ticked or their product was removed
+  const dropNow = [];
+  for (const nd of pending?.data.new_docs || []) {
+    if (ticked.has(nd.doc) || (nd.item && !liveRefs.has(nd.item))) dropNow.push(nd.doc); else data.new_docs.push(nd);
+  }
+  data.items.forEach(it => { delete it.key; });
+
+  const uploads = (req.files || []).length;
+  const d = diff(snapshot(request, curItems), { ...data, new_docs: [...data.new_docs, ...Array(uploads).fill({})] });
+  if (d.empty) {
+    if (pending) {
+      await dropRevisionFiles(pending.id);
+      await admin.from('request_revisions').update({ status: 'cancelled', updated_at: new Date().toISOString() }).eq('id', pending.id);
+      return res.redirect(`/portal/requests/${request.id}?msg=` + encodeURIComponent('Nothing differs from the current request, so the pending change was withdrawn.'));
+    }
+    return res.redirect(`/portal/requests/${request.id}?msg=` + encodeURIComponent('Nothing changed.'));
+  }
+
+  let revId = pending?.id;
+  if (pending) {
+    if (dropNow.length) await dropRevisionFiles(pending.id, dropNow);
+    const { error } = await admin.from('request_revisions').update({ data, created_by: req.user.id, updated_at: new Date().toISOString() }).eq('id', pending.id);
+    if (error) return editView(res.status(400), st, { error: error.message });
+  } else {
+    const { data: rev, error } = await admin.from('request_revisions').insert({ request_id: request.id, created_by: req.user.id, data }).select('id').single();
+    if (error) return editView(res.status(400), st, { error: /request_revisions/.test(error.message) ? 'Editing is not switched on yet (database update 0010 missing).' : error.message });
+    revId = rev.id;
+  }
+
+  // new uploads belong to the pending change until it is approved
+  const { general, byKey } = splitFiles(req.files);
+  const ups = [...general.map(file => ({ file, item: null })), ...Object.entries(byKey).flatMap(([k, fs]) => fs.map(file => ({ file, item: refOfKey[k] || null })))];
+  for (const { file, item } of ups) {
+    try {
+      const doc = await uploadDocument({ file, entityType: 'request', entityId: request.id, kind: file.mimetype?.startsWith('image/') ? 'product_photo' : 'other', uploadedBy: req.user.id });
+      await admin.from('documents').update({ revision_id: revId }).eq('id', doc.id);
+      data.new_docs.push({ doc: doc.id, item });
+    } catch (e) { console.error(`[revision] upload ${file.originalname}: ${e.message}`); }
+  }
+  if (ups.length) await admin.from('request_revisions').update({ data }).eq('id', revId);
+
+  await log({ entityType: 'request', entityId: request.id, action: pending ? 'changes_updated' : 'changes_submitted', actorId: req.user.id, clientVisible: true });
+  notifyStaffOfChange(request, req.user).catch(e => console.error(`[revision] notify: ${e.message}`));
+  res.redirect(`/portal/requests/${request.id}?msg=` + encodeURIComponent('Changes sent for approval. We will update the offer once they are approved.'));
+});
+
+r.post('/requests/:id/edit/withdraw', async (req, res) => {
+  const { data: pend } = await req.db.from('request_revisions').select('id, request_id').eq('request_id', req.params.id).eq('status', 'pending').maybeSingle();
+  if (pend) {
+    await dropRevisionFiles(pend.id);
+    await admin.from('request_revisions').update({ status: 'cancelled', updated_at: new Date().toISOString() }).eq('id', pend.id);
+    await log({ entityType: 'request', entityId: pend.request_id, action: 'changes_withdrawn', actorId: req.user.id, clientVisible: true });
+  }
+  res.redirect(`/portal/requests/${req.params.id}?msg=` + encodeURIComponent('Pending changes withdrawn.'));
 });
 
 // client accepts / rejects a sent quote

@@ -48,6 +48,7 @@ Node.js (Express, server-rendered EJS) on **Supabase** (Postgres, Auth, Storage)
    7. `supabase/migrations/0007_app_email_codes.sql`
    8. `supabase/migrations/0008_company_details.sql`
    9. `supabase/migrations/0009_request_items.sql` — several products per sourcing request
+   10. `supabase/migrations/0010_request_edits.sql` — clients edit requests (admin approves), preferred delivery
    8. optional demo data: `supabase/seed.sql`
 3. **Auth settings** (Authentication):
    - Providers → Email: turn **off** "Allow new users to sign up" (invite-only).

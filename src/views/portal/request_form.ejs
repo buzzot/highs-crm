@@ -1,11 +1,22 @@
 <%- include('../partials/head') %>
 <% const itemList = (typeof items !== 'undefined' && items.length) ? items : [{}];
    const unitList = typeof units !== 'undefined' ? units : ['pcs'];
-   const cur = form.target_currency || 'USD'; %>
-<form method="post" action="/portal/requests" enctype="multipart/form-data" class="rqform" id="rqForm">
+   const cur = form.target_currency || 'USD';
+   const editing = typeof mode !== 'undefined' && mode === 'edit';
+   const fileList = typeof files !== 'undefined' ? files : [];
+   const filesOf = it => fileList.filter(f => f.item && (f.item === it.id || f.item === it.tmp));
+   const generalFiles = fileList.filter(f => !f.item);
+   const dm = form.delivery_mode || ''; %>
+<form method="post" action="<%= editing ? '/portal/requests/' + request.id + '/edit' : '/portal/requests' %>" enctype="multipart/form-data" class="rqform" id="rqForm">
   <div class="card">
-    <h1>New sourcing request</h1>
-    <p class="muted">Add every product you need — one request can hold several. Photos, links or reference samples help us source faster.</p>
+    <% if (editing) { %>
+      <a class="back" href="/portal/requests/<%= request.id %>">← <%= request.ref %></a>
+      <h1>Edit request</h1>
+      <div class="alert info">Your changes are sent to our team for approval. Until then the current version stays in place<%= request.status === 'quoted' ? ' and offers already sent remain valid' : '' %>. Once approved, we prepare an updated offer.</div>
+    <% } else { %>
+      <h1>New sourcing request</h1>
+      <p class="muted">Add every product you need — one request can hold several. Photos, links or reference samples help us source faster.</p>
+    <% } %>
     <% if (error) { %><div class="alert err"><%= error %></div><% if ((typeof items !== 'undefined') && items.length) { %><p class="muted small">Files are not kept after an error — please add them again.</p><% } } %>
     <label>Request name <span class="muted small">— optional, e.g. "Spring kitchen range"</span>
       <input name="title" value="<%= form.title || '' %>" placeholder="Leave empty to use the first product name"></label>
@@ -15,6 +26,12 @@
       <label>Needed by <input type="date" name="needed_by" value="<%= form.needed_by || '' %>"></label>
       <label>Price currency <select name="target_currency" id="rqCur"><% ['USD','EUR','GBP','CNY'].forEach(c => { %><option <%= cur === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
     </div>
+    <fieldset class="seg">
+      <legend>Preferred delivery</legend>
+      <% [['sea', 'Sea', 'ship'], ['air', 'Air', 'plane'], ['land', 'Land', 'truck'], ['any', 'No preference', 'dots']].forEach(([v, label, ic]) => { %>
+        <label class="segopt"><input type="radio" name="delivery_mode" value="<%= v %>" <%= dm === v ? 'checked' : '' %>><span><%- icon(ic) %><%= label %><% if (v === 'land') { %><small>rail / truck</small><% } %></span></label>
+      <% }) %>
+    </fieldset>
   </div>
 
   <div class="rqhead">
@@ -23,7 +40,7 @@
 
   <div id="rqItems">
     <% itemList.forEach((it, i) => { %>
-      <%- include('_request_item', { it, i, unitList, cur }) %>
+      <%- include('_request_item', { it, i, unitList, cur, itemFiles: filesOf(it) }) %>
     <% }) %>
   </div>
 
@@ -34,6 +51,7 @@
   <div class="card">
     <h2>General notes &amp; files <span class="muted small">— optional, for the whole request</span></h2>
     <label>Notes <textarea name="description" rows="3" placeholder="Packaging or labelling for all products, certifications, shipping preferences…"><%= form.description || '' %></textarea></label>
+    <%- include('_existing_files', { list: generalFiles }) %>
     <div class="dropwrap">
       <div class="filedrop" data-dropzone data-max="10" data-max-mb="20" tabindex="0">
         <input type="file" name="files" multiple accept="image/*,.pdf,.xlsx,.xls,.docx,.doc,.csv" aria-label="General files">
@@ -43,11 +61,11 @@
       </div>
       <div class="fgrid" data-drop-list></div>
     </div>
-    <div class="actions"><button class="btn primary lg">Submit request</button> <a class="btn" href="/portal/requests">Cancel</a></div>
+    <div class="actions"><button class="btn primary lg"><%= editing ? 'Send changes for approval' : 'Submit request' %></button> <a class="btn" href="<%= editing ? '/portal/requests/' + request.id : '/portal/requests' %>">Cancel</a></div>
   </div>
 </form>
 
-<template id="rqTemplate"><%- include('_request_item', { it: {}, i: '__I__', unitList, cur }) %></template>
+<template id="rqTemplate"><%- include('_request_item', { it: {}, i: '__I__', unitList, cur, itemFiles: [] }) %></template>
 <script>
 (function () {
   const list = document.getElementById('rqItems'), tpl = document.getElementById('rqTemplate');

@@ -5,7 +5,7 @@
 <% const isStaff = typeof staff !== 'undefined' && staff;
    const rows = items.length ? items : [{ id: null, name: request.title, description: request.description, quantity: request.quantity, unit: 'pcs', target_unit_price: request.target_unit_price }];
    const own = d => items.length ? d.request_item_id : null;
-   const quotesFor = it => quotes.filter(q => items.length > 1 ? q.request_item_id === it.id : true); %>
+   const quotesFor = it => quotes.filter(q => q.status !== 'superseded' && (items.length > 1 ? q.request_item_id === it.id : true)); %>
 <div class="rqitems">
   <% rows.forEach((it, k) => { const files = docs.filter(d => it.id ? d.request_item_id === it.id : !d.request_item_id); const qs = quotesFor(it); %>
     <div class="rqrow">

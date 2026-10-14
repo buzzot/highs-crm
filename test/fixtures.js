@@ -1,6 +1,7 @@
 // Realistic sample data shaped like the Supabase query results each route passes to its view.
 import { fmt } from '../src/lib/format.js';
 import { icon } from '../src/lib/icons.js';
+import { showValue, deliveryLabel, snapshot, diff } from '../src/lib/request-revisions.js';
 import { calcQuote } from '../src/lib/pricing.js';
 import { landed } from '../src/lib/landed.js';
 
@@ -17,6 +18,7 @@ const prod = { id: 'p1', sku: 'BW-LED-001', name: 'LED Desk Lamp 10W', category:
 const prod2 = { ...prod, id: 'p2', sku: 'SH-STB-210', name: 'Stainless Steel Tumbler 500ml', category: 'Houseware', unit_cost: 12.2, moq: 1000, hs_code: '9617.00', supplier_id: 's2' };
 
 const request = { id: 'r1', ref: 'REQ-2610-0042', org_id: 'o1', title: 'LED desk lamp, custom logo', description: '10W, foldable, USB-C, black.\nLaser logo on base. Retail box with our artwork.', quantity: 2000, target_unit_price: 6.9, target_currency: 'USD', destination_country: 'USA', destination_city: 'Los Angeles', needed_by: day(45), status: 'reviewing', assigned_to: 'u1', internal_notes: 'Brightway + one backup supplier.', ai_brief: '• Spec: 10W LED, foldable arm, USB-C\n• HS chapter 94 (9405)\n• Ask: colour temperature? certifications (FCC/UL)?', created_at: d(-6), updated_at: d(-1) };
+request.delivery_mode = 'sea';
 const requests = [
   { ...request, organizations: { id: 'o1', name: 'Acme Retail LLC' }, assignee: { full_name: 'Anna Lee' }, quotes: [{ id: 'q1', status: 'sent' }] },
   { ...request, id: 'r2', ref: 'REQ-2610-0043', title: 'Stainless tumbler 500ml', status: 'new', needed_by: day(10), quantity: 5000, organizations: { id: 'o2', name: 'Nordic Home AB' }, assignee: null, quotes: [] },
@@ -49,6 +51,13 @@ const rDocs = [
   { id: 'rd2', entity_type: 'request', entity_id: 'r1', request_item_id: 'ri2', kind: 'other', title: 'charger-spec.pdf', mime_type: 'application/pdf', client_visible: true, created_at: d(-2) },
   { id: 'rd3', entity_type: 'request', entity_id: 'r1', request_item_id: null, kind: 'other', title: 'artwork.pdf', mime_type: 'application/pdf', client_visible: true, created_at: d(-2) },
 ];
+const pendingRev = { id: 'rv1', request_id: 'r1', status: 'pending', created_at: d(0), updated_at: d(0), creator: { full_name: 'Tom Baker' }, data: {
+  title: 'LED desk lamp, custom logo', description: '10W, foldable, USB-C, black.\nLaser logo on base. Retail box with our artwork.', destination_country: 'USA', destination_city: 'Los Angeles', needed_by: day(45), delivery_mode: 'air', target_currency: 'USD',
+  items: [
+    { id: 'ri1', name: 'LED desk lamp 10W, foldable', description: 'USB-C, black. Laser logo on base.', quantity: 3000, unit: 'pcs', target_unit_price: 6.5 },
+    { id: 'ri2', name: 'Wireless charging pad 15W', description: 'Matte white, retail box with our artwork.', quantity: 1500, unit: 'pcs', target_unit_price: 4.2 },
+    { tmp: '6f1c2b8e-1111-4c4c-9d9d-123456789abc', name: 'Desk organiser, bamboo', description: 'Three compartments', quantity: 800, unit: 'pcs', target_unit_price: 3.1 },
+  ], new_docs: [{ doc: 'rd9', item: '6f1c2b8e-1111-4c4c-9d9d-123456789abc' }], remove_doc_ids: ['rd2'] } };
 const events = [
   { id: 1, action: 'status_in_production', detail: { note: 'Production started, 40% done' }, client_visible: true, created_at: d(-1), profiles: { full_name: 'Anna Lee' } },
   { id: 2, action: 'documents_uploaded', detail: { note: '1 × proforma invoice' }, client_visible: true, created_at: d(-8), profiles: { full_name: 'Anna Lee' } },
@@ -64,7 +73,7 @@ const INCOTERMS = ['EXW', 'FOB', 'FCA', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DDP'
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CNY'];
 const ORDER_STATUSES = ['confirmed', 'deposit_paid', 'in_production', 'qc', 'packed', 'shipped', 'in_transit', 'customs', 'delivered', 'closed', 'cancelled'];
 
-const base = (user, path, extra = {}) => ({ fmt, icon, user, path, query: {}, msg: null, err: null, ...extra });
+const base = (user, path, extra = {}) => ({ fmt, icon, showValue, deliveryLabel, user, path, query: {}, msg: null, err: null, ...extra });
 const months = ['May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'].map((label, i) => ({ key: label, label, revenue: [8200, 12100, 9400, 15800, 18300, 13300][i], profit: [1500, 2300, 1700, 3000, 3500, 2500][i] }));
 const ordersList = [overview, { ...overview, id: 'ord2', order_no: 'HB-2610-1190', client_name: 'Nordic Home AB', status: 'qc', subtotal: 9150, cost_total: 7810, margin_pct: 17.2, gross_profit: 980, freight_total: 360 }, { ...overview, id: 'ord3', order_no: 'HB-2609-1102', status: 'in_transit', subtotal: 22400, margin_pct: 28, gross_profit: 3900 }];
 
@@ -99,8 +108,8 @@ export const pages = {
   'admin/products/index': base(staffUser, '/admin/products', { title: 'Products', products: [{ ...prod, suppliers: { id: 's1', name: sup.name } }, { ...prod2, suppliers: null }], categories: ['Houseware', 'Lighting'], suppliers: lists.suppliers, thumb: { p1: 'doc1' } }),
   'admin/products/form': base(staffUser, '/admin/products/new', { title: 'New product', p: { cost_currency: 'CNY' }, specText: '', suppliers: lists.suppliers, photos: [{ id: 'doc1', title: 'front.jpg' }, { id: 'doc2', title: 'box.jpg' }], error: null }),
   'admin/products/detail': base(staffUser, '/admin/products/p1', { title: prod.name, p: { ...prod, suppliers: sup }, docs, quotes: [{ ...quote, requests: { id: 'r1', ref: request.ref, organizations: { name: 'Acme Retail LLC' } } }], specText: 'Power: 10 W\nMaterial: Aluminium' }),
-  'admin/sourcing/index': base(staffUser, '/admin/sourcing', { title: 'Sourcing', requests, byStatus: { new: 2, reviewing: 3, quoted: 1, accepted: 9 }, statuses: ['new', 'reviewing', 'quoted', 'accepted', 'declined', 'cancelled'], status: 'open' }),
-  'admin/sourcing/detail': base(staffUser, '/admin/sourcing/r1', { title: request.ref, request: { ...request, organizations: org, creator: { full_name: 'Tom Baker' } }, quotes: [{ ...quote, products: { id: 'p1', name: prod.name }, suppliers: { id: 's1', name: sup.name } }, { ...quote, id: 'q2', status: 'accepted', margin_pct: 18, ai_check: null, products: null, suppliers: null }], docs: rDocs, items: rItems, events, staff: [staffUser], orders: [], statuses: ['new', 'reviewing', 'quoted', 'accepted', 'declined', 'cancelled'] }),
+  'admin/sourcing/index': base(staffUser, '/admin/sourcing', { title: 'Sourcing', requests, pendingIds: ['r1'], byStatus: { new: 2, reviewing: 3, quoted: 1, accepted: 9 }, statuses: ['new', 'reviewing', 'quoted', 'accepted', 'declined', 'cancelled'], status: 'open' }),
+  'admin/sourcing/detail': base(staffUser, '/admin/sourcing/r1', { title: request.ref, request: { ...request, organizations: org, creator: { full_name: 'Tom Baker' } }, quotes: [{ ...quote, products: { id: 'p1', name: prod.name }, suppliers: { id: 's1', name: sup.name } }, { ...quote, id: 'q2', status: 'accepted', margin_pct: 18, ai_check: null, products: null, suppliers: null }], docs: rDocs, items: rItems, pending: pendingRev, pendingDiff: diff(snapshot(request, rItems), pendingRev.data), pendingDocs: [{ id: 'rd9', title: 'organiser.jpg', mime_type: 'image/jpeg' }], events, staff: [staffUser], orders: [], statuses: ['new', 'reviewing', 'quoted', 'accepted', 'declined', 'cancelled'] }),
   'admin/orders/index': base(staffUser, '/admin/orders', { title: 'Orders', orders: ordersList, byStatus: { in_production: 4, qc: 1, in_transit: 2, delivered: 12 }, statuses: ORDER_STATUSES, status: 'open', clients: [org] }),
   'admin/orders/new': base(staffUser, '/admin/orders/new', { title: 'New order', clients: [org], suppliers: lists.suppliers, currencies: CURRENCIES, org: '' }),
   'admin/orders/detail': base(staffUser, '/admin/orders/ord1', { title: overview.order_no, order: overview, items, shipments: [{ ...shipment, forwarders: { name: 'Oceanlink Logistics' }, freight_costs: costs }], packing, events, docs, suppliers: lists.suppliers, products: lists.products, statuses: ORDER_STATUSES, land: landed(overview, items) }),
@@ -132,7 +141,9 @@ export const pages = {
   'portal/requests': base(clientUser, '/portal/requests', { title: 'My requests', requests, counts: { all: 2, open: 2, quoted: 0, accepted: 0, closed: 0 }, tab: 'all', q: '' }),
   'portal/request_form': base(clientUser, '/portal/requests/new', { title: 'New request', error: null, form: {}, items: [{}], units: ['pcs', 'sets', 'kg'] }),
   'portal/request_form_error': ['portal/request_form', base(clientUser, '/portal/requests/new', { title: 'New request', error: 'Product 2: enter a product name.', form: { title: 'Spring range', target_currency: 'EUR' }, items: [{ name: 'Mug', quantity: 100, unit: 'pcs' }, { description: 'like the photo' }], units: ['pcs', 'sets'] })],
-  'portal/request_detail': base(clientUser, '/portal/requests/r1', { title: request.ref, request, quotes: [{ ...quote, status: 'sent', request_item_id: 'ri1' }], docs: rDocs, events, items: rItems }),
+  'portal/request_detail': base(clientUser, '/portal/requests/r1', { title: request.ref, request, quotes: [{ ...quote, status: 'sent', request_item_id: 'ri1' }, { ...quote, id: 'q0', status: 'superseded', request_item_id: 'ri1' }], docs: rDocs, events, items: rItems, pending: pendingRev, pendingDiff: diff(snapshot(request, rItems), pendingRev.data), lastDecision: null, canEdit: true }),
+  'portal/request_detail_rejected': ['portal/request_detail', base(clientUser, '/portal/requests/r1', { title: request.ref, request, quotes: [], docs: rDocs, events, items: rItems, pending: null, pendingDiff: null, lastDecision: { status: 'rejected', admin_note: 'Quantity below supplier MOQ.' }, canEdit: true })],
+  'portal/request_edit': ['portal/request_form', base(clientUser, '/portal/requests/r1/edit', { title: 'Edit', mode: 'edit', request, error: null, units: ['pcs', 'sets'], form: pendingRev.data, items: pendingRev.data.items, files: [{ id: 'rd1', title: 'lamp.jpg', mime_type: 'image/jpeg', item: 'ri1' }, { id: 'rd2', title: 'charger-spec.pdf', mime_type: 'application/pdf', item: 'ri2', removing: true }, { id: 'rd9', title: 'organiser.jpg', mime_type: 'image/jpeg', item: '6f1c2b8e-1111-4c4c-9d9d-123456789abc', pending: true }, { id: 'rd3', title: 'artwork.pdf', mime_type: 'application/pdf', item: null }] })],
   'portal/request_detail_legacy': ['portal/request_detail', base(clientUser, '/portal/requests/r1', { title: request.ref, request, quotes: [], docs: [], events, items: [] })],
   'portal/orders': base(clientUser, '/portal/orders', { title: 'My orders', orders: [{ ...overview, shipments: [shipment] }, { ...overview, id: 'o2', order_no: 'HB-2609-1102', status: 'in_transit', subtotal: 22400, shipments: [] }], counts: { all: 2, production: 1, shipping: 1, delivered: 0 }, tab: 'all', q: '' }),
   'portal/order_detail': base(clientUser, '/portal/orders/ord1', { title: overview.order_no, order: { ...overview, order_items: items }, shipments: [shipment], documents: docs, events, packing }),

@@ -2,6 +2,10 @@
 const P = {
   home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9.5 21v-6h5v6"/>',
   inbox: '<path d="M4 13.5 6.5 5h11l2.5 8.5"/><path d="M4 13.5V19h16v-5.5h-4.5l-1.5 2.5h-4L8.5 13.5z"/>',
+  ship: '<path d="M3 15.5 4.5 20h15l1.5-4.5z"/><path d="M6 15.5V10h12v5.5M9 10V6h6v4M12 3v3"/>',
+  plane: '<path d="M10.5 3.5c0-.8.7-1.5 1.5-1.5s1.5.7 1.5 1.5V9l7.5 4.5v2L13.5 13v4.5l2.5 2V21L12 20l-4 1v-1.5l2.5-2V13L3 15.5v-2L10.5 9z"/>',
+  dots: '<circle cx="6" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18" cy="12" r="1.3"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   upload: '<path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M20 16v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3"/>',
   trash: '<path d="M4 7h16M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13M9 7V4h6v3"/>',

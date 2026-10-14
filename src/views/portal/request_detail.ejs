@@ -1,8 +1,25 @@
 <%- include('../partials/head') %>
+<% const pend = typeof pending !== 'undefined' ? pending : null; const editable = typeof canEdit !== 'undefined' && canEdit; const decided = typeof lastDecision !== 'undefined' ? lastDecision : null; %>
 <div class="pagehead">
   <div><a class="back" href="/portal/requests">← Requests</a><h1><%= request.ref %> · <%= request.title %></h1></div>
-  <span class="pill lg <%= request.status %>"><%= fmt.status(request.status) %></span>
+  <div class="headactions">
+    <% if (editable && !pend) { %><a class="btn" href="/portal/requests/<%= request.id %>/edit"><%- icon('edit') %> Edit request</a><% } %>
+    <span class="pill lg <%= request.status %>"><%= fmt.status(request.status) %></span>
+  </div>
 </div>
+<% if (pend) { %>
+  <div class="card pending">
+    <h2><%- icon('clock') %> Your changes are waiting for approval <span class="pill pending">Pending</span></h2>
+    <p class="muted">Sent <%= fmt.datetime(pend.updated_at || pend.created_at) %>. The request below still shows the current version<%= quotes.some(q => q.status === 'sent') ? ' and the offers already sent stay valid until we approve' : '' %>.</p>
+    <%- include('../partials/request_diff', { d: pendingDiff, cur: pend.data.target_currency || request.target_currency }) %>
+    <div class="actions">
+      <a class="btn" href="/portal/requests/<%= request.id %>/edit"><%- icon('edit') %> Change again</a>
+      <form method="post" action="/portal/requests/<%= request.id %>/edit/withdraw" class="inline"><button class="btn">Withdraw changes</button></form>
+    </div>
+  </div>
+<% } else if (decided && decided.status === 'rejected') { %>
+  <div class="alert warn"><strong>Your last changes were not accepted</strong><%= decided.admin_note ? ' — ' + decided.admin_note : '.' %></div>
+<% } %>
 <div class="grid2">
   <div>
     <div class="card">
@@ -10,6 +27,7 @@
       <dl class="dl">
         <dt>Destination</dt><dd><%= [request.destination_city, request.destination_country].filter(Boolean).join(', ') || '—' %></dd>
         <dt>Needed by</dt><dd><%= fmt.date(request.needed_by) %></dd>
+        <dt>Delivery</dt><dd><%= deliveryLabel(request.delivery_mode) %></dd>
       </dl>
       <%- include('../partials/request_items', { request, items, docs, base: '/portal', quotes }) %>
     </div>
@@ -17,9 +35,9 @@
       <h2>Quotes</h2>
       <% if (!quotes.length) { %><p class="muted">We're working on it — quotes will appear here.</p><% } %>
       <% quotes.forEach(q => { %>
-        <div class="quote">
+        <div class="quote <%= q.status %>">
           <% const qi = items.find(i => i.id === q.request_item_id); %>
-          <div class="qhead"><strong><%= qi ? qi.name : 'Quote' %></strong> <span class="pill <%= q.status %>"><%= fmt.status(q.status) %></span> <span class="muted">valid until <%= fmt.date(q.valid_until) %></span></div>
+          <div class="qhead"><strong><%= qi ? qi.name : 'Quote' %></strong> <span class="pill <%= q.status %>"><%= q.status === 'superseded' ? 'Replaced — updated offer coming' : fmt.status(q.status) %></span> <span class="muted">valid until <%= fmt.date(q.valid_until) %></span></div>
           <dl class="dl">
             <dt>Quantity</dt><dd><%= q.quantity %></dd>
             <dt>Unit price (<%= q.incoterm %>)</dt><dd><%= fmt.money(q.unit_price, q.sell_currency, 4) %></dd>

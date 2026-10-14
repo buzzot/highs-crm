@@ -735,3 +735,52 @@ label.flabel { margin-bottom: 6px; }
 .rqthumbs .fchip { width: auto; height: auto; padding: 6px 10px; font-size: 12px; display: flex; align-items: center; color: var(--ink-2); text-decoration: none; }
 .rqrow .rqside { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 @media (max-width: 640px) { .rqrow { grid-template-columns: 30px minmax(0, 1fr); } .rqrow .rqside { grid-column: 2; align-items: flex-start; text-align: left; } }
+.alert.info { background: var(--info-soft); color: #1d4f8f; border-color: #c9dcf3; }
+/* delivery picker */
+.seg { border: 0; padding: 0; margin: 4px 0 6px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.seg legend { font-size: 12px; font-weight: 500; color: var(--ink-2); margin-bottom: 6px; padding: 0; }
+.segopt { margin: 0; position: relative; cursor: pointer; }
+.segopt input { position: absolute; opacity: 0; pointer-events: none; }
+.segopt span { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border: 1.5px solid var(--line); border-radius: 12px; background: #fff; font-size: 14px; font-weight: 600; color: var(--ink); transition: border-color .15s, background .15s; flex-wrap: wrap; }
+.segopt span small { flex-basis: 100%; margin-left: 30px; margin-top: -4px; font-size: 11px; font-weight: 400; color: var(--muted); }
+.segopt svg { width: 22px; height: 22px; color: var(--muted); flex: none; }
+.segopt:hover span { border-color: var(--accent); }
+.segopt input:checked + span { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent) inset; }
+.segopt input:checked + span svg { color: var(--accent); }
+.segopt input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 640px) { .seg { grid-template-columns: 1fr 1fr; } }
+/* existing files in the edit form */
+.fgrid.existing .fitem { cursor: pointer; padding-right: 90px; }
+.fitem .frm { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ink-2); }
+.fitem .frm input { margin: 0; }
+.fitem:has(.frm input:checked) { border-color: var(--bad); background: #fff8f7; }
+.fitem:has(.frm input:checked) img, .fitem:has(.frm input:checked) .fname { opacity: .45; text-decoration: line-through; }
+.fitem:has(.frm input:checked) .frm { color: var(--bad); font-weight: 600; }
+/* pending change + diff */
+.pending { border: 1.5px solid #f2d9a6; background: #fffcf4; }
+.pending h2 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.diff { width: 100%; border-collapse: collapse; font-size: 13px; margin: 6px 0 12px; }
+.diff th { text-align: left; font-weight: 500; color: var(--muted); padding: 6px 10px 6px 0; width: 28%; vertical-align: top; }
+.diff td { padding: 6px 10px 6px 0; vertical-align: top; overflow-wrap: anywhere; }
+.diff tr + tr th, .diff tr + tr td { border-top: 1px solid var(--line-2); }
+.diff .from { color: var(--bad); text-decoration: line-through; }
+.diff .to { color: var(--ok); font-weight: 600; }
+.diffgroup { margin: 10px 0 2px; font-size: 13px; font-weight: 700; color: var(--ink); }
+.diffgroup .tag { margin-left: 6px; }
+.pill.superseded, .pill.pending { background: var(--line-2); color: var(--muted); }
+.pill.pending { background: var(--warn-soft); color: var(--warn); }
+.quote.superseded { opacity: .6; }
+.tag.add { background: var(--ok-soft); color: var(--ok); }
+.tag.del { background: var(--bad-soft); color: var(--bad); }
+.tag.chg { background: var(--warn-soft); color: var(--warn); }
+.headactions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.headactions .btn svg, .pending .btn svg { width: 16px; height: 16px; vertical-align: -3px; margin-right: 2px; }
+.pending h2 svg { width: 20px; height: 20px; color: var(--warn); }
+.segopt { display: flex; } .segopt span { flex: 1; align-content: center; }
+.pending form { margin-top: 14px; }
+/* small-screen logo above the sign-in card: centred, with breathing room */
+.ab-logo.morph.mobile { display: none; }
+@media (max-width: 860px) {
+  .ab-logo.morph.mobile { display: grid; justify-items: center; align-self: center; margin: 8px auto 32px; font-size: 26px; }
+  .ab-logo.morph.mobile > span { justify-content: center; }
+}

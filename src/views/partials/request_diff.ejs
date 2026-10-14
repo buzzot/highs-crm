@@ -1,0 +1,30 @@
+<%# What a client's proposed change does. locals: d (diff from request-revisions.js), cur (currency), [names] (item id → current name) %>
+<% if (d.header.length) { %>
+  <table class="diff">
+    <% d.header.forEach(h => { %>
+      <tr><th><%= h.label %></th><td><span class="from"><%= showValue(h.field, h.from, cur) %></span> → <span class="to"><%= showValue(h.field, h.to, cur) %></span></td></tr>
+    <% }) %>
+  </table>
+<% } %>
+<% d.changed.forEach(c => { %>
+  <div class="diffgroup"><%= c.name %> <span class="tag chg">changed</span></div>
+  <table class="diff">
+    <% c.fields.forEach(f => { %>
+      <tr><th><%= f.label %></th><td><span class="from"><%= showValue(f.field, f.from, cur) %></span> → <span class="to"><%= showValue(f.field, f.to, cur) %></span></td></tr>
+    <% }) %>
+  </table>
+<% }) %>
+<% d.added.forEach(a => { %>
+  <div class="diffgroup"><%= a.name %> <span class="tag add">new product</span></div>
+  <table class="diff">
+    <tr><th>Quantity</th><td><%= showValue('quantity', a.quantity) %> <%= a.unit || 'pcs' %></td></tr>
+    <tr><th>Target price</th><td><%= showValue('target_unit_price', a.target_unit_price, cur) %></td></tr>
+    <% if (a.description) { %><tr><th>Details</th><td class="pre"><%= a.description %></td></tr><% } %>
+  </table>
+<% }) %>
+<% d.removed.forEach(r => { %>
+  <div class="diffgroup"><span class="from"><%= r.name %></span> <span class="tag del">removed</span></div>
+<% }) %>
+<% if (d.files.added || d.files.removed) { %>
+  <p class="muted small">Files: <%= d.files.added ? d.files.added + ' added' : '' %><%= d.files.added && d.files.removed ? ', ' : '' %><%= d.files.removed ? d.files.removed + ' removed' : '' %></p>
+<% } %>
