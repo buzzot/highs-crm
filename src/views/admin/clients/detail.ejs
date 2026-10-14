@@ -32,6 +32,8 @@
   <div class="kpi"><span class="n"><%= k.lastLogin ? fmt.date(k.lastLogin) : '—' %></span><span class="l">Last portal sign-in</span></div>
 </div>
 
+<%- include('../../partials/ai_access', { ai: org, use: aiUse, prices: aiPrices, action: '/admin/clients/' + org.id + '/ai', who: 'this client' }) %>
+
 <div class="card">
   <h2>Portal users <span class="count"><%= members.filter(x => x.state === 'accepted' && x.active !== false).length %> active<%= members.some(x => x.state === 'pending') ? ' · ' + members.filter(x => x.state === 'pending').length + ' invited' : '' %></span></h2>
   <%- include('../../partials/users_table', { members, base: '/admin/clients/' + org.id, emptyText: 'Nobody from this client has portal access yet. Invite them — they confirm their email, fill in the company details and create a password.', firstPlaceholder: 'buyer@client.com', firstValue: org.email || '', otherPlaceholder: 'colleague@client.com' }) %>

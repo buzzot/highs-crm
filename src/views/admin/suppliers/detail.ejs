@@ -48,6 +48,8 @@
   <div class="kpi <%= overdue ? 'bad' : '' %>"><span class="n"><%= s.next_follow_up ? fmt.date(s.next_follow_up) : '—' %></span><span class="l"><%= overdue ? 'Follow-up overdue' : 'Next follow-up' %></span></div>
 </div>
 
+<%- include('../../partials/ai_access', { ai: s, use: aiUse, prices: aiPrices, action: '/admin/suppliers/' + s.id + '/ai', who: 'this supplier' }) %>
+
 <div class="card">
   <h2>Portal users <span class="count"><%= mem.filter(x => x.state === 'accepted' && x.active !== false).length %> active<%= mem.some(x => x.state === 'pending') ? ' · ' + mem.filter(x => x.state === 'pending').length + ' invited' : '' %></span></h2>
   <% if (!s.details_completed_at && mem.some(x => x.state === 'pending' || x.state === 'accepted')) { %>

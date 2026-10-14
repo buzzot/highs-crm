@@ -10,6 +10,7 @@ import supplierRoutes from './routes/supplier.js';
 import hookRoutes from './routes/hooks.js';
 import adminRoutes from './routes/admin/index.js';
 import { fmt } from './lib/format.js';
+import { admin } from './lib/supabase.js';
 import { icon } from './lib/icons.js';
 import { homeFor } from './lib/util.js';
 import { aiContext, getPrices, usageLine } from './lib/ai-usage.js';
@@ -40,8 +41,13 @@ app.use(async (req, res, next) => {
   if (req.user && ['admin', 'staff'].includes(req.user.role)) {
     const prices = await getPrices();
     res.locals.aiLine = u => usageLine(u, prices);
+    // red ball on the Sourcing menu: client change requests waiting for approval
+    try {
+      const { count } = await admin.from('request_revisions').select('id', { count: 'exact', head: true }).eq('status', 'pending');
+      res.locals.navPending = { sourcing: count || 0 };
+    } catch { res.locals.navPending = { sourcing: 0 }; }
   } else res.locals.aiLine = () => '';
-  aiContext.run({ userId: req.user?.id || null }, next);
+  aiContext.run({ userId: req.user?.id || null, orgId: req.user?.org_id || null, supplierId: req.user?.supplier_id || null }, next);
 });
 
 app.get('/', (req, res) => {

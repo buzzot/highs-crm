@@ -4,6 +4,7 @@ import { requireClient } from '../middleware/auth.js';
 import { admin } from '../lib/supabase.js';
 import { log } from '../lib/activity.js';
 import { aiEnabled, extractProductInfo } from '../lib/ai.js';
+import { companyAiOn } from '../lib/ai-access.js';
 import { uploadDocument, signedUrl } from '../lib/storage.js';
 import { parseItems, validateItems, requestTitle, splitFiles, UNITS } from '../lib/request-items.js';
 import { EDITABLE, DELIVERY, snapshot, buildRevision, diff } from '../lib/request-revisions.js';
@@ -26,7 +27,7 @@ const ITEM = 'id, description, quantity, unit_price, hs_code';
 const SHIP = 'id, order_id, mode, incoterm, origin_port, destination_port, container_no, tracking_no, bl_no, export_declaration_no, export_official, etd, eta, atd, ata, status, gross_weight_kg, volume_cbm, cartons, created_at';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 40 } });
 r.use(requireClient);
-r.use((req, res, next) => { res.locals.aiOn = aiEnabled(); next(); });
+r.use(async (req, res, next) => { try { res.locals.aiOn = await companyAiOn('organization', req.user.org_id); } catch { res.locals.aiOn = false; } next(); });
 
 // Everything here uses req.db (the user's token) so Supabase RLS enforces org scoping.
 
@@ -92,7 +93,7 @@ r.get('/requests/new', (req, res) => newForm(res));
 
 // optional: read a product's photo / PDF with AI and suggest name, SKU and details (nothing is saved here)
 r.post('/requests/ai-fill', upload.array('files', 4), async (req, res) => {
-  if (!aiEnabled()) return res.status(503).json({ error: 'AI fill is not switched on.' });
+  if (!res.locals.aiOn) return res.status(403).json({ error: 'AI is not switched on for your company. Please contact Lumi Trade.' });
   const IMG = /^image\/(png|jpe?g|gif|webp)$/i;
   const files = (req.files || []).flatMap(f => (f.mimetype === 'application/pdf' || /\.pdf$/i.test(f.originalname) ? [{ pdf: f.buffer }] : IMG.test(f.mimetype) ? [{ data: f.buffer, mediaType: f.mimetype.replace('jpg', 'jpeg') }] : []));
   if (!files.length) return res.status(400).json({ error: 'Add a photo or a PDF of the product first.' });

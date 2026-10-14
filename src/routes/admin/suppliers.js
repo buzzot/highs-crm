@@ -6,6 +6,8 @@ import { ACTIVITY_TYPES as BASE_TYPES, readActivity, withLastLogin } from '../..
 import { inviteUser, memberRows } from '../../lib/invites.js';
 import { log } from '../../lib/activity.js';
 import { COMPANY_TYPES } from '../../lib/supplier-company.js';
+import { usageSummary, setCompanyAi } from '../../lib/ai-access.js';
+import { getPrices } from '../../lib/ai-usage.js';
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 /** Placeholder name until the supplier fills in their company details. */
@@ -108,8 +110,9 @@ r.get('/:id', async (req, res) => {
   (photos || []).forEach(d => { photoOf[d.entity_id] ||= d.id; });
   const spend = (orders || []).filter(o => o.status !== 'cancelled').reduce((t, o) => t + Number(o.cost_total || 0), 0);
   const members = memberRows(users || [], invites || []);
+  const aiUse = await usageSummary('supplier', id);
   res.render('admin/suppliers/detail', {
-    title: s.name, s, products: products || [], photoOf, orders: orders || [], docs: docs || [], spend, types: COMPANY_TYPES,
+    aiUse, aiPrices: await getPrices(), title: s.name, s, products: products || [], photoOf, orders: orders || [], docs: docs || [], spend, types: COMPANY_TYPES,
     members, events: events || [], crmStatuses: CRM_STATUSES, activityTypes: ACTIVITY_TYPES,
     portalBlocked: members.some(m => m.state === 'accepted') && !members.some(m => m.state === 'accepted' && m.active !== false),
     msg: req.query.msg, err: req.query.err,
@@ -152,6 +155,13 @@ r.get('/:id/edit', async (req, res) => {
   const { data: s } = await admin.from('suppliers').select('*').eq('id', req.params.id).single();
   if (!s) return notFound(res, 'Supplier');
   res.render('admin/suppliers/form', { title: 'Edit supplier', s, error: null, mode: 'manual', inv: {}, crmStatuses: CRM_STATUSES });
+});
+r.post('/:id/ai', requireAdmin, async (req, res) => {
+  const on = req.body.ai_enabled === 'on';
+  const { error } = await setCompanyAi('supplier', req.params.id, on);
+  if (error) return res.redirect(`/admin/suppliers/${req.params.id}?err=` + encodeURIComponent(/ai_enabled/.test(error.message) ? 'Run supabase/migrations/0018_ai_access.sql first.' : error.message));
+  await log({ entityType: 'supplier', entityId: req.params.id, action: on ? 'ai_enabled' : 'ai_disabled', actorId: req.user.id });
+  res.redirect(`/admin/suppliers/${req.params.id}?msg=` + encodeURIComponent(`AI ${on ? 'switched on' : 'switched off'} for this supplier.`));
 });
 r.post('/:id', async (req, res) => {
   const { error } = await admin.from('suppliers').update(body(req.body)).eq('id', req.params.id);

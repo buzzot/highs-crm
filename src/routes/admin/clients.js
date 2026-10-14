@@ -3,6 +3,8 @@ import { admin } from '../../lib/supabase.js';
 import { inviteUser, memberRows } from '../../lib/invites.js';
 import { requireAdmin } from '../../middleware/auth.js';
 import { log } from '../../lib/activity.js';
+import { usageSummary, setCompanyAi } from '../../lib/ai-access.js';
+import { getPrices } from '../../lib/ai-usage.js';
 import { ACTIVITY_TYPES, readActivity, withLastLogin } from '../../lib/crm.js';
 
 const ORG_FIELDS = ['name', 'registration_no', 'tax_id', 'address', 'postal_code', 'city', 'country', 'delivery_address', 'phone', 'email', 'website', 'default_currency', 'notes'];
@@ -60,8 +62,9 @@ r.get('/:id', async (req, res) => {
     profit: live.reduce((t, o) => t + Number(o.gross_profit ?? (Number(o.subtotal || 0) - Number(o.cost_total || 0))), 0),
     lastLogin: (users || []).map(u => u.last_login_at).filter(Boolean).sort().pop() || null,
   };
+  const aiUse = await usageSummary('organization', id);
   res.render('admin/clients/detail', {
-    title: client.name, org: client, members: memberRows(users || [], invites || []), requests: requests || [], orders: orders || [],
+    aiUse, aiPrices: await getPrices(), title: client.name, org: client, members: memberRows(users || [], invites || []), requests: requests || [], orders: orders || [],
     events: events || [], activityTypes: ACTIVITY_TYPES, kpi, msg: req.query.msg, err: req.query.err,
   });
 });
@@ -86,6 +89,13 @@ r.post('/:id/details', async (req, res) => {
 r.get('/:id/edit', async (req, res) => {
   const { data: client } = await admin.from('organizations').select('*').eq('id', req.params.id).single();
   res.render('admin/clients/form', { title: 'Edit client', org: client, error: null });
+});
+r.post('/:id/ai', requireAdmin, async (req, res) => {
+  const on = req.body.ai_enabled === 'on';
+  const { error } = await setCompanyAi('organization', req.params.id, on);
+  if (error) return res.redirect(`/admin/clients/${req.params.id}?err=` + encodeURIComponent(/ai_enabled/.test(error.message) ? 'Run supabase/migrations/0018_ai_access.sql first.' : error.message));
+  await log({ entityType: 'organization', entityId: req.params.id, action: on ? 'ai_enabled' : 'ai_disabled', actorId: req.user.id });
+  res.redirect(`/admin/clients/${req.params.id}?msg=` + encodeURIComponent(`AI ${on ? 'switched on' : 'switched off'} for this client.`));
 });
 r.post('/:id', async (req, res) => {
   const { error } = await admin.from('organizations').update(clean(req.body)).eq('id', req.params.id);

@@ -6,7 +6,7 @@ export const aiContext = new AsyncLocalStorage();
 
 export const FEATURES = {
   quote_check: 'Quote check', sourcing_brief: 'Sourcing brief', product_extract: 'Product import — reading the file',
-  product_review: 'Product import — row check', product_compare: 'Product compare', packing_extract: 'Packing list reading', freight_quote_read: 'Freight quote reading',
+  product_review: 'Product import — row check', request_product_fill: 'Client request — product fill', product_compare: 'Product compare', packing_extract: 'Packing list reading', freight_quote_read: 'Freight quote reading',
 };
 
 /** Normalise the Anthropic response usage. */
@@ -44,7 +44,7 @@ export async function recordUsage({ feature, usage, entityType = null, entityId 
     const { admin } = await import('./supabase.js');
     const ctx = aiContext.getStore() || {};
     const { error: e } = await admin.from('ai_usage').insert({
-      user_id: ctx.userId || null, feature, model: usage?.model || null,
+      user_id: ctx.userId || null, org_id: ctx.orgId || null, supplier_id: ctx.supplierId || null, feature, model: usage?.model || null,
       input_tokens: usage?.input || 0, output_tokens: usage?.output || 0, cache_read_tokens: usage?.cacheRead || 0, cache_write_tokens: usage?.cacheWrite || 0,
       entity_type: entityType, entity_id: entityId ? String(entityId) : null, ok, error: error ? String(error).slice(0, 500) : null,
     });

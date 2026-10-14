@@ -1,0 +1,34 @@
+<%# AI switch + token usage for one company. locals: ai (row with ai_enabled), use (usageSummary), prices, action, who %>
+<% const nn = x => Number(x || 0).toLocaleString('en-US');
+   const price = u => { const a = Number(prices?.input_per_m) || 0, b = Number(prices?.output_per_m) || 0; return (a || b) ? (u.input * a + u.output * b) / 1e6 : null; };
+   const money = v => v == null ? '' : ' · ≈ $' + (v < 0.01 ? v.toFixed(4) : v.toFixed(2)); %>
+<div class="card aiaccess">
+  <h2>AI access
+    <span class="hactions">
+      <% if (user.role === 'admin') { %>
+      <form method="post" action="<%= action %>" class="inline aiswitch">
+        <label class="switch"><input type="checkbox" name="ai_enabled" value="on" <%= ai.ai_enabled ? 'checked' : '' %> onchange="this.form.submit()"><span class="track"></span><span class="swlabel"><%= ai.ai_enabled ? 'AI on' : 'AI off' %></span></label>
+      </form>
+      <% } else { %><span class="pill <%= ai.ai_enabled ? 'ok' : '' %>"><%= ai.ai_enabled ? 'AI on' : 'AI off' %></span><% } %>
+    </span>
+  </h2>
+  <p class="muted small">When on, <%= who %>'s portal users can use AI helpers (for example filling a product from a photo or PDF). Off by default. Staff always have AI.</p>
+  <% if (!use.ready) { %>
+    <p class="muted small">Usage is not tracked yet — run <code>supabase/migrations/0018_ai_access.sql</code>.</p>
+  <% } else { %>
+  <div class="kpis aikpis">
+    <div class="kpi"><span class="n"><%= nn(use.current.total) %></span><span class="l">Tokens this month · <%= nn(use.current.calls) %> calls<%= money(price(use.current)) %></span></div>
+    <div class="kpi"><span class="n"><%= nn(use.all.total) %></span><span class="l">Tokens in total · <%= nn(use.all.calls) %> calls<%= money(price(use.all)) %></span></div>
+    <div class="kpi"><span class="n"><%= nn(use.all.input) %> / <%= nn(use.all.output) %></span><span class="l">Total input / output tokens</span></div>
+  </div>
+  <% if (use.all.calls) { %>
+  <table class="tbl compact">
+    <thead><tr><th>Month</th><th class="right">Calls</th><th class="right">Input</th><th class="right">Output</th><th class="right">Total tokens</th></tr></thead>
+    <tbody>
+      <% use.months.filter(m => m.calls).forEach(m => { %><tr><td><%= m.label %></td><td class="right num"><%= nn(m.calls) %></td><td class="right num"><%= nn(m.input) %></td><td class="right num"><%= nn(m.output) %></td><td class="right num"><%= nn(m.total) %></td></tr><% }) %>
+      <tr><td><b>All time</b></td><td class="right num"><b><%= nn(use.all.calls) %></b></td><td class="right num"><b><%= nn(use.all.input) %></b></td><td class="right num"><b><%= nn(use.all.output) %></b></td><td class="right num"><b><%= nn(use.all.total) %></b></td></tr>
+    </tbody>
+  </table>
+  <% } else { %><p class="muted small">No AI use by this company yet.</p><% } %>
+  <% } %>
+</div>

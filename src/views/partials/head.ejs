@@ -23,7 +23,7 @@
       <a href="/admin/clients" class="<%= path.startsWith('/admin/clients') ? 'on' : '' %>">Clients</a>
       <a href="/admin/suppliers" class="<%= path.startsWith('/admin/suppliers') ? 'on' : '' %>">Suppliers</a>
       <a href="/admin/products" class="<%= path.startsWith('/admin/products') ? 'on' : '' %>">Products</a>
-      <a href="/admin/sourcing" class="<%= path.startsWith('/admin/sourcing') ? 'on' : '' %>">Sourcing</a>
+      <a href="/admin/sourcing" class="<%= path.startsWith('/admin/sourcing') ? 'on' : '' %>">Sourcing<% if (typeof navPending !== 'undefined' && navPending.sourcing > 0) { %><span class="navball" title="<%= navPending.sourcing %> client change<%= navPending.sourcing > 1 ? 's' : '' %> waiting for approval"><%= navPending.sourcing > 99 ? '99+' : navPending.sourcing %></span><% } %></a>
       <a href="/admin/logistics" class="<%= path.startsWith('/admin/logistics') ? 'on' : '' %>">Logistics</a>
       <a href="/admin/pricing" class="<%= path.startsWith('/admin/pricing') ? 'on' : '' %>">Pricing</a>
     <% } else { %>
