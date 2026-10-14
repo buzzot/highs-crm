@@ -165,3 +165,42 @@ export function rfqEmail({ order, info = {}, rows, t, message, senderName, forwa
   const text = [`Freight quote request — ${order.order_no}`, ...facts.map(([k, v]) => `${k}: ${v}`), '', message || '', 'Attached Excel: quotation form (first sheet) and packing list.', '', 'Please fill in the yellow cells of the quotation form: contact details, date quoted and validity, main freight (unit price per kg or cbm), documentation and extra service, the total, shipping date, and pickup from our supplier or delivery to your warehouse.', '', 'IMPORTANT: please send your quote by REPLYING to this email. Quotes sent as a new email are not received by our system. Email is a must; a copy may also be sent via WeChat.', '重要：请直接回复本邮件报价。新建邮件发送的报价我们无法收到。必须通过邮件报价，副本可同时发微信。', '', 'Best regards,', 'Logistics Department', 'Lumi Trade'].join('\n');
   return { subject: `Freight quote request · ${order.order_no}${info.mode ? ' · ' + info.mode : ''}${info.pol && info.pod ? ` · ${info.pol} → ${info.pod}` : ''}`, html, text };
 }
+
+// ---- booking confirmation to the forwarder whose quote we accepted ----
+export function bookingEmail({ order, info = {}, t, ref, quoteSummary, forwarderName, message }) {
+  const F = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+  const route = [info.pol, info.pod].filter(Boolean).join(' → ');
+  const facts = [['Request', ref], ['Order', order.order_no], ['Mode', info.mode], ['Route', route], ['Incoterm', info.incoterm],
+    ['Cargo', `${t.cartons} ctns · ${t.gross} kg · ${t.cbm} cbm`], ['Accepted quote', quoteSummary]].filter(([, v]) => v);
+  const asks = [
+    ['Loading port / terminal', '装货港/码头'],
+    ['Direct or transshipment (if transshipment, where)', '直达还是中转（如中转请注明中转港）'],
+    ['Latest date to receive the goods (warehouse / cut-off)', '最晚收货日期（仓库/截仓）'],
+  ];
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:0;background:#f1f3f6;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f3f6;"><tr><td align="center" style="padding:28px 12px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;background:#fff;border:1px solid #e3e6eb;border-radius:14px;">
+<tr><td style="padding:26px 30px 24px;font-family:${F};">
+  <div style="font-size:20px;font-weight:700;color:#0f3d5c;">Lumi<span style="color:#0b8a7a;">Trade</span></div>
+  <div style="margin-top:14px;font-size:22px;font-weight:700;color:#16202e;">Booking confirmation · ${esc(order.order_no)}</div>
+  <p style="font-size:15px;line-height:1.6;color:#2f3a4a;">Dear ${esc(forwarderName || 'partner')},<br>thank you for your quotation. We accept it and would like to <strong style="font-weight:600;">confirm the booking</strong> with you.<br><span style="color:#6b7686;font-size:14px;">感谢您的报价。我们接受此报价，现确认订舱。</span></p>
+  <table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 16px;font-size:14px;">${facts.map(([k, v]) => `<tr><td style="padding:3px 18px 3px 0;color:#7a8494;vertical-align:top;">${esc(k)}</td><td style="padding:3px 0;color:#16202e;">${esc(v)}</td></tr>`).join('')}</table>
+  ${message ? `<p style="font-size:15px;line-height:1.6;color:#2f3a4a;white-space:pre-line;">${esc(message)}</p>` : ''}
+  <p style="font-size:15px;line-height:1.6;color:#2f3a4a;margin-bottom:6px;">Please reply with:</p>
+  <ol style="margin:0 0 16px;padding-left:20px;font-size:15px;line-height:1.7;color:#2f3a4a;">${asks.map(([en, cn]) => `<li>${esc(en)}<br><span style="color:#6b7686;font-size:13px;">${esc(cn)}</span></li>`).join('')}</ol>
+  <p style="font-size:15px;line-height:1.6;color:#2f3a4a;">Also welcome: vessel / flight name, ETD and ETA, booking number, and where and how our supplier should deliver or when you will pick up.<br><span style="color:#6b7686;font-size:13px;">另请提供：船名/航班、ETD/ETA、订舱号，以及供应商送货方式或提货时间。</span></p>
+  <div style="margin:16px 0 18px;padding:12px 16px;border:1px solid #f1c2c2;border-left:4px solid #c62828;border-radius:8px;background:#fdf3f3;font-size:14px;line-height:1.6;color:#c62828;">
+    <strong style="font-weight:600;">Important: please reply to this email.</strong> Replies sent as a new email are not received by our system.
+    <div style="margin-top:6px;color:#b23b3b;font-size:13px;">重要：请直接回复本邮件。新建邮件发送的内容我们无法收到。</div>
+  </div>
+  <p style="font-size:15px;color:#2f3a4a;">Best regards,<br><span style="color:#6b7686;">Logistics Department</span><br><strong style="font-weight:600;color:#0f3a5c;">Lumi Trade</strong></p>
+</td></tr>
+<tr><td style="padding:14px 30px 24px;font-family:${F};font-size:12px;color:#7a8494;border-top:1px solid #eef0f3;">Lumi Trade · Sourcing, orders and shipments in one place</td></tr>
+</table></td></tr></table></body></html>`;
+  const txt = [`Booking confirmation — ${order.order_no}`, '', `Dear ${forwarderName || 'partner'},`, 'Thank you for your quotation. We accept it and confirm the booking.', '',
+    ...facts.map(([k, v]) => `${k}: ${v}`), '', message || null, message ? '' : null, 'Please reply with:', ...asks.map(([en, cn], i) => `${i + 1}. ${en} / ${cn}`), '',
+    'Also welcome: vessel/flight, ETD/ETA, booking number, and how our supplier should deliver or when you will pick up.', '',
+    'IMPORTANT: please reply to this email. Replies sent as a new email are not received by our system.', '重要：请直接回复本邮件。新建邮件发送的内容我们无法收到。', '',
+    'Best regards,', 'Logistics Department', 'Lumi Trade'].filter(l => l !== null).join('\n');
+  return { subject: `Booking confirmation · ${order.order_no}${route ? ' · ' + route : ''}`, html, text: txt };
+}

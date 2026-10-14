@@ -58,3 +58,12 @@ test('mailgun signature', async () => {
   assert.equal(m.from, 'amy@ocean.example'); assert.equal(m.text, 'USD 1850');
   assert.deepEqual(matchKeys(m), { token: 'ab12cd34ef' });
 });
+
+test('booking confirmation email asks for port, routing and latest receiving date', async () => {
+  const { bookingEmail } = await import('../src/lib/email-templates.js');
+  const m = bookingEmail({ order: { order_no: 'LT-2610-0711' }, info: { mode: 'Sea LCL', pol: 'Shenzhen', pod: 'Los Angeles' }, t: { cartons: 22, gross: 298, cbm: 0.98 }, ref: 'FQ-2610-0042', quoteSummary: 'USD 1,850 · 32 days', forwarderName: 'Amy', message: 'Please book the 2 Nov sailing.' });
+  assert.match(m.subject, /^Booking confirmation · LT-2610-0711 · Shenzhen → Los Angeles$/);
+  for (const t of [m.html, m.text]) { assert.match(t, /Loading port/); assert.match(t, /transshipment/i); assert.match(t, /Latest date to receive/); assert.match(t, /reply to this email/i); }
+  assert.match(m.html, /Please book the 2 Nov sailing\./);
+  assert.match(m.html, /USD 1,850/);
+});

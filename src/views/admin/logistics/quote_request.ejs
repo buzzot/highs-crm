@@ -50,6 +50,12 @@
           <form method="post" action="/admin/logistics/quotes/<%= fr.id %>/rfq/<%= r.id %>/status" class="autosubmit inline">
             <select name="status" class="pillselect" aria-label="Status"><% Object.entries(RFQ).forEach(([k, l]) => { %><option value="<%= k %>" <%= r.status === k ? 'selected' : '' %>><%= l %></option><% }) %></select>
           </form>
+          <% if (r.status === 'accepted' && r.shipment_id) { %>
+            <div class="small"><a href="/admin/logistics/shipments/<%= r.shipment_id %>">Shipment →</a></div>
+            <% if (r.channel === 'email') { %><form method="post" action="/admin/logistics/quotes/<%= fr.id %>/rfq/<%= r.id %>/accept" class="inline" onsubmit="return confirm('Send the booking confirmation to <%= r.sent_to %> again?')"><button class="btn small">✉ Resend confirmation</button></form><% } %>
+          <% } else if (r.quote_amount != null) { %>
+            <form method="post" action="/admin/logistics/quotes/<%= fr.id %>/rfq/<%= r.id %>/accept" class="inline" onsubmit="return confirm('Accept this quote, create the shipment<%= r.channel === 'email' ? ' and email ' + r.sent_to + ' to confirm the booking' : '' %>?')"><button class="btn primary small">✓ Accept &amp; confirm booking</button></form>
+          <% } %>
           <a class="small" href="/admin/logistics/quotes/<%= fr.id %>/rfq/<%= r.id %>/form.xlsx" title="Quotation form + packing list for this forwarder (e.g. to send by WeChat)">⇩ Form</a>
         </td>
       </tr>
@@ -58,6 +64,10 @@
   </table>
 </div>
 
+<% Object.entries(bookingText || {}).forEach(([id, txt]) => { const r = rfqs.find(x => x.id === id); %>
+<div class="card"><h2>Booking confirmation for <%= r?.forwarders?.name || 'forwarder' %> <span class="muted small">— send by WeChat</span></h2>
+  <textarea class="wechat" rows="9" readonly onclick="this.select()"><%= txt %></textarea></div>
+<% }) %>
 <div class="grid2 even">
   <div class="card">
     <h2>Timeline</h2>
@@ -70,17 +80,7 @@
             <div class="ahead"><strong>Reply from <%= e.r?.forwarders?.name || x.from_address || 'forwarder' %></strong>
               <span class="muted small"><%= fmt.datetime(x.received_at) %> · <%= x.channel === 'email' ? 'email' + (x.from_address ? ' ' + x.from_address : '') : x.channel === 'wechat' ? 'WeChat (pasted)' : 'typed in' %><%= x.profiles ? ' · added by ' + (x.profiles.full_name || x.profiles.email) : '' %></span></div>
             <% if (ex.summary) { %><p class="<%= ex.is_quote ? 'oktext' : 'muted' %>">✦ <%= ex.summary %></p><% } %>
-            <% if (ex.source === 'form') { %><p class="muted small">Read from their filled quotation form<%= ex.file ? ' (' + ex.file + ')' : '' %> — no AI needed.</p><% } %>
-            <% const facts = [['Company', ex.company], ['Address', ex.address], ['Quoted by', ex.contact_person], ['Email', ex.email], ['Phone / WeChat', ex.phone], ['Date quoted', dd(ex.quote_date)], ['Valid until', dd(ex.valid_until)], ['Mode', [ex.mode, ex.scope].filter(Boolean).join(' · ')], ['Transit', ex.transit_days ? ex.transit_days + ' days' : null], ['Ship date (ETD)', dd(ex.etd)], ['Handover', HAND[ex.handover] || ex.handover], [ex.handover === 'warehouse' ? 'Deliver to warehouse by' : 'Pickup date', dd(ex.pickup_date)], ['Warehouse', [ex.warehouse_address, ex.warehouse_contact].filter(Boolean).join(' · ')], ['Cut-off', dd(ex.cutoff_date)]].filter(([, v]) => v); %>
-            <% if (facts.length) { %><dl class="qfacts small"><% facts.forEach(([k, v]) => { %><dt><%= k %></dt><dd><%= v %></dd><% }) %></dl><% } %>
-            <% if ((ex.breakdown || []).length) { %>
-              <table class="tbl qcharges small"><thead><tr><th>Charge</th><th>Basis</th><th class="right">Unit price</th><th class="right">Qty</th><th class="right">Amount</th></tr></thead><tbody>
-              <% ex.breakdown.forEach(b => { %><tr><td><%= b.item %><% if (b.notes) { %><div class="muted"><%= b.notes %></div><% } %></td><td><%= b.per || '' %></td><td class="right num"><%= n2(b.unit_price) %></td><td class="right num"><%= n2(b.qty) %></td><td class="right num"><%= n2(b.amount) %> <%= b.currency || ex.currency || '' %></td></tr><% }) %>
-              </tbody><% if (ex.amount != null) { %><tfoot><tr><td colspan="4">Total</td><td class="right num"><%= n2(ex.amount) %> <%= ex.currency || '' %></td></tr></tfoot><% } %></table>
-            <% } %>
-            <% if (ex.includes) { %><p class="small"><span class="muted">Included:</span> <%= ex.includes %></p><% } %>
-            <% if (ex.excludes) { %><p class="small warntext"><span class="muted">Not included / extra:</span> <%= ex.excludes %></p><% } %>
-            <% if (ex.remarks) { %><p class="small"><span class="muted">Remarks:</span> <%= ex.remarks %></p><% } %>
+            <% if ((ex.breakdown || []).length) { %><ul class="small qbreak"><% ex.breakdown.forEach(b => { %><li><%= b.item %>: <%= b.amount != null ? Number(b.amount).toLocaleString('en-US') : '' %> <%= b.currency || ex.currency || '' %><%= b.per ? ' / ' + b.per : '' %></li><% }) %></ul><% } %>
             <% if (ex.questions) { %><p class="warntext small">Question: <%= ex.questions %></p><% } %>
             <% if ((ex.files || []).length) { %><p class="small"><% ex.files.forEach(f => { %><a href="/admin/documents/<%= f.id %>/download">📎 <%= f.name %></a> <% }) %></p><% } %>
             <% if (x.body) { %><details><summary class="muted small">Original message</summary><p class="pre small"><%= x.body %></p></details><% } %>

@@ -7,6 +7,9 @@ import { saveResponse } from '../../lib/freight-store.js';
 import multer from 'multer';
 import { rfqWorkbook } from '../../lib/quote-form.js';
 import { totals as packTotals } from '../../lib/packing.js';
+import { sendEmail } from '../../lib/mailer.js';
+import { bookingEmail } from '../../lib/email-templates.js';
+import { replyAddress, subjectTag } from '../../lib/freight.js';
 
 const quoteFiles = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024, files: 5 } }).array('files', 5);
 
@@ -56,8 +59,10 @@ r.get('/quotes/:id', async (req, res) => {
   ]);
   const quoted = (rfqs || []).filter(x => x.quote_amount != null);
   const best = quoted.sort((a, b) => Number(a.quote_amount) - Number(b.quote_amount))[0] || null;
+  const bookingText = {};
+  for (const x of rfqs || []) if (x.status === 'accepted' && x.channel === 'wechat') bookingText[x.id] = bookingEmail({ order: { order_no: fr.orders?.order_no }, info: fr.info || {}, t: { cartons: fr.totals?.cartons, gross: fr.totals?.gross_kg, cbm: fr.totals?.cbm }, ref: fr.ref, quoteSummary: x.quote_notes, forwarderName: x.forwarders?.contact_name || x.forwarders?.name }).text;
   res.render('admin/logistics/quote_request', {
-    title: fr.ref, fr, rfqs: rfqs || [], responses: responses || [], bestId: best?.id || null,
+    bookingText, title: fr.ref, fr, rfqs: rfqs || [], responses: responses || [], bestId: best?.id || null,
     inboundOn: !!process.env.QUOTE_REPLY_ADDRESS, msg: req.query.msg, err: req.query.err,
   });
 });
@@ -88,6 +93,54 @@ r.get('/quotes/:id/rfq/:rid/form.xlsx', async (req, res) => {
   const buf = rfqWorkbook({ order, info: fr.info || {}, rows: rows || [], t: packTotals(rows || []), ref: fr.ref, token: rfq.token });
   res.set({ 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="${fr.ref}-quotation-packing-list-${order.order_no}.xlsx"` });
   res.send(buf);
+});
+
+// accept a quote: mark it accepted, create the shipment (shipping order) from it, and email the forwarder to confirm the booking
+const shipMode = m => (/fcl/i.test(m || '') ? 'sea_fcl' : /air/i.test(m || '') ? 'air' : /express/i.test(m || '') ? 'express' : /rail/i.test(m || '') ? 'rail' : 'sea_lcl');
+r.post('/quotes/:id/rfq/:rid/accept', async (req, res) => {
+  const to = `/admin/logistics/quotes/${req.params.id}`;
+  const { data: rfq } = await admin.from('freight_rfqs').select('*, forwarders(id, name, contact_name, email)').eq('id', req.params.rid).eq('request_id', req.params.id).maybeSingle();
+  if (!rfq) return notFound(res, 'Quote request');
+  if (rfq.quote_amount == null) return back(res, to, { err: 'This forwarder has not quoted yet.' });
+  const [{ data: fr }, { data: order }, { data: rows }, { data: resp }] = await Promise.all([
+    admin.from('freight_requests').select('*').eq('id', rfq.request_id).single(),
+    admin.from('orders').select('id, order_no, currency').eq('id', rfq.order_id).single(),
+    admin.from('packing_lists').select('*').eq('order_id', rfq.order_id).order('position').order('carton_no'),
+    admin.from('freight_responses').select('extracted').eq('rfq_id', rfq.id).order('received_at', { ascending: false }),
+  ]);
+  const info = fr?.info || {}, t = packTotals(rows || []);
+  const q = (resp || []).map(x => x.extracted || {}).find(e => e.is_quote) || {};
+  const day = v => (/^\d{4}-\d{2}-\d{2}$/.test(v || '') ? v : null);
+
+  // 1. the shipment (once — pressing the button again only re-sends the email)
+  let shipmentId = rfq.shipment_id;
+  if (!shipmentId) {
+    const { data: sh, error } = await admin.from('shipments').insert({
+      order_id: rfq.order_id, forwarder_id: rfq.forwarder_id, mode: shipMode(q.mode || info.mode), incoterm: info.incoterm || 'FOB',
+      origin_port: info.pol || null, destination_port: info.pod || null, etd: day(q.etd), status: 'booked',
+      gross_weight_kg: t.gross || null, volume_cbm: t.cbm || null, cartons: t.cartons || null,
+      notes: `From quote ${fr?.ref}: ${rfq.quote_notes || ''}`.trim(),
+    }).select('id').single();
+    if (error) return back(res, to, { err: error.message });
+    shipmentId = sh.id;
+    const settings = await getSettings();
+    await admin.from('freight_costs').insert({ shipment_id: shipmentId, type: 'main_freight', description: `Quote ${fr?.ref}${rfq.forwarders?.name ? ' · ' + rfq.forwarders.name : ''}`, amount: rfq.quote_amount, currency: rfq.quote_currency || 'USD', fx_to_order: fxRate(settings, rfq.quote_currency || 'USD', order?.currency || 'USD') });
+    await log({ entityType: 'order', entityId: rfq.order_id, action: 'shipment_created', actorId: req.user.id, clientVisible: true, detail: { mode: shipMode(q.mode || info.mode) } });
+  }
+  await admin.from('freight_rfqs').update({ status: 'accepted', shipment_id: shipmentId }).eq('id', rfq.id);
+  await log({ entityType: 'order', entityId: rfq.order_id, action: 'freight_quote_accepted', actorId: req.user.id, detail: { note: `${fr?.ref} · ${rfq.forwarders?.name || rfq.sent_to}: ${rfq.quote_notes || ''}` } });
+
+  // 2. confirmation email asking for loading port, direct or not, latest receiving date
+  let sentMsg = '';
+  if (rfq.channel === 'email' && /@/.test(rfq.sent_to || '')) {
+    try {
+      const m = bookingEmail({ order, info, t, ref: fr?.ref, quoteSummary: rfq.quote_notes, forwarderName: rfq.forwarders?.contact_name || rfq.forwarders?.name, message: String(req.body.message || '').trim().slice(0, 2000) });
+      await sendEmail({ to: rfq.sent_to, ...m, subject: `${m.subject} ${subjectTag(fr.ref, rfq.token)}`, replyTo: replyAddress(rfq.token, req.user.email) });
+      await admin.from('freight_rfqs').update({ booking_sent_at: new Date().toISOString() }).eq('id', rfq.id);
+      sentMsg = ` Booking confirmation emailed to ${rfq.sent_to}.`;
+    } catch (e) { return res.redirect(`/admin/logistics/shipments/${shipmentId}?err=` + encodeURIComponent(`Shipment created, but the confirmation email failed: ${e.message}. Use "Confirm booking" on ${to} to retry.`)); }
+  } else sentMsg = ' No email address — send the confirmation by WeChat (text is on the quote request page).';
+  res.redirect(`/admin/logistics/shipments/${shipmentId}?msg=` + encodeURIComponent(`Quote accepted — shipment created.${sentMsg}`));
 });
 
 r.post('/quotes/:id/rfq/:rid/status', async (req, res) => {

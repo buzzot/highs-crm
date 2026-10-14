@@ -84,7 +84,20 @@ export async function saveResponse({ rfq, channel, from = null, subject = null, 
     extracted: Object.keys(final).length ? final : null, created_by: userId,
   }).select('*').single();
   if (error) throw error;
-  if (final.is_quote && final.amount != null) {
+  if (rfq.status === 'accepted') {
+    // after acceptance, replies are booking details: keep the accepted price, enrich the shipment
+    if (rfq.shipment_id) {
+      const patch = {};
+      if (final.loading_port) patch.origin_port = final.loading_port;
+      if (isoDate(final.etd)) patch.etd = final.etd;
+      const bits = [final.routing && `Routing: ${final.routing}${final.via ? ' via ' + final.via : ''}`, final.latest_receiving_date && `Latest receiving date: ${final.latest_receiving_date}`, final.vessel_flight && `Vessel/flight: ${final.vessel_flight}`].filter(Boolean);
+      if (bits.length) {
+        const { data: sh } = await admin.from('shipments').select('notes').eq('id', rfq.shipment_id).maybeSingle();
+        patch.notes = [sh?.notes, `Booking details: ${bits.join(' · ')}`].filter(Boolean).join('\n');
+      }
+      if (Object.keys(patch).length) await admin.from('shipments').update(patch).eq('id', rfq.shipment_id);
+    }
+  } else if (final.is_quote && final.amount != null) {
     await admin.from('freight_rfqs').update({
       status: 'quoted', quote_amount: final.amount, quote_currency: final.currency || 'USD', quote_notes: final.summary || null,
       transit_days: final.transit_days ?? null, valid_until: isoDate(final.valid_until), quoted_at: new Date().toISOString(),
