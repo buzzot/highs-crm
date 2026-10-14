@@ -13,7 +13,7 @@
   <div><a class="back" href="/admin/logistics">← Logistics</a>
     <h1><%= fmt.status(s.mode).toUpperCase() %> shipment · <a href="/admin/orders/<%= s.order_id %>"><%= s.orders?.order_no %></a></h1>
     <p class="muted"><%= s.orders?.organizations?.name %> · <%= s.origin_port || '—' %> → <%= s.destination_port || '—' %> · <%= s.incoterm %> · <%= s.forwarders?.name || 'no forwarder' %></p></div>
-  <div class="actions"><span class="pill lg <%= s.status %>"><%= fmt.status(s.status) %></span><a class="btn" href="/admin/logistics/shipments/<%= s.id %>/edit">Edit</a></div>
+  <div class="actions"><span class="pill lg <%= s.status %>"><%= fmt.status(s.status) %></span><a class="btn" href="/admin/logistics/shipments/<%= s.id %>/edit">Edit</a><form method="post" action="/admin/logistics/shipments/<%= s.id %>/delete" class="inline" onsubmit="return confirm('Delete this shipment and its costs? This cannot be undone.')"><button class="btn danger">Delete</button></form></div>
 </div>
 <% if (s.export_official && !s.export_declaration_no) { %>
   <div class="alert warn">Export declaration number not recorded yet. Ask the forwarder / customs broker for the 报关单 and upload it below.</div>

@@ -137,10 +137,10 @@ r.post('/quotes/:id/rfq/:rid/book', async (req, res) => {
     }).select('id').single();
     if (error) return back(res, to, { err: error.message });
     shipmentId = sh.id;
+    await admin.from('freight_rfqs').update({ shipment_id: shipmentId }).eq('id', rfq.id); // link first, so a retry never creates a second shipment
     const settings = await getSettings(admin);
     await admin.from('freight_costs').insert({ shipment_id: shipmentId, type: 'main_freight', description: `Quote ${fr?.ref}${rfq.forwarders?.name ? ' · ' + rfq.forwarders.name : ''}`, amount: rfq.quote_amount, currency: rfq.quote_currency || 'USD', fx_to_order: fxRate(settings, rfq.quote_currency || 'USD', order?.currency || 'USD') });
     await log({ entityType: 'order', entityId: rfq.order_id, action: 'shipment_created', actorId: req.user.id, clientVisible: true, detail: { mode: shipMode(q.mode || info.mode) } });
-    await admin.from('freight_rfqs').update({ shipment_id: shipmentId }).eq('id', rfq.id);
   }
   await log({ entityType: 'order', entityId: rfq.order_id, action: 'freight_quote_booked', actorId: req.user.id, detail: { note: `${fr?.ref} · ${rfq.forwarders?.name || rfq.sent_to}: ${rfq.quote_notes || ''}` } });
 
@@ -276,6 +276,18 @@ r.post('/shipments/:id', async (req, res) => {
     await log({ entityType: 'order', entityId: before.order_id, action: 'export_declared', actorId: req.user.id, clientVisible: true, detail: { note: b.export_declaration_no } });
   }
   res.redirect(`/admin/logistics/shipments/${id}`);
+});
+
+// delete a shipment (e.g. created by mistake); its costs go with it
+r.post('/shipments/:id/delete', async (req, res) => {
+  const { data: s } = await admin.from('shipments').select('order_id').eq('id', req.params.id).maybeSingle();
+  if (!s) return notFound(res, 'Shipment');
+  const { error } = await admin.from('shipments').delete().eq('id', req.params.id);
+  if (error) return back(res, `/admin/logistics/shipments/${req.params.id}`, { err: error.message });
+  const { data: cs } = await admin.from('freight_costs').select('amount, fx_to_order, shipments!inner(order_id)').eq('shipments.order_id', s.order_id);
+  await admin.from('orders').update({ freight_total: (cs || []).reduce((t, c) => t + Number(c.amount) * Number(c.fx_to_order || 1), 0) }).eq('id', s.order_id);
+  await log({ entityType: 'order', entityId: s.order_id, action: 'shipment_deleted', actorId: req.user.id });
+  res.redirect('/admin/logistics?msg=' + encodeURIComponent('Shipment deleted.'));
 });
 
 // quick status change from the list
