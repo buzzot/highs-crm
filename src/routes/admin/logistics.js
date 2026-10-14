@@ -134,7 +134,7 @@ r.post('/quotes/:id/rfq/:rid/book', async (req, res) => {
     }).select('id').single();
     if (error) return back(res, to, { err: error.message });
     shipmentId = sh.id;
-    const settings = await getSettings();
+    const settings = await getSettings(admin);
     await admin.from('freight_costs').insert({ shipment_id: shipmentId, type: 'main_freight', description: `Quote ${fr?.ref}${rfq.forwarders?.name ? ' · ' + rfq.forwarders.name : ''}`, amount: rfq.quote_amount, currency: rfq.quote_currency || 'USD', fx_to_order: fxRate(settings, rfq.quote_currency || 'USD', order?.currency || 'USD') });
     await log({ entityType: 'order', entityId: rfq.order_id, action: 'shipment_created', actorId: req.user.id, clientVisible: true, detail: { mode: shipMode(q.mode || info.mode) } });
     await admin.from('freight_rfqs').update({ shipment_id: shipmentId }).eq('id', rfq.id);
