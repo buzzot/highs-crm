@@ -1,0 +1,96 @@
+<%- include('../../partials/head') %>
+<%
+  const i = fr.info || {}, tt = fr.totals || {};
+  const RFQ = { sent: 'Waiting for quote', quoted: 'Quoted', declined: 'Declined', accepted: 'Accepted' };
+  const pillOf = s => s === 'quoted' ? 'quoted' : s === 'accepted' ? 'accepted' : s === 'declined' ? 'declined' : 'new';
+  const respOf = id => responses.filter(r => r.rfq_id === id);
+  const dur = (a, b) => { const m = Math.round((new Date(b) - new Date(a)) / 60000); return m < 60 ? m + ' min' : m < 2880 ? Math.round(m / 60) + ' h' : Math.round(m / 1440) + ' days'; };
+  const timeline = [
+    ...rfqs.map(r => ({ at: r.sent_at, kind: 'sent', r })),
+    ...responses.map(x => ({ at: x.received_at, kind: 'resp', x, r: rfqs.find(r => r.id === x.rfq_id) })),
+  ].sort((a, b) => String(a.at).localeCompare(String(b.at)));
+%>
+<div class="pagehead">
+  <div><a class="back" href="/admin/logistics#quote-requests">← Logistics</a>
+    <h1><%= fr.ref %> · freight quote request</h1>
+    <p class="muted"><% if (fr.orders) { %><a href="/admin/orders/<%= fr.orders.id %>/packing-list"><%= fr.orders.order_no %></a> · <%= fr.orders.organizations?.name || '' %> · <% } %>sent <%= fmt.datetime(fr.created_at) %> by <%= fr.profiles?.full_name || fr.profiles?.email || '—' %></p></div>
+  <% if (fr.orders) { %><div class="actions"><a class="btn" href="/admin/orders/<%= fr.orders.id %>/packing-list">Packing list</a></div><% } %>
+</div>
+
+<div class="kpis">
+  <div class="kpi"><span class="n"><%= tt.cartons ?? '—' %></span><span class="l">Cartons · <%= Number(tt.pieces || 0).toLocaleString('en-US') %> pcs</span></div>
+  <div class="kpi"><span class="n"><%= tt.gross_kg ?? '—' %> kg</span><span class="l">Gross weight</span></div>
+  <div class="kpi"><span class="n"><%= tt.cbm ?? '—' %></span><span class="l">CBM</span></div>
+  <div class="kpi"><span class="n"><%= rfqs.filter(r => r.quote_amount != null).length %> / <%= rfqs.length %></span><span class="l">Forwarders quoted</span></div>
+</div>
+<p class="muted small"><%= [i.mode, i.pol && 'from ' + i.pol, i.pod && 'to ' + i.pod, i.incoterm, i.ready_date && 'ready ' + fmt.date(i.ready_date)].filter(Boolean).join(' · ') %><%= fr.message ? ' — “' + fr.message + '”' : '' %></p>
+
+<div class="card">
+  <h2>Forwarders &amp; offers</h2>
+  <table class="tbl">
+    <thead><tr><th>Forwarder</th><th>Sent</th><th>Status</th><th class="right">Quote</th><th>Transit</th><th>Valid until</th><th>Summary</th><th></th></tr></thead>
+    <tbody>
+    <% rfqs.forEach(r => { const rs = respOf(r.id); const first = rs[0]; %>
+      <tr class="<%= r.id === bestId ? 'bestrow' : '' %>">
+        <td><%= r.forwarders?.name || r.sent_to %><div class="muted small"><%= r.channel === 'wechat' ? 'WeChat' + (r.forwarders?.wechat ? ' ' + r.forwarders.wechat : '') : r.sent_to %></div></td>
+        <td class="small"><%= fmt.datetime(r.sent_at) %><% if (first) { %><div class="muted">answered after <%= dur(r.sent_at, first.received_at) %></div><% } %></td>
+        <td><span class="pill <%= pillOf(r.status) %>"><%= RFQ[r.status] %></span></td>
+        <td class="right num"><%= r.quote_amount != null ? fmt.money(r.quote_amount, r.quote_currency || 'USD') : '—' %><% if (r.id === bestId) { %><div class="oktext small">lowest</div><% } %></td>
+        <td><%= r.transit_days ? r.transit_days + ' days' : '—' %></td>
+        <td><%= r.valid_until ? fmt.date(r.valid_until) : '—' %></td>
+        <td class="small"><%= r.quote_notes || '' %></td>
+        <td class="nowrap">
+          <form method="post" action="/admin/logistics/quotes/<%= fr.id %>/rfq/<%= r.id %>/status" class="autosubmit inline">
+            <select name="status" class="pillselect" aria-label="Status"><% Object.entries(RFQ).forEach(([k, l]) => { %><option value="<%= k %>" <%= r.status === k ? 'selected' : '' %>><%= l %></option><% }) %></select>
+          </form>
+        </td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table>
+</div>
+
+<div class="grid2 even">
+  <div class="card">
+    <h2>Timeline</h2>
+    <ul class="actlist qtimeline">
+      <% timeline.forEach(e => { %>
+        <% if (e.kind === 'sent') { %>
+          <li class="sys"><div class="ahead"><strong>Sent to <%= e.r.forwarders?.name || e.r.sent_to %></strong> <span class="muted small"><%= fmt.datetime(e.at) %> · <%= e.r.channel === 'wechat' ? 'WeChat' : 'email ' + e.r.sent_to %></span></div></li>
+        <% } else { const x = e.x, ex = x.extracted || {}; %>
+          <li class="crm">
+            <div class="ahead"><strong>Reply from <%= e.r?.forwarders?.name || x.from_address || 'forwarder' %></strong>
+              <span class="muted small"><%= fmt.datetime(x.received_at) %> · <%= x.channel === 'email' ? 'email' + (x.from_address ? ' ' + x.from_address : '') : x.channel === 'wechat' ? 'WeChat (pasted)' : 'typed in' %><%= x.profiles ? ' · added by ' + (x.profiles.full_name || x.profiles.email) : '' %></span></div>
+            <% if (ex.summary) { %><p class="<%= ex.is_quote ? 'oktext' : 'muted' %>">✦ <%= ex.summary %></p><% } %>
+            <% if ((ex.breakdown || []).length) { %><ul class="small qbreak"><% ex.breakdown.forEach(b => { %><li><%= b.item %>: <%= b.amount != null ? Number(b.amount).toLocaleString('en-US') : '' %> <%= b.currency || '' %><%= b.per ? ' / ' + b.per : '' %></li><% }) %></ul><% } %>
+            <% if (ex.questions) { %><p class="warntext small">Question: <%= ex.questions %></p><% } %>
+            <% if (x.body) { %><details><summary class="muted small">Original message</summary><p class="pre small"><%= x.body %></p></details><% } %>
+          </li>
+        <% } %>
+      <% }) %>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>Add a response</h2>
+    <p class="muted small"><% if (inboundOn) { %>Email replies arrive here automatically. Paste WeChat messages (or anything else) below.<% } else { %>Email replies go to your inbox for now — paste them (or WeChat messages) below. Automatic capture: see “Inbound email” in the README.<% } %> AI reads the price, transit time and validity.</p>
+    <form method="post" action="/admin/logistics/quotes/<%= fr.id %>/response">
+      <div class="row">
+        <label>From <select name="rfq_id" required><% rfqs.forEach(r => { %><option value="<%= r.id %>"><%= r.forwarders?.name || r.sent_to %></option><% }) %></select></label>
+        <label>Channel <select name="channel"><option value="wechat">WeChat</option><option value="email">Email</option><option value="manual">Phone / other</option></select></label>
+      </div>
+      <label>Their message <textarea name="text" rows="6" placeholder="Paste the reply — Chinese or English is fine"></textarea></label>
+      <details class="manualq"><summary class="muted small">…or type the offer yourself</summary>
+        <div class="row">
+          <label>Amount <input type="number" step="0.01" name="amount"></label>
+          <label>Currency <select name="currency"><option>USD</option><option>CNY</option><option>EUR</option></select></label>
+          <label>Transit days <input type="number" name="transit_days"></label>
+          <label>Valid until <input type="date" name="valid_until"></label>
+        </div>
+        <label>Notes <input name="notes" placeholder="e.g. door-to-door incl. customs"></label>
+      </details>
+      <div class="actions"><button class="btn primary">✦ Save response</button></div>
+    </form>
+  </div>
+</div>
+<%- include('../../partials/foot') %>

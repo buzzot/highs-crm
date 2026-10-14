@@ -46,13 +46,8 @@ Node.js (Express, server-rendered EJS) on **Supabase** (Postgres, Auth, Storage)
    5. `supabase/migrations/0005_product_import.sql`
    6. `supabase/migrations/0006_profile_and_email_codes.sql`
    7. `supabase/migrations/0007_app_email_codes.sql`
-   8. `supabase/migrations/0008_company_details.sql`
-   9. `supabase/migrations/0009_request_items.sql` — several products per sourcing request
-   10. `supabase/migrations/0010_request_edits.sql` — clients edit requests (admin approves), preferred delivery
-   11. `supabase/migrations/0011_supplier_portal.sql` — invite suppliers; supplier portal
-   12. `supabase/migrations/0012_supplier_crm.sql` — last sign-in, supplier CRM status and follow-ups
-   13. `supabase/migrations/0013_ai_usage.sql` — AI token usage log (Admin → AI usage)
-   8. optional demo data: `supabase/seed.sql`
+   8. `0008` … `0014` in number order (request items, request edits, supplier portal, supplier CRM, AI usage, packing lists & freight quotes)
+   9. optional demo data: `supabase/seed.sql`
 3. **Auth settings** (Authentication):
    - Providers → Email: turn **off** "Allow new users to sign up" (invite-only).
    - URL Configuration: Site URL = your `APP_URL`; add `APP_URL/auth/accept` to Redirect URLs.
@@ -82,6 +77,25 @@ Node.js (Express, server-rendered EJS) on **Supabase** (Postgres, Auth, Storage)
 4. The client accepts in the portal, then Sourcing → **Create order**.
 5. Order page: update status as production moves (tick "show client"), upload product/QC/packing photos, add the packing list.
 6. Logistics → **+ Shipment**: forwarder, B/L, export declaration no., ETD/ETA, freight costs as invoices arrive. The client sees shipment progress and documents marked visible.
+
+### Packing lists & freight quotes
+- Order page → **Packing list**: drop the supplier's packing list (Excel, CSV, PDF or a screenshot). Spreadsheets with normal
+  headers (EN/CN) are read directly; anything else is read by AI. You check and correct the lines, then save.
+- **Packing list & freight quotes** page: standard printable packing list, Excel download, WeChat text, and
+  *Send packing list* — one email per forwarder with the Excel attached. Each request gets a number (`FQ-YYMM-####`).
+- Logistics → **Freight quote requests**: every request, who it went to and when, answers with time, best quote.
+  Click the number to see the timeline and the AI-read offers (price, transit days, validity, breakdown, questions).
+- WeChat or phone replies: paste them on the request page — AI reads them the same way.
+
+#### Inbound email (automatic capture of forwarders' replies) — optional
+Without this, replies arrive in the sender's own inbox (Reply-To) and you paste them in.
+1. Pick an inbound-email service that POSTs JSON to a webhook (Postmark Inbound, Mailgun Routes, SendGrid Inbound Parse,
+   a Cloudflare Email Worker, or Resend inbound if your plan includes it). Point a subdomain at it, e.g. `in.lumitrade.cc`.
+2. Railway → Variables:
+   - `QUOTE_REPLY_ADDRESS=quotes@in.lumitrade.cc` — replies go to `quotes+<token>@in.lumitrade.cc`
+   - `INBOUND_EMAIL_SECRET=` a long random string
+3. Webhook URL: `https://lumitrade.cc/hooks/inbound-email?key=<INBOUND_EMAIL_SECRET>` (or send the secret in an
+   `x-inbound-secret` header). Replies are matched by the address token or the `[FQ-… #token]` subject tag.
 
 ## Project layout
 ```

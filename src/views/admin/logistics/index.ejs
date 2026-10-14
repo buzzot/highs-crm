@@ -35,6 +35,33 @@
   </table>
 </div>
 
+<div class="card" id="quote-requests">
+  <h2>Freight quote requests <span class="count"><%= (typeof quoteRequests !== 'undefined' ? quoteRequests : []).length %></span><span class="muted small">— packing lists sent to forwarders and their answers</span></h2>
+  <% const qr = typeof quoteRequests !== 'undefined' ? quoteRequests : []; %>
+  <% if (!qr.length) { %><p class="muted">No quote requests yet. Open an order's packing list and use “Request freight quotes”.</p><% } else { %>
+  <table class="tbl">
+    <thead><tr><th>Request</th><th>Order</th><th>Shipment</th><th>Sent to</th><th class="right">Answers</th><th class="right">Best quote</th><th>Last activity</th></tr></thead>
+    <tbody>
+    <% qr.forEach(fr => {
+         const rf = fr.freight_rfqs || [], rs = fr.freight_responses || [];
+         const quoted = rf.filter(x => x.quote_amount != null).sort((a, b) => Number(a.quote_amount) - Number(b.quote_amount));
+         const last = [fr.created_at, ...rs.map(x => x.received_at)].sort().pop();
+         const i = fr.info || {}, tt = fr.totals || {}; %>
+      <tr>
+        <td><a href="/admin/logistics/quotes/<%= fr.id %>"><%= fr.ref %></a><div class="muted small"><%= fmt.datetime(fr.created_at) %></div></td>
+        <td><% if (fr.orders) { %><a href="/admin/orders/<%= fr.orders.id %>/packing-list"><%= fr.orders.order_no %></a><div class="muted small"><%= fr.orders.organizations?.name || '' %></div><% } %></td>
+        <td class="small"><%= [i.mode, [i.pol, i.pod].filter(Boolean).join(' → ')].filter(Boolean).join(' · ') || '—' %><div class="muted"><%= tt.cartons ? tt.cartons + ' ctns · ' + tt.gross_kg + ' kg · ' + tt.cbm + ' cbm' : '' %></div></td>
+        <td class="small"><%= rf.map(x => x.forwarders?.name || 'other').join(', ') || '—' %></td>
+        <td class="right num"><%= quoted.length %> / <%= rf.length %><% if (rs.length) { %><div class="muted small"><%= rs.length %> repl<%= rs.length === 1 ? 'y' : 'ies' %></div><% } %></td>
+        <td class="right num"><% if (quoted[0]) { %><strong><%= fmt.money(quoted[0].quote_amount, quoted[0].quote_currency || 'USD') %></strong><div class="muted small"><%= quoted[0].forwarders?.name || '' %></div><% } else { %><span class="muted">waiting</span><% } %></td>
+        <td class="muted small"><%= fmt.datetime(last) %></td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table>
+  <% } %>
+</div>
+
 <div class="card" id="forwarders">
   <h2>Forwarders (3PL)</h2>
   <table class="tbl">

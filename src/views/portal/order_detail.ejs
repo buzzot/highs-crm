@@ -38,9 +38,10 @@
     </div>
     <% if (packing.length) { %>
     <div class="card">
-      <h2>Packing list</h2>
-      <table class="tbl"><thead><tr><th>Carton</th><th>Description</th><th>Qty</th><th>Dims (cm)</th><th>GW kg</th><th>CBM</th></tr></thead><tbody>
-      <% packing.forEach(p => { %><tr><td><%= p.carton_no %></td><td><%= p.description %></td><td><%= p.quantity %></td><td><%= p.length_cm %>×<%= p.width_cm %>×<%= p.height_cm %></td><td><%= fmt.num(p.gross_weight_kg,1) %></td><td><%= fmt.num(p.cbm,3) %></td></tr><% }) %>
+      <% const pc = p => Number(p.cartons || 1); const ptot = packing.reduce((a, p) => ({ c: a.c + pc(p), q: a.q + (Number(p.quantity) || 0) * pc(p), g: a.g + (Number(p.gross_weight_kg) || 0) * pc(p), v: a.v + (Number(p.cbm) || 0) * pc(p) }), { c: 0, q: 0, g: 0, v: 0 }); %>
+      <h2>Packing list <span class="muted small"><%= ptot.c %> cartons · <%= Number(ptot.q).toLocaleString('en-US') %> pcs · <%= fmt.num(ptot.g, 1) %> kg · <%= fmt.num(ptot.v, 3) %> cbm</span></h2>
+      <table class="tbl"><thead><tr><th>Carton</th><th class="right">Ctns</th><th>Description</th><th class="right">Pcs/ctn</th><th>Dims (cm)</th><th class="right">GW/ctn kg</th><th class="right">CBM</th></tr></thead><tbody>
+      <% packing.forEach(p => { %><tr><td><%= p.carton_no %></td><td class="right"><%= pc(p) %></td><td><%= p.description %></td><td class="right"><%= p.quantity ?? '—' %></td><td><%= p.length_cm ? Number(p.length_cm) + '×' + Number(p.width_cm) + '×' + Number(p.height_cm) : '—' %></td><td class="right"><%= fmt.num(p.gross_weight_kg,1) %></td><td class="right"><%= fmt.num((Number(p.cbm) || 0) * pc(p),3) %></td></tr><% }) %>
       </tbody></table>
     </div>
     <% } %>

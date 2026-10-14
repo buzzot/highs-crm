@@ -1,0 +1,68 @@
+<%- include('../../partials/head') %>
+<%
+  const n = v => v == null || v === '' ? '' : v;
+  const f = (i, k, v, attrs = '') => `<input name="rows[${i}][${k}]" value="${String(n(v)).replace(/"/g, '&quot;')}" ${attrs}>`;
+%>
+<div class="pagehead">
+  <div><a class="back" href="/admin/orders/<%= order.id %>#packing">← <%= order.order_no %></a>
+    <h1>Check the packing list</h1>
+    <p class="muted">Read from <strong><%= file %></strong> <%= method === 'ai' ? 'by AI' : 'by its column headers' %> · <%= rows.length %> lines · nothing is saved until you confirm. Values are <em>per carton</em>.</p></div>
+</div>
+<% if (notes.length) { %><div class="alert warn"><%= notes.join(' ') %></div><% } %>
+<% if (t.missing.length) { %><div class="alert info">Missing on some lines: <%= t.missing.join(', ') %> — fill them in below so forwarders can quote accurately.</div><% } %>
+
+<form method="post" action="/admin/orders/<%= order.id %>/packing/confirm" class="card tablecard" id="reviewForm">
+  <div class="bulkbar">
+    <span><strong id="rvTotals"><%= t.cartons %> cartons · <%= Number(t.pieces).toLocaleString('en-US') %> pcs · <%= t.gross %> kg · <%= t.cbm %> cbm</strong></span>
+    <% if (existing) { %>
+      <label class="check"><input type="radio" name="mode" value="replace" checked> Replace the current <%= existing %> line<%= existing === 1 ? '' : 's' %></label>
+      <label class="check"><input type="radio" name="mode" value="append"> Add to them</label>
+    <% } else { %><input type="hidden" name="mode" value="replace"><% } %>
+    <span class="grow"></span>
+    <a class="btn small" href="/admin/orders/<%= order.id %>#packing">Cancel</a>
+    <button class="btn primary">Save packing list</button>
+  </div>
+  <table class="tbl editgrid">
+    <thead><tr><th></th><th>CTN No.</th><th class="right">Ctns</th><th>Description</th><th>Item / SKU</th><th>HS code</th><th class="right">Pcs/ctn</th><th class="right">L cm</th><th class="right">W cm</th><th class="right">H cm</th><th class="right">GW/ctn kg</th><th class="right">NW/ctn kg</th></tr></thead>
+    <tbody>
+    <% rows.forEach((x, i) => { %>
+      <tr>
+        <td><input type="checkbox" checked aria-label="Keep this line" onchange="this.closest('tr').classList.toggle('off', !this.checked); this.nextElementSibling.value = this.checked ? 'on' : 'off'"><input type="hidden" name="rows[<%= i %>][keep]" value="on"></td>
+        <td><%- f(i, 'carton_no', x.carton_no, 'class="w-s"') %></td>
+        <td><%- f(i, 'cartons', x.cartons, 'type="number" min="1" class="w-xs num" data-calc') %></td>
+        <td><%- f(i, 'description', x.description, 'class="w-l"') %></td>
+        <td><%- f(i, 'sku', x.sku, 'class="w-s"') %></td>
+        <td><%- f(i, 'hs_code', x.hs_code, 'class="w-s"') %></td>
+        <td><%- f(i, 'quantity', x.quantity, 'type="number" min="0" class="w-xs num" data-calc') %></td>
+        <td><%- f(i, 'length_cm', x.length_cm, 'type="number" step="0.1" class="w-xs num" data-calc' + (x.length_cm ? '' : ' data-miss')) %></td>
+        <td><%- f(i, 'width_cm', x.width_cm, 'type="number" step="0.1" class="w-xs num" data-calc' + (x.width_cm ? '' : ' data-miss')) %></td>
+        <td><%- f(i, 'height_cm', x.height_cm, 'type="number" step="0.1" class="w-xs num" data-calc' + (x.height_cm ? '' : ' data-miss')) %></td>
+        <td><%- f(i, 'gross_weight_kg', x.gross_weight_kg, 'type="number" step="0.001" class="w-xs num" data-calc' + (x.gross_weight_kg ? '' : ' data-miss')) %></td>
+        <td><%- f(i, 'net_weight_kg', x.net_weight_kg, 'type="number" step="0.001" class="w-xs num"') %></td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table>
+  <div class="reviewfoot">
+    <label>Shipping marks <span class="muted small">— optional</span><input name="marks" value="<%= marks || '' %>" placeholder="e.g. LUMI / LT-2610-0711 / LOS ANGELES / C/NO. 1-UP"></label>
+    <% if (usage) { %><p class="muted small ailine"><%= aiLine(usage) %></p><% } %>
+  </div>
+</form>
+<script>
+(function () {
+  const form = document.getElementById('reviewForm'), out = document.getElementById('rvTotals');
+  const v = (tr, k) => Number(tr.querySelector(`[name$="[${k}]"]`)?.value || 0);
+  const calc = () => {
+    let c = 0, p = 0, g = 0, cbm = 0;
+    form.querySelectorAll('tbody tr').forEach(tr => {
+      if (tr.classList.contains('off')) return;
+      const n = v(tr, 'cartons') || 1; c += n; p += v(tr, 'quantity') * n; g += v(tr, 'gross_weight_kg') * n;
+      cbm += v(tr, 'length_cm') * v(tr, 'width_cm') * v(tr, 'height_cm') / 1e6 * n;
+    });
+    out.textContent = `${c} cartons · ${p.toLocaleString('en-US')} pcs · ${Math.round(g * 100) / 100} kg · ${Math.round(cbm * 1000) / 1000} cbm`;
+  };
+  form.addEventListener('input', e => { if (e.target.matches('[data-miss]') && e.target.value) e.target.removeAttribute('data-miss'); calc(); });
+  form.addEventListener('change', calc);
+})();
+</script>
+<%- include('../../partials/foot') %>

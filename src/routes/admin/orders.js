@@ -3,6 +3,21 @@ import { admin } from '../../lib/supabase.js';
 import { log } from '../../lib/activity.js';
 import { clean, bool, back, notFound, ORDER_STATUSES, CURRENCIES } from '../../lib/util.js';
 import { landed } from '../../lib/landed.js';
+import multer from 'multer';
+import { readXlsx, workbookToText } from '../../lib/xlsx-read.js';
+import { readCsv } from './imports.js';
+import { normalizeRows, rowsFromSheet, totals as packTotals, packingText, packingSheet } from '../../lib/packing.js';
+import { writeXlsx } from '../../lib/xlsx-write.js';
+import { extractPacking, aiEnabled } from '../../lib/ai.js';
+import { uploadDocument } from '../../lib/storage.js';
+import { sendEmail } from '../../lib/mailer.js';
+import { rfqEmail } from '../../lib/email-templates.js';
+import { replyAddress, subjectTag } from '../../lib/freight.js';
+
+const packUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+const IMG = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif' };
+const PACK_INFO = ['mode', 'pol', 'pod', 'incoterm', 'ready_date', 'marks', 'remarks'];
+const MODES = ['Sea FCL', 'Sea LCL', 'Air', 'Express', 'Rail', 'Truck'];
 
 const r = Router();
 const like = q => String(q || '').replace(/[,()%]/g, ' ').trim();
@@ -109,21 +124,184 @@ r.post('/:id/items/:iid/delete', async (req, res) => {
 });
 
 // ---- packing list ----
+// manual add: N identical cartons become one line "first-last"
 r.post('/:id/packing', async (req, res) => {
-  const b = clean(req.body, ['carton_no', 'product_id', 'description', 'quantity', 'length_cm', 'width_cm', 'height_cm', 'gross_weight_kg', 'net_weight_kg']);
-  const copies = Math.min(Math.max(parseInt(req.body.copies || '1', 10) || 1, 1), 500);
-  // "copies" lets you add N identical cartons at once: carton_no "1" × 20 → 1..20
+  const b = clean(req.body, ['carton_no', 'product_id', 'description', 'sku', 'quantity', 'length_cm', 'width_cm', 'height_cm', 'gross_weight_kg', 'net_weight_kg']);
+  const copies = Math.min(Math.max(parseInt(req.body.copies || '1', 10) || 1, 1), 5000);
   const start = parseInt(b.carton_no, 10);
-  const rows = Array.from({ length: copies }, (_, i) => ({
-    ...b, order_id: req.params.id,
-    carton_no: copies > 1 && Number.isFinite(start) ? String(start + i) : b.carton_no,
-  }));
-  const { error } = await admin.from('packing_lists').insert(rows);
-  back(res, `/admin/orders/${req.params.id}#packing`, error ? { err: error.message } : { msg: `${rows.length} carton(s) added.` });
+  const row = { ...b, order_id: req.params.id, cartons: copies, carton_no: copies > 1 && Number.isFinite(start) ? `${start}-${start + copies - 1}` : b.carton_no };
+  const { data: last } = await admin.from('packing_lists').select('position').eq('order_id', req.params.id).order('position', { ascending: false }).limit(1).maybeSingle();
+  row.position = (last?.position ?? -1) + 1;
+  const { error } = await admin.from('packing_lists').insert(row);
+  back(res, `/admin/orders/${req.params.id}#packing`, error ? { err: error.message } : { msg: `${copies} carton(s) added.` });
 });
 r.post('/:id/packing/:pid/delete', async (req, res) => {
   await admin.from('packing_lists').delete().eq('id', req.params.pid).eq('order_id', req.params.id);
   back(res, `/admin/orders/${req.params.id}#packing`);
+});
+r.post('/:id/packing-clear', async (req, res) => {
+  await admin.from('packing_lists').delete().eq('order_id', req.params.id);
+  back(res, `/admin/orders/${req.params.id}#packing`, { msg: 'Packing list cleared.' });
+});
+
+// upload Excel / CSV / PDF / screenshot → read it (column headers first, AI otherwise) → review page
+r.post('/:id/packing/import', packUpload.single('file'), async (req, res) => {
+  const id = req.params.id;
+  const { data: order } = await admin.from('orders').select('id, order_no, packing_info').eq('id', id).single();
+  if (!order) return notFound(res, 'Order');
+  const f = req.file;
+  if (!f) return back(res, `/admin/orders/${id}#packing`, { err: 'Choose or drop a packing list file.' });
+  const ext = (f.originalname.split('.').pop() || '').toLowerCase();
+  let rows = null, method = 'columns', notes = [], usage = null, marks = null;
+  try {
+    if (['xlsx', 'xlsm', 'csv', 'txt'].includes(ext)) {
+      const wb = ext === 'csv' || ext === 'txt' ? readCsv(f.buffer.toString('utf8').replace(/^﻿/, '')) : readXlsx(f.buffer);
+      for (const sh of wb.sheets) { rows = rowsFromSheet(sh.rows); if (rows) break; }
+      if (!rows) {
+        if (!aiEnabled()) throw new Error('This layout was not recognised and AI is not configured (ANTHROPIC_API_KEY). Use columns like CTN NO · DESCRIPTION · QTY/CTN · CTNS · MEAS · G.W.');
+        method = 'ai';
+        const ai = await extractPacking({ text: workbookToText(wb), filename: f.originalname }, { type: 'order', id });
+        rows = normalizeRows(ai.lines); usage = ai.usage; marks = ai.marks; if (ai.notes) notes.push(ai.notes);
+      }
+    } else if (ext === 'pdf' || IMG[ext]) {
+      if (!aiEnabled()) throw new Error('Reading PDFs and screenshots needs AI — set ANTHROPIC_API_KEY, or upload the Excel file.');
+      method = 'ai';
+      const ai = await extractPacking(ext === 'pdf' ? { pdf: f.buffer, filename: f.originalname } : { image: { data: f.buffer, mediaType: IMG[ext] }, filename: f.originalname }, { type: 'order', id });
+      rows = normalizeRows(ai.lines); usage = ai.usage; marks = ai.marks; if (ai.notes) notes.push(ai.notes);
+    } else if (ext === 'xls') {
+      throw new Error('Old .xls format — open it in Excel/WPS and "Save as" .xlsx, or upload a PDF / screenshot.');
+    } else throw new Error(`Unsupported file type .${ext}. Use Excel, CSV, PDF or a screenshot.`);
+  } catch (e) {
+    console.error('[packing import]', e.message);
+    return back(res, `/admin/orders/${id}#packing`, { err: e.message });
+  }
+  if (!rows?.length) return back(res, `/admin/orders/${id}#packing`, { err: 'No packing lines found in this file.' });
+  // keep the original on the order (internal)
+  let source = null;
+  try { source = await uploadDocument({ file: f, entityType: 'order', entityId: id, kind: 'packing_list', title: `Supplier packing list — ${f.originalname}`, clientVisible: false, uploadedBy: req.user.id }); } catch (e) { notes.push(`Original not stored: ${e.message}`); }
+  const { count } = await admin.from('packing_lists').select('id', { count: 'exact', head: true }).eq('order_id', id);
+  res.render('admin/orders/packing_review', {
+    title: `Packing list · ${order.order_no}`, order, rows, t: packTotals(rows), method, notes, usage, marks, existing: count || 0, source, file: f.originalname,
+  });
+});
+
+r.post('/:id/packing/confirm', async (req, res) => {
+  const id = req.params.id;
+  const raw = req.body.rows ? (Array.isArray(req.body.rows) ? req.body.rows : Object.values(req.body.rows)) : [];
+  const rows = normalizeRows(raw.filter(x => x && x.keep !== 'off'));
+  if (!rows.length) return back(res, `/admin/orders/${id}#packing`, { err: 'No lines to save.' });
+  let start = 0;
+  if (req.body.mode === 'replace') await admin.from('packing_lists').delete().eq('order_id', id);
+  else {
+    const { data: last } = await admin.from('packing_lists').select('position').eq('order_id', id).order('position', { ascending: false }).limit(1).maybeSingle();
+    start = (last?.position ?? -1) + 1;
+  }
+  const { error } = await admin.from('packing_lists').insert(rows.map((x, i) => ({ ...x, order_id: id, position: start + i })));
+  if (error) return back(res, `/admin/orders/${id}#packing`, { err: error.message });
+  if (req.body.marks) {
+    const { data: o } = await admin.from('orders').select('packing_info').eq('id', id).single();
+    if (!o?.packing_info?.marks) await admin.from('orders').update({ packing_info: { ...(o?.packing_info || {}), marks: String(req.body.marks).slice(0, 500) } }).eq('id', id);
+  }
+  await log({ entityType: 'order', entityId: id, action: 'packing_list_imported', actorId: req.user.id, detail: { note: `${rows.length} lines · ${packTotals(rows).cartons} cartons` } });
+  res.redirect(`/admin/orders/${id}/packing-list?msg=` + encodeURIComponent(`Packing list saved: ${rows.length} lines, ${packTotals(rows).cartons} cartons.`));
+});
+
+async function packingData(id) {
+  const [{ data: order }, { data: rows }] = await Promise.all([
+    admin.from('order_overview').select('*').eq('id', id).single(),
+    admin.from('packing_lists').select('*').eq('order_id', id).order('position').order('carton_no'),
+  ]);
+  return { order, rows: rows || [], t: packTotals(rows || []), info: order?.packing_info || {} };
+}
+
+// standard packing list: print / PDF, Excel, send to forwarders
+r.get('/:id/packing-list', async (req, res) => {
+  const { order, rows, t, info } = await packingData(req.params.id);
+  if (!order) return notFound(res, 'Order');
+  const [{ data: forwarders }, { data: rfqs }] = await Promise.all([
+    admin.from('forwarders').select('*').order('name'),
+    admin.from('freight_rfqs').select('*, forwarders(name), freight_requests!freight_rfqs_request_id_fkey(id, ref)').eq('order_id', order.id).order('sent_at', { ascending: false }),
+  ]);
+  res.render('admin/orders/packing_list', {
+    title: `Packing list · ${order.order_no}`, order, rows, t, info, modes: MODES, forwarders: forwarders || [], rfqs: rfqs || [],
+    wechatText: packingText({ order, info, rows, t }), msg: req.query.msg, err: req.query.err,
+  });
+});
+
+r.get('/:id/packing-list.xlsx', async (req, res) => {
+  const { order, rows, t, info } = await packingData(req.params.id);
+  if (!order) return notFound(res, 'Order');
+  const sheet = packingSheet({ order, info, rows, t });
+  const buf = writeXlsx(sheet, { sheet: 'Packing list', boldRows: [0, sheet.findIndex(x => x[0] === 'CTN No.'), sheet.findIndex(x => x[0] === 'TOTAL')], widths: [10, 8, 34, 14, 12, 9, 10, 8, 8, 8, 9, 10, 11, 12, 11, 12] });
+  res.set({ 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="packing-list-${order.order_no}.xlsx"` });
+  res.send(buf);
+});
+
+r.post('/:id/packing-info', async (req, res) => {
+  const info = Object.fromEntries(PACK_INFO.map(k => [k, String(req.body[k] || '').trim().slice(0, 500) || null]).filter(([, v]) => v));
+  const { error } = await admin.from('orders').update({ packing_info: info }).eq('id', req.params.id);
+  back(res, `/admin/orders/${req.params.id}/packing-list`, error ? { err: error.message } : { msg: 'Shipment details saved.' });
+});
+
+// email the packing list (Excel attached) to the chosen forwarders and record the quote requests
+r.post('/:id/packing-list/send', async (req, res) => {
+  const id = req.params.id;
+  const { order, rows, t, info } = await packingData(id);
+  if (!order) return notFound(res, 'Order');
+  if (!rows.length) return back(res, `/admin/orders/${id}/packing-list`, { err: 'The packing list is empty.' });
+  const ids = [].concat(req.body.forwarder_ids || []).filter(Boolean);
+  const { data: fws } = ids.length ? await admin.from('forwarders').select('*').in('id', ids) : { data: [] };
+  const extra = String(req.body.extra_emails || '').split(/[\s,;]+/).map(x => x.trim().toLowerCase()).filter(x => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x));
+  const targets = [...(fws || []).filter(f => f.email).map(f => ({ fw: f, email: f.email })), ...extra.map(email => ({ fw: null, email }))];
+  if (!targets.length) return back(res, `/admin/orders/${id}/packing-list`, { err: 'Choose a forwarder with an email address, or type an email.' });
+  const sheet = packingSheet({ order, info, rows, t });
+  const xlsx = writeXlsx(sheet, { sheet: 'Packing list', boldRows: [0, sheet.findIndex(x => x[0] === 'CTN No.'), sheet.findIndex(x => x[0] === 'TOTAL')] });
+  const message = String(req.body.message || '').trim().slice(0, 3000);
+  const { data: fr, error: frErr } = await admin.from('freight_requests').insert({
+    order_id: id, info, totals: { cartons: t.cartons, pieces: t.pieces, gross_kg: t.gross, cbm: t.cbm }, message: message || null, created_by: req.user.id,
+  }).select('*').single();
+  if (frErr) return back(res, `/admin/orders/${id}/packing-list`, { err: /freight_requests/.test(frErr.message) ? 'Run supabase/migrations/0014_packing_rfq.sql first.' : frErr.message });
+  const sent = [], failed = [];
+  for (const tg of targets) {
+    const { data: rfq, error: rErr } = await admin.from('freight_rfqs').insert({ request_id: fr.id, order_id: id, forwarder_id: tg.fw?.id || null, sent_to: tg.email, channel: 'email', message: message || null, sent_by: req.user.id }).select('*').single();
+    if (rErr) { failed.push(`${tg.email}: ${rErr.message}`); continue; }
+    try {
+      const m = rfqEmail({ order, info, rows, t, message, senderName: req.user.full_name, forwarderName: tg.fw?.contact_name || tg.fw?.name });
+      await sendEmail({ to: tg.email, ...m, subject: `${m.subject} ${subjectTag(fr.ref, rfq.token)}`, replyTo: replyAddress(rfq.token, req.user.email),
+        attachments: [{ filename: `packing-list-${order.order_no}.xlsx`, content: xlsx }] });
+      sent.push(tg.fw?.name || tg.email);
+    } catch (e) {
+      await admin.from('freight_rfqs').delete().eq('id', rfq.id);
+      failed.push(`${tg.fw?.name || tg.email}: ${e.message}`);
+    }
+  }
+  if (!sent.length) await admin.from('freight_requests').delete().eq('id', fr.id);
+  else await log({ entityType: 'order', entityId: id, action: 'freight_quote_requested', actorId: req.user.id, detail: { note: `${fr.ref} → ${sent.join(', ')}` } });
+  if (sent.length && !failed.length) return res.redirect(`/admin/logistics/quotes/${fr.id}?msg=` + encodeURIComponent(`${fr.ref} sent to ${sent.join(', ')}.`));
+  back(res, `/admin/orders/${id}/packing-list`, { err: `${sent.length ? `${fr.ref} sent to ${sent.join(', ')}. ` : ''}Failed: ${failed.join(' · ')}` });
+});
+
+// WeChat is sent by hand — this records it as a quote request so the answer can be added later
+r.post('/:id/packing-list/wechat', async (req, res) => {
+  const id = req.params.id;
+  const { order, t, info } = await packingData(id);
+  if (!order) return notFound(res, 'Order');
+  const { data: fr, error } = await admin.from('freight_requests').insert({ order_id: id, info, totals: { cartons: t.cartons, pieces: t.pieces, gross_kg: t.gross, cbm: t.cbm }, message: 'Sent by WeChat', created_by: req.user.id }).select('*').single();
+  if (error) return back(res, `/admin/orders/${id}/packing-list`, { err: error.message });
+  await admin.from('freight_rfqs').insert({ request_id: fr.id, order_id: id, forwarder_id: req.body.forwarder_id || null, channel: 'wechat', sent_by: req.user.id, sent_to: 'WeChat' });
+  await log({ entityType: 'order', entityId: id, action: 'freight_quote_requested', actorId: req.user.id, detail: { note: `${fr.ref} by WeChat` } });
+  res.redirect(`/admin/logistics/quotes/${fr.id}?msg=` + encodeURIComponent(`${fr.ref} recorded as sent by WeChat — paste the reply here when it comes.`));
+});
+
+// record the forwarder's answer
+r.post('/:id/rfq/:rid', async (req, res) => {
+  const status = ['sent', 'quoted', 'declined', 'accepted'].includes(req.body.status) ? req.body.status : 'quoted';
+  const amount = Number(req.body.quote_amount);
+  await admin.from('freight_rfqs').update({
+    status, quote_amount: Number.isFinite(amount) && req.body.quote_amount !== '' ? amount : null, quote_currency: req.body.quote_currency || 'USD',
+    quote_notes: String(req.body.quote_notes || '').trim() || null, quoted_at: new Date().toISOString(),
+  }).eq('id', req.params.rid).eq('order_id', req.params.id);
+  back(res, `/admin/orders/${req.params.id}/packing-list#quotes`, { msg: 'Quote saved.' });
 });
 
 export default r;

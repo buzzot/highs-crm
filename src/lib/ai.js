@@ -289,3 +289,91 @@ and missing data that matters for shipping (carton size/weight). Be concise. Don
   });
   return { issues: input.issues || [], summary: input.summary || '', usage };
 }
+
+// ---------------------------------------------------------------------------------------------
+// Packing list extraction (Excel text, PDF or screenshot) → standard lines.
+// ---------------------------------------------------------------------------------------------
+const PACKING_TOOL = {
+  name: 'record_packing_list',
+  description: 'Record every line of the packing list. Values per carton unless the field says total.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      lines: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            carton_no: { ...strOrNull, description: 'Carton number or range as printed, e.g. "1-20"' },
+            cartons: { ...numOrNull, description: 'Number of cartons on this line' },
+            description: { ...strOrNull, description: 'Goods description in English (translate Chinese, keep model numbers)' },
+            sku: { ...strOrNull, description: 'Item / model / article number' },
+            hs_code: strOrNull,
+            quantity: { ...numOrNull, description: 'Pieces in EACH carton' },
+            total_quantity: { ...numOrNull, description: 'Total pieces on this line, if only the total is given' },
+            length_cm: numOrNull, width_cm: numOrNull, height_cm: numOrNull,
+            gross_weight_kg: { ...numOrNull, description: 'Gross weight of ONE carton, kg' },
+            net_weight_kg: { ...numOrNull, description: 'Net weight of ONE carton, kg' },
+            total_gross_weight_kg: { ...numOrNull, description: 'Total gross weight of the line, if only the total is given' },
+            total_net_weight_kg: numOrNull,
+          },
+          required: ['description'],
+        },
+      },
+      shipping_marks: strOrNull,
+      notes: { type: 'string', description: 'Anything unclear: units in mm/g/lbs converted, totals that do not add up, unreadable values' },
+    },
+    required: ['lines'],
+  },
+};
+
+export async function extractPacking(src, entity = null) {
+  const system = `You read packing lists from Chinese factories (Excel exports, PDFs, phone screenshots, WeChat images).
+Return one entry per line of the packing list. Copy numbers exactly; convert mm→cm, g→kg, lbs→kg, inches→cm.
+Dimensions and weights are PER CARTON. If the document only gives totals for a line, fill the total_* fields instead.
+Never invent values — use null when something is not in the document. Skip TOTAL rows.`;
+  const content = [];
+  if (src.pdf) content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: src.pdf.toString('base64') } });
+  if (src.image) content.push({ type: 'image', source: { type: 'base64', media_type: src.image.mediaType, data: src.image.data.toString('base64') } });
+  content.push({ type: 'text', text: `File: ${src.filename}\n${src.text ? `Spreadsheet contents (row number first, tab-separated):\n\n${src.text.slice(0, 120000)}\n\n` : ''}Record the packing list with record_packing_list.` });
+  const { input, truncated, usage } = await forcedTool({ tool: PACKING_TOOL, content, system, maxTokens: 12000, feature: 'packing_extract', entity });
+  return {
+    lines: input.lines || [], marks: input.shipping_marks || null,
+    notes: [input.notes, truncated ? 'The document was long — the AI may have stopped early. Check the last lines.' : null].filter(Boolean).join(' '),
+    usage,
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Freight quote reply (email or WeChat text) → price, transit, validity.
+// ---------------------------------------------------------------------------------------------
+const QUOTE_TOOL = {
+  name: 'record_freight_quote',
+  description: "Record the forwarder's offer from their reply.",
+  input_schema: {
+    type: 'object',
+    properties: {
+      is_quote: { type: 'boolean', description: 'false if the message has no price (e.g. a question, "will check", out-of-office)' },
+      amount: { ...numOrNull, description: 'All-in total for the shipment if given; otherwise the main freight total' },
+      currency: { ...strOrNull, description: 'ISO code: USD, CNY, EUR…' },
+      transit_days: { ...numOrNull, description: 'Transit time in days (use the upper value of a range)' },
+      valid_until: { ...strOrNull, description: 'YYYY-MM-DD if a validity date is given' },
+      mode: { ...strOrNull, description: 'Sea FCL / Sea LCL / Air / Express / Rail / Truck' },
+      breakdown: { type: 'array', items: { type: 'object', properties: { item: { type: 'string' }, amount: numOrNull, currency: strOrNull, per: strOrNull } }, description: 'Cost lines as written (freight, origin charges, destination charges, customs, per cbm/kg…)' },
+      includes: strOrNull, excludes: strOrNull,
+      questions: { ...strOrNull, description: 'Anything the forwarder asks us' },
+      summary: { type: 'string', description: 'One line in English, e.g. "USD 1,850 door-to-door, 32 days, valid to 31 Oct"' },
+    },
+    required: ['is_quote', 'summary'],
+  },
+};
+
+export async function extractQuote({ text, context }, entity = null) {
+  const system = `You read replies from freight forwarders (often Chinese/English mixed, from email or WeChat) to a freight quote request.
+Extract the offer exactly as written. Do not convert currencies. If several options are given, use the cheapest complete option for amount
+and list the others in breakdown. If the price is per cbm/kg, compute the total using the shipment totals given in context and say so in summary.
+Never invent numbers.`;
+  const content = [{ type: 'text', text: `Shipment we asked about: ${JSON.stringify(context || {})}\n\nReply:\n${String(text).slice(0, 15000)}` }];
+  const { input, usage } = await forcedTool({ tool: QUOTE_TOOL, content, system, maxTokens: 2000, feature: 'freight_quote_read', entity });
+  return { ...input, usage };
+}

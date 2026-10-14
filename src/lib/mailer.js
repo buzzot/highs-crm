@@ -4,7 +4,7 @@
 
 export const mailConfigured = () => !!process.env.RESEND_API_KEY && !!process.env.EMAIL_FROM;
 
-export async function sendEmail({ to, subject, html, text }) {
+export async function sendEmail({ to, subject, html, text, attachments, replyTo }) {
   if (!process.env.RESEND_API_KEY) {
     if (process.env.NODE_ENV === 'production') throw new Error('Email is not configured (RESEND_API_KEY missing).');
     console.log(`\n[mail:dev] to=${to}\n[mail:dev] subject=${subject}\n${text || ''}\n`);
@@ -16,7 +16,9 @@ export async function sendEmail({ to, subject, html, text }) {
     headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       from: process.env.EMAIL_FROM, to: Array.isArray(to) ? to : [to], subject, html, text,
-      ...(process.env.EMAIL_REPLY_TO ? { reply_to: process.env.EMAIL_REPLY_TO } : {}),
+      ...(replyTo || process.env.EMAIL_REPLY_TO ? { reply_to: replyTo || process.env.EMAIL_REPLY_TO } : {}),
+      // [{ filename, content: Buffer }] → Resend expects base64
+      ...(attachments?.length ? { attachments: attachments.map(a => ({ filename: a.filename, content: Buffer.isBuffer(a.content) ? a.content.toString('base64') : a.content })) } : {}),
     }),
   });
   const body = await res.json().catch(() => ({}));

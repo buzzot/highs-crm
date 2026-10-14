@@ -6,7 +6,7 @@ export const aiContext = new AsyncLocalStorage();
 
 export const FEATURES = {
   quote_check: 'Quote check', sourcing_brief: 'Sourcing brief', product_extract: 'Product import — reading the file',
-  product_review: 'Product import — row check', product_compare: 'Product compare',
+  product_review: 'Product import — row check', product_compare: 'Product compare', packing_extract: 'Packing list reading', freight_quote_read: 'Freight quote reading',
 };
 
 /** Normalise the Anthropic response usage. */

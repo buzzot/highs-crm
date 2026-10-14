@@ -59,7 +59,7 @@
     <thead><tr><th>When</th><th>Feature</th><th>Person</th><th>Model</th><th class="right">Input</th><th class="right">Output</th><th class="right">Total</th><% if (hasPrices) { %><th class="right">≈ Cost</th><% } %><th></th></tr></thead>
     <tbody>
     <% if (!recent.length) { %><tr><td colspan="9" class="muted">No AI calls yet.</td></tr><% } %>
-    <% recent.forEach(x => { const link = x.entity_type === 'request' ? '/admin/sourcing/' + x.entity_id : x.entity_type === 'quote' ? '/admin/pricing/quotes/' + x.entity_id : x.entity_type === 'product_import' ? '/admin/products/import/' + x.entity_id : null; %>
+    <% recent.forEach(x => { const link = x.entity_type === 'request' ? '/admin/sourcing/' + x.entity_id : x.entity_type === 'quote' ? '/admin/pricing/quotes/' + x.entity_id : x.entity_type === 'product_import' ? '/admin/products/import/' + x.entity_id : x.entity_type === 'order' ? '/admin/orders/' + x.entity_id : null; %>
       <tr class="<%= x.ok ? '' : 'dim' %>">
         <td class="muted small"><%= fmt.datetime(x.created_at) %></td>
         <td><%= fname(x.feature) %><% if (!x.ok) { %> <span class="badge warn" title="<%= x.error %>">failed</span><% } %></td>

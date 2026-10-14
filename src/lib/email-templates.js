@@ -126,3 +126,37 @@ export function changeDecidedEmail({ request, approved, note, url }) {
     text: `${approved ? 'Approved' : 'Not accepted'}: your changes to ${request.ref}. ${note || ''} ${url}`,
   };
 }
+
+// ---- freight quote request to a forwarder (packing list in the body + Excel attached) ----
+export function rfqEmail({ order, info = {}, rows, t, message, senderName, forwarderName }) {
+  const F = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+  const n = v => (v == null || v === '' ? '' : Number(v).toLocaleString('en-US'));
+  const td = (v, right) => `<td style="padding:7px 8px;border-bottom:1px solid #eef0f3;font-size:13px;color:#16202e;${right ? 'text-align:right;' : ''}">${esc(v ?? '')}</td>`;
+  const th = (v, right) => `<th style="padding:7px 8px;border-bottom:2px solid #dfe3e8;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#7a8494;text-align:${right ? 'right' : 'left'};">${esc(v)}</th>`;
+  const facts = [
+    ['Mode', info.mode], ['From', info.pol], ['To', info.pod], ['Incoterm', info.incoterm], ['Cargo ready', info.ready_date],
+    ['Cartons', n(t.cartons)], ['Pieces', n(t.pieces)], ['Gross weight', `${n(t.gross)} kg`], ['Volume', `${t.cbm} cbm`],
+    ['Shipping marks', info.marks], ['Cargo notes', info.remarks],
+  ].filter(([, v]) => v !== undefined && v !== null && v !== '');
+  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f1f3f6;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f3f6;"><tr><td align="center" style="padding:28px 12px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:760px;background:#fff;border:1px solid #e3e6eb;border-radius:14px;">
+<tr><td style="padding:26px 30px 6px;font-family:${F};">
+  <div style="font-size:20px;font-weight:700;color:#0f3d5c;">Lumi<span style="color:#0b8a7a;">Trade</span></div>
+  <div style="margin-top:14px;font-size:22px;font-weight:700;color:#16202e;">Freight quote request · ${esc(order.order_no)}</div>
+  <p style="font-size:15px;line-height:1.6;color:#2f3a4a;">Dear ${esc(forwarderName || 'partner')},<br>please quote freight for the shipment below${info.mode ? ` (${esc(info.mode)})` : ''}. The full packing list is attached as Excel.</p>
+  ${message ? `<p style="font-size:15px;line-height:1.6;color:#2f3a4a;white-space:pre-line;">${esc(message)}</p>` : ''}
+  <table role="presentation" cellpadding="0" cellspacing="0" style="margin:10px 0 18px;font-size:14px;">${facts.map(([k, v]) => `<tr><td style="padding:3px 18px 3px 0;color:#7a8494;">${esc(k)}</td><td style="padding:3px 0;color:#16202e;">${esc(v)}</td></tr>`).join('')}</table>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-family:${F};">
+    <tr>${th('CTN No.')}${th('Description')}${th('Ctns', 1)}${th('Pcs/ctn', 1)}${th('L×W×H cm', 1)}${th('GW/ctn kg', 1)}${th('Total CBM', 1)}</tr>
+    ${rows.map(x => `<tr>${td(x.carton_no)}${td([x.description, x.sku].filter(Boolean).join(' · '))}${td(n(x.cartons), 1)}${td(n(x.quantity), 1)}${td(x.length_cm ? `${Number(x.length_cm)}×${Number(x.width_cm)}×${Number(x.height_cm)}` : '', 1)}${td(n(x.gross_weight_kg), 1)}${td(x.length_cm ? (x.length_cm * x.width_cm * x.height_cm / 1e6 * x.cartons).toFixed(3) : '', 1)}</tr>`).join('')}
+    <tr><td style="padding:8px;font-weight:700;font-size:13px;">TOTAL</td><td></td><td style="padding:8px;text-align:right;font-weight:700;font-size:13px;">${n(t.cartons)}</td><td></td><td></td><td style="padding:8px;text-align:right;font-weight:700;font-size:13px;">${n(t.gross)} kg</td><td style="padding:8px;text-align:right;font-weight:700;font-size:13px;">${t.cbm}</td></tr>
+  </table>
+  <p style="font-size:15px;line-height:1.6;color:#2f3a4a;margin-top:20px;">Please include: freight, local charges at origin and destination, transit time and validity. Reply to this email with your offer.</p>
+  <p style="font-size:15px;color:#2f3a4a;">Best regards,<br>${esc(senderName || 'Lumi Trade logistics')}<br>Lumi Trade</p>
+</td></tr>
+<tr><td style="padding:14px 30px 24px;font-family:${F};font-size:12px;color:#7a8494;border-top:1px solid #eef0f3;">Lumi Trade · Sourcing, orders and shipments in one place</td></tr>
+</table></td></tr></table></body></html>`;
+  const text = [`Freight quote request — ${order.order_no}`, ...facts.map(([k, v]) => `${k}: ${v}`), '', message || '', 'Packing list attached (Excel).', '', senderName || 'Lumi Trade'].join('\n');
+  return { subject: `Freight quote request · ${order.order_no}${info.mode ? ' · ' + info.mode : ''}${info.pol && info.pod ? ` · ${info.pol} → ${info.pod}` : ''}`, html, text };
+}

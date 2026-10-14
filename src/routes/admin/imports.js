@@ -19,7 +19,7 @@ const IMG_TYPES = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif
 const s = v => (v == null ? '' : String(v).trim());
 
 // tiny CSV reader (quoted fields, comma / semicolon / tab)
-function readCsv(text) {
+export function readCsv(text) {
   const first = text.split(/\r?\n/, 1)[0] || '';
   const sep = [',', ';', '\t'].sort((a, b) => first.split(b).length - first.split(a).length)[0];
   const rows = []; let row = [], cell = '', q = false;

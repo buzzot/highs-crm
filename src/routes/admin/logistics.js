@@ -3,6 +3,7 @@ import { admin } from '../../lib/supabase.js';
 import { log } from '../../lib/activity.js';
 import { clean, bool, back, notFound, getSettings, fxRate, SHIPMENT_STATUSES, SHIPMENT_MODES, FREIGHT_TYPES, INCOTERMS, CURRENCIES } from '../../lib/util.js';
 import { landed } from '../../lib/landed.js';
+import { saveResponse } from '../../lib/freight-store.js';
 
 const r = Router();
 const SHIP_FIELDS = ['order_id', 'forwarder_id', 'mode', 'incoterm', 'origin_port', 'destination_port', 'container_no', 'tracking_no', 'bl_no',
@@ -16,7 +17,11 @@ r.get('/', async (req, res) => {
     .select('*, forwarders(name), orders(id, order_no, currency, organizations(name)), freight_costs(amount, fx_to_order, paid)')
     .order('eta', { ascending: true, nullsFirst: false });
   if (!showAll) q = q.neq('status', 'delivered');
-  const [{ data: shipments }, { data: forwarders }] = await Promise.all([q, admin.from('forwarders').select('*').order('name')]);
+  const [{ data: shipments }, { data: forwarders }, { data: rfqReqs }] = await Promise.all([
+    q, admin.from('forwarders').select('*').order('name'),
+    admin.from('freight_requests').select('*, orders(id, order_no, organizations(name)), freight_rfqs!freight_rfqs_request_id_fkey(id, status, quote_amount, quote_currency, sent_at, forwarders(name)), freight_responses!freight_responses_request_id_fkey(id, received_at)')
+      .order('created_at', { ascending: false }).limit(20),
+  ]);
   const list = (shipments || []).map(s => {
     const costs = s.freight_costs || [];
     return {
@@ -33,7 +38,42 @@ r.get('/', async (req, res) => {
     unpaid: list.reduce((t, s) => t + s.unpaid, 0),
     exportMissing: list.filter(s => s.exportMissing).length,
   };
-  res.render('admin/logistics/index', { title: 'Logistics', shipments: list, forwarders: forwarders || [], kpi, showAll, today });
+  res.render('admin/logistics/index', { title: 'Logistics', shipments: list, forwarders: forwarders || [], kpi, showAll, today, quoteRequests: rfqReqs || [] });
+});
+
+// ---- freight quote requests ----
+r.get('/quotes/:id', async (req, res) => {
+  const { data: fr } = await admin.from('freight_requests').select('*, orders(id, order_no, organizations(name)), profiles(full_name, email)').eq('id', req.params.id).single();
+  if (!fr) return notFound(res, 'Quote request');
+  const [{ data: rfqs }, { data: responses }] = await Promise.all([
+    admin.from('freight_rfqs').select('*, forwarders(id, name, contact_name, email, wechat)').eq('request_id', fr.id).order('sent_at'),
+    admin.from('freight_responses').select('*, profiles(full_name, email)').eq('request_id', fr.id).order('received_at'),
+  ]);
+  const quoted = (rfqs || []).filter(x => x.quote_amount != null);
+  const best = quoted.sort((a, b) => Number(a.quote_amount) - Number(b.quote_amount))[0] || null;
+  res.render('admin/logistics/quote_request', {
+    title: fr.ref, fr, rfqs: rfqs || [], responses: responses || [], bestId: best?.id || null,
+    inboundOn: !!process.env.QUOTE_REPLY_ADDRESS, msg: req.query.msg, err: req.query.err,
+  });
+});
+
+// paste a reply (WeChat / email) or type the offer → AI reads it → saved as a response
+r.post('/quotes/:id/response', async (req, res) => {
+  const { data: rfq } = await admin.from('freight_rfqs').select('*').eq('id', req.body.rfq_id).eq('request_id', req.params.id).single();
+  if (!rfq) return back(res, `/admin/logistics/quotes/${req.params.id}`, { err: 'Choose the forwarder who answered.' });
+  const text = String(req.body.text || '').trim();
+  const manual = { amount: req.body.amount, currency: req.body.currency, transit_days: req.body.transit_days, valid_until: req.body.valid_until, notes: req.body.notes };
+  if (!text && (manual.amount === '' || manual.amount == null)) return back(res, `/admin/logistics/quotes/${req.params.id}`, { err: 'Paste the reply or type the price.' });
+  try {
+    const { extracted, usage } = await saveResponse({ rfq, channel: req.body.channel === 'email' ? 'email' : req.body.channel === 'manual' ? 'manual' : 'wechat', text, manual, userId: req.user.id });
+    back(res, `/admin/logistics/quotes/${req.params.id}`, { msg: `Response saved${extracted?.summary ? ': ' + extracted.summary : ''}${usage ? ' — ' + res.locals.aiLine(usage) : ''}` });
+  } catch (e) { back(res, `/admin/logistics/quotes/${req.params.id}`, { err: e.message }); }
+});
+
+r.post('/quotes/:id/rfq/:rid/status', async (req, res) => {
+  const status = ['sent', 'quoted', 'declined', 'accepted'].includes(req.body.status) ? req.body.status : null;
+  if (status) await admin.from('freight_rfqs').update({ status }).eq('id', req.params.rid).eq('request_id', req.params.id);
+  back(res, `/admin/logistics/quotes/${req.params.id}`, { msg: 'Status updated.' });
 });
 
 // ---- forwarders ----
@@ -66,11 +106,12 @@ r.get('/shipments/new', async (req, res) => {
   const s = { order_id: req.query.order_id, mode: 'sea_lcl', incoterm: 'FOB', status: 'planned', export_official: true };
   if (req.query.order_id) {
     // pre-fill cargo totals from the packing list
-    const { data: pk } = await admin.from('packing_lists').select('gross_weight_kg, cbm').eq('order_id', req.query.order_id);
+    const { data: pk } = await admin.from('packing_lists').select('*').eq('order_id', req.query.order_id);
     if (pk?.length) {
-      s.cartons = pk.length;
-      s.gross_weight_kg = Math.round(pk.reduce((t, p) => t + Number(p.gross_weight_kg || 0), 0) * 1000) / 1000;
-      s.volume_cbm = Math.round(pk.reduce((t, p) => t + Number(p.cbm || 0), 0) * 10000) / 10000;
+      const c = p => Number(p.cartons || 1); // a line can cover several identical cartons
+      s.cartons = pk.reduce((t, p) => t + c(p), 0);
+      s.gross_weight_kg = Math.round(pk.reduce((t, p) => t + Number(p.gross_weight_kg || 0) * c(p), 0) * 1000) / 1000;
+      s.volume_cbm = Math.round(pk.reduce((t, p) => t + Number(p.cbm || 0) * c(p), 0) * 10000) / 10000;
     }
   }
   await shipForm(res, { s, title: 'New shipment' });

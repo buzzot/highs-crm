@@ -85,35 +85,66 @@
     </div>
 
     <div class="card" id="packing">
-      <h2>Packing list <span class="muted small"><%= packing.length %> cartons · <%= fmt.num(packing.reduce((t,p)=>t+Number(p.gross_weight_kg||0),0),1) %> kg · <%= fmt.num(packing.reduce((t,p)=>t+Number(p.cbm||0),0),3) %> cbm</span></h2>
+      <% const pt = { cartons: 0, pcs: 0, gw: 0, cbm: 0 }; packing.forEach(p => { const c = Number(p.cartons || 1); pt.cartons += c; pt.pcs += (Number(p.quantity) || 0) * c; pt.gw += (Number(p.gross_weight_kg) || 0) * c; pt.cbm += (Number(p.cbm) || 0) * c; }); %>
+      <h2>Packing list <span class="muted small"><%= pt.cartons %> cartons · <%= Number(pt.pcs).toLocaleString('en-US') %> pcs · <%= fmt.num(pt.gw, 1) %> kg · <%= fmt.num(pt.cbm, 3) %> cbm</span>
+        <span class="hactions"><% if (packing.length) { %><a class="btn small primary" href="/admin/orders/<%= order.id %>/packing-list">Packing list &amp; freight quotes →</a><% } %></span></h2>
       <% if (packing.length) { %>
-      <table class="tbl compact"><thead><tr><th>Carton</th><th>Contents</th><th>Qty</th><th>L×W×H cm</th><th>GW</th><th>NW</th><th>CBM</th><th></th></tr></thead><tbody>
-      <% packing.forEach(p => { %>
-        <tr><td><%= p.carton_no %></td><td><%= p.description %></td><td><%= p.quantity %></td><td><%= p.length_cm %>×<%= p.width_cm %>×<%= p.height_cm %></td>
-          <td><%= fmt.num(p.gross_weight_kg,1) %></td><td><%= fmt.num(p.net_weight_kg,1) %></td><td><%= fmt.num(p.cbm,3) %></td>
-          <td><form method="post" action="/admin/orders/<%= order.id %>/packing/<%= p.id %>/delete" class="inline"><button class="link small danger">×</button></form></td></tr>
+      <table class="tbl compact"><thead><tr><th>CTN No.</th><th class="right">Ctns</th><th>Contents</th><th class="right">Pcs/ctn</th><th>L×W×H cm</th><th class="right">GW/ctn</th><th class="right">CBM total</th><th></th></tr></thead><tbody>
+      <% packing.forEach(p => { const c = Number(p.cartons || 1); %>
+        <tr><td><%= p.carton_no %></td><td class="right"><%= c %></td><td><%= p.description %><% if (p.sku) { %> <span class="muted small"><%= p.sku %></span><% } %></td><td class="right"><%= p.quantity ?? '—' %></td>
+          <td><%= p.length_cm ? Number(p.length_cm) + '×' + Number(p.width_cm) + '×' + Number(p.height_cm) : '—' %></td>
+          <td class="right"><%= p.gross_weight_kg != null ? fmt.num(p.gross_weight_kg, 1) : '—' %></td><td class="right"><%= fmt.num((Number(p.cbm) || 0) * c, 3) %></td>
+          <td><form method="post" action="/admin/orders/<%= order.id %>/packing/<%= p.id %>/delete" class="inline"><button class="link small danger" title="Remove line">×</button></form></td></tr>
       <% }) %>
       </tbody></table>
       <% } %>
-      <details>
-        <summary class="btn small">+ Add cartons</summary>
-        <form method="post" action="/admin/orders/<%= order.id %>/packing" class="sub">
-          <div class="row">
-            <label>First carton no. <input name="carton_no" required value="<%= packing.length + 1 %>"></label>
-            <label>× identical cartons <input type="number" name="copies" min="1" max="500" value="1"></label>
-            <label class="grow2">Contents <input name="description" value="<%= items[0]?.description || '' %>"></label>
-            <label>Pcs / carton <input type="number" name="quantity"></label>
+
+      <form method="post" action="/admin/orders/<%= order.id %>/packing/import" enctype="multipart/form-data" class="packimport" id="packImport">
+        <div class="dropwrap">
+          <div class="filedrop compact" data-dropzone data-max="1" data-max-mb="20" tabindex="0">
+            <input type="file" name="file" accept=".xlsx,.xlsm,.csv,.pdf,image/*" aria-label="Packing list file">
+            <span class="dicon"><%- icon('upload') %></span>
+            <strong data-drop-count>Drop the supplier's packing list here, or <span class="dlink">browse</span></strong>
+            <span class="muted small dsub">Excel, CSV, PDF or a screenshot (paste with ⌘/Ctrl V) — AI turns it into a standard packing list you check before saving</span>
           </div>
-          <div class="row">
-            <label>L cm <input type="number" step="0.1" name="length_cm"></label>
-            <label>W cm <input type="number" step="0.1" name="width_cm"></label>
-            <label>H cm <input type="number" step="0.1" name="height_cm"></label>
-            <label>GW kg <input type="number" step="0.01" name="gross_weight_kg"></label>
-            <label>NW kg <input type="number" step="0.01" name="net_weight_kg"></label>
-          </div>
-          <button class="btn primary">Add</button>
-        </form>
-      </details>
+          <div class="fgrid" data-drop-list></div>
+        </div>
+        <div class="actions"><button class="btn primary" id="packRead">✦ Read packing list</button>
+          <details class="inline-details">
+            <summary class="btn small">+ Add cartons by hand</summary>
+          </details>
+          <% if (packing.length) { %><button class="link small danger" formaction="/admin/orders/<%= order.id %>/packing-clear" formenctype="application/x-www-form-urlencoded" onclick="return confirm('Remove all packing lines?')">Clear packing list</button><% } %>
+        </div>
+      </form>
+      <form method="post" action="/admin/orders/<%= order.id %>/packing" class="sub" id="packManual" hidden>
+        <div class="row">
+          <label>First carton no. <input name="carton_no" required value="<%= pt.cartons + 1 %>"></label>
+          <label>Cartons <input type="number" name="copies" min="1" max="5000" value="1"></label>
+          <label class="grow2">Contents <input name="description" value="<%= items[0]?.description || '' %>"></label>
+          <label>Item / SKU <input name="sku"></label>
+          <label>Pcs / carton <input type="number" name="quantity"></label>
+        </div>
+        <div class="row">
+          <label>L cm <input type="number" step="0.1" name="length_cm"></label>
+          <label>W cm <input type="number" step="0.1" name="width_cm"></label>
+          <label>H cm <input type="number" step="0.1" name="height_cm"></label>
+          <label>GW kg / carton <input type="number" step="0.01" name="gross_weight_kg"></label>
+          <label>NW kg / carton <input type="number" step="0.01" name="net_weight_kg"></label>
+        </div>
+        <button class="btn primary">Add</button>
+      </form>
+      <script>
+        (function () {
+          const d = document.querySelector('#packImport details'), m = document.getElementById('packManual');
+          d.addEventListener('toggle', () => { m.hidden = !d.open; });
+          document.getElementById('packImport').addEventListener('submit', e => {
+            if (e.submitter && e.submitter.id === 'packRead') {
+              if (!e.target.querySelector('input[type=file]').files.length) { e.preventDefault(); alert('Drop or choose a packing list file first.'); return; }
+              e.submitter.textContent = '✦ Reading…'; e.submitter.disabled = true;
+            }
+          });
+        })();
+      </script>
     </div>
 
     <%- include('../../partials/docs', { docs, entityType: 'order', entityId: order.id, redirect: '/admin/orders/' + order.id, heading: 'Product & packing photos, documents', defaultKind: 'product_photo' }) %>

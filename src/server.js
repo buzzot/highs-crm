@@ -7,6 +7,7 @@ import { loadUser } from './middleware/auth.js';
 import authRoutes from './routes/auth.js';
 import portalRoutes from './routes/portal.js';
 import supplierRoutes from './routes/supplier.js';
+import hookRoutes from './routes/hooks.js';
 import adminRoutes from './routes/admin/index.js';
 import { fmt } from './lib/format.js';
 import { icon } from './lib/icons.js';
@@ -20,8 +21,11 @@ const app = express();
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.set('trust proxy', 1);
-app.use(express.urlencoded({ extended: true, parameterLimit: 50000, limit: '5mb' })); // import review posts many fields
-app.use(express.json());
+// /hooks/* parse their own (larger) bodies — inbound emails can be big
+const formParser = express.urlencoded({ extended: true, parameterLimit: 50000, limit: '5mb' }); // import review posts many fields
+const jsonParser = express.json();
+app.use((req, res, next) => (req.path.startsWith('/hooks/') ? next() : formParser(req, res, next)));
+app.use((req, res, next) => (req.path.startsWith('/hooks/') ? next() : jsonParser(req, res, next)));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 // the quote calculator in the browser uses the exact same pricing module as the server
@@ -73,6 +77,7 @@ app.get('/health/db', async (req, res) => {
     app_url: process.env.APP_URL || null,
   });
 });
+app.use('/hooks', hookRoutes);
 app.use('/', authRoutes);
 app.use('/portal', portalRoutes);
 app.use('/supplier', supplierRoutes);
