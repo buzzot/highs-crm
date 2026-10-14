@@ -1,4 +1,18 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { usageFrom, recordUsage } from './ai-usage.js';
+
+/** Run one API call, record its tokens (or the failure), return { msg, usage }. */
+async function tracked(feature, entity, fn) {
+  try {
+    const msg = await fn();
+    const usage = usageFrom(msg, MODEL);
+    await recordUsage({ feature, usage, entityType: entity?.type, entityId: entity?.id });
+    return { msg, usage };
+  } catch (e) {
+    await recordUsage({ feature, usage: { model: MODEL, input: 0, output: 0 }, entityType: entity?.type, entityId: entity?.id, ok: false, error: e.message });
+    throw e;
+  }
+}
 
 const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5-5';
 
@@ -57,12 +71,12 @@ quantity below supplier MOQ, freight estimate plausibility versus weight/volume 
 lead time versus the client's needed-by date, missing fields, and whether the price is likely to be competitive against the client's target.
 Respond ONLY with JSON: {"ok":bool,"score":0-100,"issues":[{"severity":"high|medium|low","field":string,"message":string}],"summary":string}`;
 
-  const msg = await client.messages.create({
+  const { msg, usage } = await tracked('quote_check', { type: 'quote', id: quote?.id }, () => client.messages.create({
     model: MODEL,
     max_tokens: 1024,
     system,
     messages: [{ role: 'user', content: JSON.stringify(payload) }],
-  });
+  }));
 
   const text = msg.content.map(c => (c.type === 'text' ? c.text : '')).join('');
   let parsed;
@@ -78,7 +92,8 @@ Respond ONLY with JSON: {"ok":bool,"score":0-100,"issues":[{"severity":"high|med
     score: Math.min(Number(parsed.score) || 0, ruleIssues.length ? 49 : 100),
     issues,
     summary: parsed.summary || '',
-    model: MODEL,
+    model: usage.model || MODEL,
+    usage,
     checked_at: new Date().toISOString(),
   };
 }
@@ -101,10 +116,10 @@ Respond ONLY with JSON:
 {"summary": string (2–4 sentences), "recommended_id": string|null,
  "ranking": [{"id": string, "score": 0-100, "verdict": string (one line), "pros": [string], "cons": [string]}],
  "risks": [string], "questions": [string] (what to ask the suppliers before ordering)}`;
-  const msg = await client.messages.create({
+  const { msg, usage } = await tracked('product_compare', null, () => client.messages.create({
     model: MODEL, max_tokens: 4000, system,
     messages: [{ role: 'user', content: `${purpose ? `What the buyer needs: ${purpose}\n\n` : ''}Products (prices in USD unless noted):\n${JSON.stringify(products, null, 1)}` }],
-  });
+  }));
   const text = msg.content.map(c => (c.type === 'text' ? c.text : '')).join('');
   const a = text.indexOf('{'), b = text.lastIndexOf('}');
   let out;
@@ -113,21 +128,21 @@ Respond ONLY with JSON:
   out.ranking = (out.ranking || []).filter(x => ids.has(x.id)).sort((x, y) => (y.score || 0) - (x.score || 0));
   if (!ids.has(out.recommended_id)) out.recommended_id = out.ranking[0]?.id || null;
   out.risks ||= []; out.questions ||= [];
-  return { ...out, model: MODEL, at: new Date().toISOString() };
+  return { ...out, model: usage.model || MODEL, usage, at: new Date().toISOString() };
 }
 
-export async function summarizeRequest(request) {
+export async function summarizeRequest(request, requestId = null) {
   if (!process.env.ANTHROPIC_API_KEY) return null;
   const client = new Anthropic();
-  const msg = await client.messages.create({
+  const { msg, usage } = await tracked('sourcing_brief', { type: 'request', id: requestId }, () => client.messages.create({
     model: MODEL,
     max_tokens: 600,
     messages: [{
       role: 'user',
       content: `Turn this client request into a concise sourcing brief for a China sourcing team: product spec bullets, likely category, suggested HS chapter, questions to clarify with the client.\n\n${JSON.stringify(request)}`,
     }],
-  });
-  return msg.content.map(c => (c.type === 'text' ? c.text : '')).join('');
+  }));
+  return { text: msg.content.map(c => (c.type === 'text' ? c.text : '')).join(''), usage };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -188,36 +203,36 @@ function jsonFromText(text) {
   try { return JSON.parse(text.slice(s, e + 1)); } catch { return null; }
 }
 
-async function forcedTool({ tool, content, system, maxTokens = 16000 }) {
+async function forcedTool({ tool, content, system, maxTokens = 16000, feature, entity }) {
   const client = new Anthropic();
-  const run = forced => client.messages.stream({
+  const run = forced => tracked(feature, entity, () => client.messages.stream({
     model: MODEL, max_tokens: maxTokens,
     system: forced ? system : `${system}\n\nYou MUST answer by calling the \`${tool.name}\` tool exactly once with the complete result. Do not answer in plain text.`,
     tools: [tool], tool_choice: forced ? { type: 'tool', name: tool.name } : { type: 'auto' },
     messages: [{ role: 'user', content }],
-  }).finalMessage();
+  }).finalMessage());
 
-  let msg;
+  let msg, usage;
   if (!forcedUnsupported) {
-    try { msg = await run(true); } catch (e) {
+    try { ({ msg, usage } = await run(true)); } catch (e) {
       if (!isToolChoiceError(e)) throw e;
       forcedUnsupported = true;
       console.warn(`[ai] ${MODEL} does not support a forced tool choice — using tool_choice "auto"`);
     }
   }
-  if (!msg) msg = await run(false);
+  if (!msg) ({ msg, usage } = await run(false));
 
   const use = msg.content.find(c => c.type === 'tool_use' && c.name === tool.name);
   const input = use?.input || jsonFromText(msg.content.map(c => (c.type === 'text' ? c.text : '')).join(''));
   if (!input) throw new Error('AI returned no structured result. Try again, or use the Excel template.');
-  return { input, truncated: msg.stop_reason === 'max_tokens', model: MODEL };
+  return { input, truncated: msg.stop_reason === 'max_tokens', model: usage.model || MODEL, usage };
 }
 
 /**
  * Extract supplier + products from a PDF / image (buffer) or spreadsheet text.
  * @param {{ pdf?: Buffer, image?: { data: Buffer, mediaType: string }, text?: string, filename: string }} src
  */
-export async function extractProducts(src) {
+export async function extractProducts(src, entity = null) {
   const system = `You extract product data for a China-sourcing trading company from supplier documents
 (price lists, quotations, catalogues, product forms). Be exact: copy numbers as written, convert units to kg and cm,
 never guess values that are not in the document (use null), translate Chinese product names to English (keep the original in notes if useful).
@@ -230,8 +245,8 @@ The supplier is the company that ISSUED the document (letterhead, stamp, signatu
     type: 'text',
     text: `File: ${src.filename}\n${src.text ? `Spreadsheet contents (row number first, tab-separated cells):\n\n${src.text.slice(0, 180000)}\n\n` : ''}Extract the supplier and all products with record_products. For spreadsheets set source_row to the row number.`,
   });
-  const { input, truncated, model } = await forcedTool({ tool: EXTRACT_TOOL, content, system });
-  return { supplier: input.supplier || {}, products: input.products || [], notes: [input.notes, truncated ? 'The document was long — the AI may have stopped before the last products. Check the end of the list.' : null].filter(Boolean).join(' '), model };
+  const { input, truncated, model, usage } = await forcedTool({ tool: EXTRACT_TOOL, content, system, feature: 'product_extract', entity });
+  return { supplier: input.supplier || {}, products: input.products || [], notes: [input.notes, truncated ? 'The document was long — the AI may have stopped before the last products. Check the end of the list.' : null].filter(Boolean).join(' '), model, usage };
 }
 
 const REVIEW_TOOL = {
@@ -261,9 +276,9 @@ const REVIEW_TOOL = {
 };
 
 /** Second opinion on imported rows: HS code vs product, implausible weights/sizes/prices, duplicates. */
-export async function reviewProducts({ supplier, products }) {
+export async function reviewProducts({ supplier, products }, entity = null) {
   const rows = products.slice(0, 200).map((p, i) => ({ i, ...p, image: undefined, match: undefined, issues: undefined }));
-  const { input } = await forcedTool({
+  const { input, usage } = await forcedTool({ feature: 'product_review', entity,
     tool: REVIEW_TOOL, maxTokens: 8000,
     system: `You check product data before it is imported into a trading company's catalogue.
 Flag only real problems: HS code that doesn't fit the product (give the likely 6-digit heading as suggestion), weights/sizes
@@ -272,5 +287,5 @@ doesn't fit the carton volume, prices that look like a different currency or uni
 and missing data that matters for shipping (carton size/weight). Be concise. Don't repeat the same issue for every row — mention it once per row only when it applies.`,
     content: [{ type: 'text', text: JSON.stringify({ supplier: { name: supplier?.name }, products: rows }) }],
   });
-  return { issues: input.issues || [], summary: input.summary || '' };
+  return { issues: input.issues || [], summary: input.summary || '', usage };
 }

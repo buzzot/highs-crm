@@ -3,6 +3,7 @@ import { fmt } from '../src/lib/format.js';
 import { icon } from '../src/lib/icons.js';
 import { showValue, deliveryLabel, snapshot, diff } from '../src/lib/request-revisions.js';
 import { productMetrics } from '../src/lib/product-metrics.js';
+import { usageLine } from '../src/lib/ai-usage.js';
 import { calcQuote } from '../src/lib/pricing.js';
 import { landed } from '../src/lib/landed.js';
 
@@ -28,7 +29,7 @@ const requests = [
 
 const calc = calcQuote({ unitCost: 38.5, fxRate: 0.138, marginPct: 25, quantity: 2000, freightTotal: 820, dutiesTotal: 300, otherTotal: 80 });
 const quote = { id: 'q1', request_id: 'r1', product_id: 'p1', supplier_id: 's1', quantity: 2000, unit_cost: 38.5, cost_currency: 'CNY', fx_rate: 0.138, margin_pct: 25, sell_currency: 'USD', unit_price: calc.unitPrice, freight_estimate: 820, duties_estimate: 300, other_costs: 80, landed_unit_price: calc.landedUnitPrice, incoterm: 'FOB', lead_time_days: 30, valid_until: day(30), status: 'draft', notes: 'Price includes laser logo.', created_at: d(-2),
-  ai_check: { ok: false, score: 72, issues: [{ severity: 'medium', field: 'lead_time', message: '30 days production + ~25 days sea leaves little buffer before the needed-by date.' }, { severity: 'low', field: 'hs_code', message: '9405.21 fits electric table lamps.' }], summary: 'Pricing is consistent; schedule is tight.', model: 'claude-sonnet-5-5', checked_at: d(-1) } };
+  ai_check: { usage: { model: 'claude-haiku-5-5', input: 1450, output: 210, cacheRead: 0, cacheWrite: 0, total: 1660 }, ok: false, score: 72, issues: [{ severity: 'medium', field: 'lead_time', message: '30 days production + ~25 days sea leaves little buffer before the needed-by date.' }, { severity: 'low', field: 'hs_code', message: '9405.21 fits electric table lamps.' }], summary: 'Pricing is consistent; schedule is tight.', model: 'claude-sonnet-5-5', checked_at: d(-1) } };
 
 const overview = { id: 'ord1', order_no: 'HB-2610-1187', org_id: 'o1', request_id: 'r1', quote_id: 'q1', supplier_id: 's1', status: 'in_production', currency: 'USD', subtotal: 13282.5, cost_total: 10626, freight_total: 1240, client_notes: 'Production started 8 Oct.', internal_notes: 'Deposit paid 7 Oct.', expected_ship_date: day(20), created_at: d(-9), updated_at: d(-1), client_name: 'Acme Retail LLC', supplier_name: sup.name, shipment_count: 1, latest_eta: day(48), margin_pct: 25, gross_profit: 1416.5 };
 const items = [{ id: 'i1', order_id: 'ord1', product_id: 'p1', description: 'LED Desk Lamp 10W', quantity: 2000, unit_cost: 5.313, unit_price: 6.6413, hs_code: '9405.21', products: { id: 'p1', name: prod.name, sku: prod.sku } }];
@@ -75,7 +76,7 @@ const INCOTERMS = ['EXW', 'FOB', 'FCA', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DDP'
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CNY'];
 const ORDER_STATUSES = ['confirmed', 'deposit_paid', 'in_production', 'qc', 'packed', 'shipped', 'in_transit', 'customs', 'delivered', 'closed', 'cancelled'];
 
-const base = (user, path, extra = {}) => ({ fmt, icon, showValue, deliveryLabel, user, path, query: {}, msg: null, err: null, ...extra });
+const base = (user, path, extra = {}) => ({ fmt, icon, aiLine: u => usageLine(u), showValue, deliveryLabel, user, path, query: {}, msg: null, err: null, ...extra });
 const months = ['May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'].map((label, i) => ({ key: label, label, revenue: [8200, 12100, 9400, 15800, 18300, 13300][i], profit: [1500, 2300, 1700, 3000, 3500, 2500][i] }));
 const ordersList = [overview, { ...overview, id: 'ord2', order_no: 'HB-2610-1190', client_name: 'Nordic Home AB', status: 'qc', subtotal: 9150, cost_total: 7810, margin_pct: 17.2, gross_profit: 980, freight_total: 360 }, { ...overview, id: 'ord3', order_no: 'HB-2609-1102', status: 'in_transit', subtotal: 22400, margin_pct: 28, gross_profit: 3900 }];
 
@@ -114,7 +115,7 @@ export const pages = {
   'admin/products/compare': base(staffUser, '/admin/products/compare', { title: 'Compare products', container: settings.container, purpose: '', aiError: null, thumb: { p1: 'doc1' }, specKeys: ['Material', 'Power'],
     products: [{ ...prod, spec: { Material: 'Aluminium', Power: '10 W' }, suppliers: { id: 's1', name: sup.name, rating: 4, lead_time_days: 30, can_export_official: true, city: 'Shenzhen', country: 'China' }, m: productMetrics(prod, c => (c === 'CNY' ? 0.138 : 1), settings.container) },
                { ...prod2, spec: { Material: 'Steel' }, suppliers: { id: 's2', name: 'Yiwu Sunhome Houseware', rating: 3, lead_time_days: 25, can_export_official: false, city: 'Yiwu', country: 'China' }, m: productMetrics(prod2, c => (c === 'CNY' ? 0.138 : 1), settings.container) }],
-    ai: { summary: 'The lamp lands cheaper per unit and ships more efficiently.', recommended_id: prod.id, model: 'claude-sonnet-5-5', risks: ['Tumbler supplier has no export rights.'], questions: ['Confirm carton weight for the tumbler.'],
+    ai: { summary: 'The lamp lands cheaper per unit and ships more efficiently.', recommended_id: prod.id, model: 'claude-haiku-5-5', usage: { model: 'claude-haiku-5-5', input: 3900, output: 284, cacheRead: 0, cacheWrite: 0, total: 4184 }, risks: ['Tumbler supplier has no export rights.'], questions: ['Confirm carton weight for the tumbler.'],
       ranking: [{ id: prod.id, score: 82, verdict: 'Best value', pros: ['Lowest landed cost'], cons: ['Higher MOQ'] }, { id: prod2.id, score: 64, verdict: 'OK', pros: ['Low price'], cons: ['Missing data'] }] } }),
   'admin/products/form': base(staffUser, '/admin/products/new', { title: 'New product', p: { cost_currency: 'CNY' }, specText: '', suppliers: lists.suppliers, photos: [{ id: 'doc1', title: 'front.jpg' }, { id: 'doc2', title: 'box.jpg' }], error: null }),
   'admin/products/detail': base(staffUser, '/admin/products/p1', { title: prod.name, p: { ...prod, suppliers: sup }, docs, quotes: [{ ...quote, requests: { id: 'r1', ref: request.ref, organizations: { name: 'Acme Retail LLC' } } }], specText: 'Power: 10 W\nMaterial: Aluminium' }),
@@ -169,6 +170,13 @@ export const pages = {
   'supplier/company': base({ ...supplierUser, supplier: { id: 's1', name: '(factory.example)', details_completed_at: null } }, '/supplier/company', { title: 'Company details', form: { contact_name: 'Li Kuan', email: 'marsel@lulyboo.com' }, errors: { name: 'Enter the company name.', main_products: 'Tell us what you make or sell.' }, first: true, saved: false, types: { factory: 'Factory / manufacturer', trading: 'Trading company', both: 'Factory with own trading arm' } }),
   'supplier/company_saved': ['supplier/company', base(supplierUser, '/supplier/company', { title: 'Company details', form: { ...sup, company_type: 'factory', can_export_official: true }, errors: {}, first: false, saved: true, types: { factory: 'Factory / manufacturer', trading: 'Trading company', both: 'Factory with own trading arm' } })],
   'supplier/products': base(supplierUser, '/supplier/products', { title: 'My products', products: [{ ...prod, supplier_sku: 'BW-1' }, prod2], photoOf: { [prod.id]: 'ph1' } }),
+  'admin/ai_usage': base(staffUser, '/admin/ai-usage', { title: 'AI usage', missing: false, msg: null, prices: { input_per_m: 1, output_per_m: 5 }, features: { product_compare: 'Product compare', quote_check: 'Quote check' },
+    totals: { today: { calls: 2, failed: 0, input: 7800, output: 568, total: 8368, cost: 0.0106 }, week: { calls: 9, failed: 1, input: 40000, output: 3000, total: 43000, cost: 0.055 }, month: { calls: 30, failed: 1, input: 160000, output: 12000, total: 172000, cost: 0.22 } },
+    byFeature: [{ key: 'product_compare', calls: 4, failed: 0, input: 15600, output: 1136, total: 16736, cost: 0.02 }, { key: 'quote_check', calls: 5, failed: 1, input: 9000, output: 900, total: 9900, cost: 0.0135 }],
+    byUser: [{ key: 'Anna Lee', calls: 9, total: 26636, cost: 0.0335 }], byModel: [{ key: 'claude-haiku-5-5', calls: 9, total: 26636 }],
+    days: Array.from({ length: 30 }, (_, i) => ({ key: '2026-10-' + String((i % 28) + 1).padStart(2, '0'), calls: i % 3, total: (i * 977) % 9000 })),
+    recent: [{ created_at: d(0), feature: 'product_compare', who: 'Anna Lee', model: 'claude-haiku-5-5', ok: true, u: { input: 3900, output: 284, cacheRead: 0, cacheWrite: 0, total: 4184 }, cost: 0.0053, entity_type: null },
+             { created_at: d(-1), feature: 'quote_check', who: 'Anna Lee', model: 'claude-haiku-5-5', ok: false, error: 'overloaded', u: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }, cost: 0, entity_type: 'quote', entity_id: 'q1' }] }),
   'auth/account': base({ ...clientUser, job_title: 'Buyer', phone: '+1 555 0100' }, '/account', { title: 'My account', saved: false }),
   error: base(staffUser, '/x', { title: 'Not found', message: 'Page not found.' }),
 };

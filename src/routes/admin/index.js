@@ -13,6 +13,7 @@ import logistics from './logistics.js';
 import pricing from './pricing.js';
 import documents from './documents.js';
 import orders from './orders.js';
+import { FEATURES, costOf, clearPriceCache, getPrices } from '../../lib/ai-usage.js';
 
 const r = Router();
 r.use(requireStaff);
@@ -71,6 +72,39 @@ async function emailCheck(req, res, extra = {}) {
     twoFa: !/^(off|false|0|no)$/i.test(process.env.LOGIN_2FA || ''), ...extra });
 }
 r.get('/email-check', requireAdmin, (req, res) => emailCheck(req, res));
+
+// AI usage report: tokens per day, feature, person and model (last 30 days) + optional cost estimate
+r.get('/ai-usage', requireAdmin, async (req, res) => {
+  const since = new Date(Date.now() - 30 * 864e5).toISOString();
+  const [{ data: rows, error }, { data: people }, prices] = await Promise.all([
+    admin.from('ai_usage').select('*').gte('created_at', since).order('created_at', { ascending: false }).limit(10000),
+    admin.from('profiles').select('id, full_name, email').in('role', ['admin', 'staff']),
+    getPrices(),
+  ]);
+  const who = Object.fromEntries((people || []).map(p => [p.id, p.full_name || p.email]));
+  const list = (rows || []).map(x => {
+    const u = { model: x.model, input: x.input_tokens, output: x.output_tokens, cacheRead: x.cache_read_tokens, cacheWrite: x.cache_write_tokens };
+    u.total = u.input + u.output + u.cacheRead + u.cacheWrite;
+    return { ...x, u, cost: costOf(u, prices), who: who[x.user_id] || (x.user_id ? 'former user' : 'system') };
+  });
+  const sum = xs => xs.reduce((a, x) => ({ calls: a.calls + 1, failed: a.failed + (x.ok ? 0 : 1), input: a.input + x.u.input + x.u.cacheRead + x.u.cacheWrite, output: a.output + x.u.output, total: a.total + x.u.total, cost: x.cost == null ? a.cost : (a.cost || 0) + x.cost }), { calls: 0, failed: 0, input: 0, output: 0, total: 0, cost: null });
+  const day = d => new Date(d).toISOString().slice(0, 10);
+  const today = day(Date.now());
+  const group = key => Object.entries(list.reduce((m, x) => ((m[key(x)] ||= []).push(x), m), {})).map(([k, xs]) => ({ key: k, ...sum(xs) })).sort((a, b) => b.total - a.total);
+  const days = Array.from({ length: 30 }, (_, i) => day(Date.now() - (29 - i) * 864e5)).map(d => ({ key: d, ...sum(list.filter(x => day(x.created_at) === d)) }));
+  res.render('admin/ai_usage', {
+    title: 'AI usage', missing: !!error, prices: prices || {}, features: FEATURES,
+    totals: { today: sum(list.filter(x => day(x.created_at) === today)), week: sum(list.filter(x => x.created_at >= new Date(Date.now() - 7 * 864e5).toISOString())), month: sum(list) },
+    byFeature: group(x => x.feature), byUser: group(x => x.who), byModel: group(x => x.model || '—'), days, recent: list.slice(0, 60),
+    msg: req.query.msg,
+  });
+});
+r.post('/ai-usage/prices', requireAdmin, async (req, res) => {
+  const v = k => (Number(req.body[k]) >= 0 ? Number(req.body[k]) : 0);
+  await admin.from('settings').upsert({ key: 'ai_prices', value: { input_per_m: v('input_per_m'), output_per_m: v('output_per_m') }, updated_at: new Date().toISOString() });
+  clearPriceCache();
+  res.redirect('/admin/ai-usage?msg=' + encodeURIComponent('Prices saved — costs are estimates from these prices.'));
+});
 r.post('/email-check/test', requireAdmin, async (req, res) => {
   const to = String(req.body.to || req.user.email).trim();
   try {

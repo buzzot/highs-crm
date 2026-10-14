@@ -96,9 +96,24 @@
     </form>
   </div>
 
-  <div class="card" id="activity">
-    <h2>Activity</h2>
-    <%- include('../../partials/crm_activity', { events: evs, action: '/admin/suppliers/' + s.id + '/activity', types: acts, today }) %>
+  <div class="stack">
+    <div class="card" id="activity">
+      <h2>Activity</h2>
+      <%- include('../../partials/crm_activity', { events: evs, action: '/admin/suppliers/' + s.id + '/activity', types: acts, today }) %>
+    </div>
+    <div class="card">
+      <h2>Orders <span class="count"><%= orders.length %></span></h2>
+      <% if (!orders.length) { %><p class="muted">No orders yet.</p><% } else { %>
+      <table class="tbl"><thead><tr><th>Order</th><th>Client</th><th>Status</th><th class="right">Cost</th></tr></thead><tbody>
+      <% orders.forEach(o => { %>
+        <tr><td><a href="/admin/orders/<%= o.id %>"><%= o.order_no %></a></td><td><%= o.client_name %></td><td><span class="pill <%= o.status %>"><%= fmt.status(o.status) %></span></td><td class="right"><%= fmt.money(o.cost_total, o.currency) %></td></tr>
+      <% }) %>
+      </tbody></table>
+      <% } %>
+    </div>
+    <div>
+      <%- include('../../partials/docs', { docs, entityType: 'supplier', entityId: s.id, redirect: '/admin/suppliers/' + s.id, kinds: ['certificate','qc_report','other','product_photo'], heading: 'Licences, certificates & files', defaultKind: 'certificate', defaultVisible: false }) %>
+    </div>
   </div>
 </div>
 
@@ -133,22 +148,6 @@
     <a href="/templates/lumi-trade-product-import-template.xlsx" download>Excel template</a>
     <span class="muted small">Excel, CSV, PDF or a photo — you review everything before it's saved.</span>
   </form>
-</div>
-
-<div class="grid2 even">
-  <div class="card">
-    <h2>Orders <span class="count"><%= orders.length %></span></h2>
-    <% if (!orders.length) { %><p class="muted">No orders yet.</p><% } else { %>
-    <table class="tbl"><thead><tr><th>Order</th><th>Client</th><th>Status</th><th class="right">Cost</th></tr></thead><tbody>
-    <% orders.forEach(o => { %>
-      <tr><td><a href="/admin/orders/<%= o.id %>"><%= o.order_no %></a></td><td><%= o.client_name %></td><td><span class="pill <%= o.status %>"><%= fmt.status(o.status) %></span></td><td class="right"><%= fmt.money(o.cost_total, o.currency) %></td></tr>
-    <% }) %>
-    </tbody></table>
-    <% } %>
-  </div>
-  <div>
-    <%- include('../../partials/docs', { docs, entityType: 'supplier', entityId: s.id, redirect: '/admin/suppliers/' + s.id, kinds: ['certificate','qc_report','other','product_photo'], heading: 'Licences, certificates & files', defaultKind: 'certificate', defaultVisible: false }) %>
-  </div>
 </div>
 
 <% if (isAdmin) { %>

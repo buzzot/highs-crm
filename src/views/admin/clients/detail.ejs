@@ -67,32 +67,30 @@
     </form>
   </div>
 
-  <div class="card" id="activity">
-    <h2>Activity</h2>
-    <%- include('../../partials/crm_activity', { events: evs, action: '/admin/clients/' + org.id + '/activity', types, today }) %>
+  <div class="stack">
+    <div class="card" id="activity">
+      <h2>Activity</h2>
+      <%- include('../../partials/crm_activity', { events: evs, action: '/admin/clients/' + org.id + '/activity', types, today }) %>
+    </div>
+    <div class="card">
+      <h2>Requests <span class="count"><%= requests.length %></span></h2>
+      <% if (!requests.length) { %><p class="muted">No requests yet — the client sends them from the portal.</p><% } else { %>
+      <table class="tbl">
+        <thead><tr><th>Request</th><th class="right">Products</th><th>Quotes</th><th>Status</th></tr></thead>
+        <tbody>
+        <% requests.forEach(q => { const n = q.request_items?.[0]?.count; const sent = (q.quotes || []).filter(x => x.status === 'sent').length; %>
+          <tr>
+            <td><a href="/admin/sourcing/<%= q.id %>"><%= q.title %></a><div class="muted small"><%= q.ref %> · <%= fmt.date(q.created_at) %><%= q.needed_by ? ' · needed ' + fmt.date(q.needed_by) : '' %></div></td>
+            <td class="right"><%= n || 1 %></td>
+            <td><%= (q.quotes || []).length %><% if (sent) { %> <span class="muted small">(<%= sent %> sent)</span><% } %></td>
+            <td><span class="pill <%= q.status %>"><%= fmt.status(q.status) %></span></td>
+          </tr>
+        <% }) %>
+        </tbody>
+      </table>
+      <% } %>
+    </div>
   </div>
-</div>
-
-<div class="card">
-  <h2>Requests <span class="count"><%= requests.length %></span></h2>
-  <% if (!requests.length) { %><p class="muted">No requests yet — the client sends them from the portal.</p><% } else { %>
-  <table class="tbl">
-    <thead><tr><th>Ref</th><th>Request</th><th class="right">Products</th><th>Needed by</th><th>Quotes</th><th>Status</th><th>Received</th></tr></thead>
-    <tbody>
-    <% requests.forEach(q => { const n = q.request_items?.[0]?.count; const sent = (q.quotes || []).filter(x => x.status === 'sent').length; %>
-      <tr>
-        <td><a href="/admin/sourcing/<%= q.id %>"><%= q.ref %></a></td>
-        <td><strong><%= q.title %></strong></td>
-        <td class="right"><%= n || 1 %></td>
-        <td><%= fmt.date(q.needed_by) %></td>
-        <td><%= (q.quotes || []).length %><% if (sent) { %> <span class="muted small">(<%= sent %> sent)</span><% } %></td>
-        <td><span class="pill <%= q.status %>"><%= fmt.status(q.status) %></span></td>
-        <td class="muted small"><%= fmt.date(q.created_at) %></td>
-      </tr>
-    <% }) %>
-    </tbody>
-  </table>
-  <% } %>
 </div>
 
 <div class="card">

@@ -43,7 +43,7 @@
 
     <div class="card">
       <h2>AI sourcing brief</h2>
-      <% if (request.ai_brief) { %><div class="pre ai"><%= request.ai_brief %></div><% } else { %><p class="muted">Turn the client's text into a spec checklist, likely HS chapter and questions to ask.</p><% } %>
+      <% if (request.ai_brief) { %><div class="pre ai"><%= request.ai_brief %></div><% if (typeof briefUsage !== 'undefined' && briefUsage) { %><p class="muted small ailine"><%= aiLine(briefUsage) %> · <%= fmt.datetime(briefUsage.at) %></p><% } %><% } else { %><p class="muted">Turn the client's text into a spec checklist, likely HS chapter and questions to ask.</p><% } %>
       <form method="post" action="/admin/sourcing/<%= request.id %>/brief"><button class="btn"><%= request.ai_brief ? 'Regenerate' : 'Generate brief' %></button></form>
     </div>
 

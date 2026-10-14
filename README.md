@@ -51,6 +51,7 @@ Node.js (Express, server-rendered EJS) on **Supabase** (Postgres, Auth, Storage)
    10. `supabase/migrations/0010_request_edits.sql` — clients edit requests (admin approves), preferred delivery
    11. `supabase/migrations/0011_supplier_portal.sql` — invite suppliers; supplier portal
    12. `supabase/migrations/0012_supplier_crm.sql` — last sign-in, supplier CRM status and follow-ups
+   13. `supabase/migrations/0013_ai_usage.sql` — AI token usage log (Admin → AI usage)
    8. optional demo data: `supabase/seed.sql`
 3. **Auth settings** (Authentication):
    - Providers → Email: turn **off** "Allow new users to sign up" (invite-only).

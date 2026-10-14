@@ -22,7 +22,7 @@
         <ul class="issues">
           <% (ai.issues || []).forEach(i => { %><li class="<%= i.severity %>"><span class="tag"><%= i.severity %></span> <strong><%= i.field %></strong> — <%= i.message %></li><% }) %>
         </ul>
-        <p class="muted small"><%= ai.model ? 'Model ' + ai.model : 'Rules only' %> · <%= fmt.datetime(ai.checked_at) %></p>
+        <p class="muted small ailine"><%= ai.usage ? aiLine(ai.usage) : ai.model ? 'Model ' + ai.model : 'Rules only' %> · <%= fmt.datetime(ai.checked_at) %></p>
       <% } %>
       <% if (editable) { %><form method="post" action="/admin/pricing/quotes/<%= q.id %>/verify"><button class="btn"><%= ai ? 'Re-run check' : 'Run AI check' %></button></form><% } %>
     </div>

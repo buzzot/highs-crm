@@ -930,3 +930,11 @@ a strong, a b { color: inherit; }
 .dl dt { color: var(--muted); }
 .dl dd { color: var(--ink); }
 label { color: var(--ink-2); }
+/* AI usage */
+.ailine { margin-top: 10px; font-variant-numeric: tabular-nums; }
+.usagebars { display: grid; grid-template-columns: repeat(30, minmax(0, 1fr)); gap: 4px; align-items: end; height: 140px; padding-top: 6px; }
+.usagebars .ub { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; }
+.usagebars .bar { width: 100%; min-height: 2px; background: var(--accent); border-radius: 4px 4px 0 0; opacity: .85; }
+.usagebars .ub:hover .bar { opacity: 1; }
+.usagebars .lbl { font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.grid2 > .stack > .card { margin-bottom: 18px; } .grid2 > .stack > div > .card { margin-bottom: 18px; }

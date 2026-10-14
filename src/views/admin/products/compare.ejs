@@ -54,7 +54,7 @@
 <% if (aiError) { %><div class="alert err">AI compare failed: <%= aiError %></div><% } %>
 <% if (ai) { const rec = products.find(p => p.id === ai.recommended_id); %>
   <div class="card aiverdict">
-    <div class="aihead"><span class="aibadge">✦ AI verdict</span><% if (rec) { %> <span>Recommended: <strong><%= rec.name %></strong></span><% } %><span class="muted small"><%= ai.model %></span></div>
+    <div class="aihead"><span class="aibadge">✦ AI verdict</span><% if (rec) { %> <span>Recommended: <strong><%= rec.name %></strong></span><% } %></div>
     <p class="aisum"><%= ai.summary %></p>
     <div class="aigrid">
       <% (ai.ranking || []).forEach((r, i) => { const p = products.find(x => x.id === r.id); if (!p) return; %>
@@ -70,6 +70,7 @@
       <% if (ai.risks.length) { %><div><h3>Risks</h3><ul><% ai.risks.forEach(x => { %><li><%= x %></li><% }) %></ul></div><% } %>
       <% if (ai.questions.length) { %><div><h3>Ask the suppliers</h3><ul><% ai.questions.forEach(x => { %><li><%= x %></li><% }) %></ul></div><% } %>
     </div>
+    <p class="muted small ailine"><%= ai.usage ? aiLine(ai.usage) : ai.model %> · AI output: verify facts, HS codes and duty rates before acting.</p>
   </div>
 <% } %>
 

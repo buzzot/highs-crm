@@ -7,6 +7,7 @@ import { admin } from '../../lib/supabase.js';
 import { log } from '../../lib/activity.js';
 import { back, notFound, CURRENCIES } from '../../lib/util.js';
 import { readXlsx, workbookToText } from '../../lib/xlsx-read.js';
+import { addUsage } from '../../lib/ai-usage.js';
 import { parseWorkbook, cleanProduct, checkRow, matchSupplier, matchProduct, toProductRecord, cartonCbm, PRODUCT_FIELDS } from '../../lib/product-import.js';
 import { aiEnabled, extractProducts, reviewProducts } from '../../lib/ai.js';
 
@@ -56,6 +57,7 @@ r.post('/', upload.single('file'), async (req, res) => {
   const ext = (f.originalname.split('.').pop() || '').toLowerCase();
   const id = randomUUID();
   let method = 'template', supplier = {}, rows = [], notes = [], model = null;
+  const usages = []; // [label, usage] per AI call, reported on the review page
   const rowImages = {}; // row index → { data, ext }
 
   try {
@@ -67,8 +69,8 @@ r.post('/', upload.single('file'), async (req, res) => {
         method = 'template'; supplier = parsed.supplier; rows = parsed.products;
       } else if (aiEnabled()) {
         method = 'ai';
-        const ai = await extractProducts({ text: workbookToText(wb), filename: f.originalname });
-        model = ai.model; supplier = ai.supplier; rows = ai.products; if (ai.notes) notes.push(ai.notes);
+        const ai = await extractProducts({ text: workbookToText(wb), filename: f.originalname }, { type: 'product_import', id });
+        model = ai.model; supplier = ai.supplier; rows = ai.products; if (ai.notes) notes.push(ai.notes); usages.push(['reading the file', ai.usage]);
         // pictures: take them from the sheet that has the products' rows
         const pics = {};
         for (const sh of wb.sheets) for (const img of sh.images) pics[img.row + 1] ||= img;
@@ -85,8 +87,8 @@ r.post('/', upload.single('file'), async (req, res) => {
       method = 'ai';
       const ai = await extractProducts(ext === 'pdf'
         ? { pdf: f.buffer, filename: f.originalname }
-        : { image: { data: f.buffer, mediaType: IMG_TYPES[ext] === 'image/jpeg' ? 'image/jpeg' : IMG_TYPES[ext] }, filename: f.originalname });
-      model = ai.model; supplier = ai.supplier; rows = ai.products; if (ai.notes) notes.push(ai.notes);
+        : { image: { data: f.buffer, mediaType: IMG_TYPES[ext] === 'image/jpeg' ? 'image/jpeg' : IMG_TYPES[ext] }, filename: f.originalname }, { type: 'product_import', id });
+      model = ai.model; supplier = ai.supplier; rows = ai.products; if (ai.notes) notes.push(ai.notes); usages.push(['reading the file', ai.usage]);
       if (ext === 'pdf') notes.push('Photos are not taken from PDFs — add them on the product pages after import, or ask the supplier for the Excel template.');
     } else {
       throw new Error(`Unsupported file type .${ext}. Use .xlsx, .csv, .pdf or a photo (.jpg/.png).`);
@@ -124,12 +126,17 @@ r.post('/', upload.single('file'), async (req, res) => {
   // AI second opinion on the rows (never blocks the import)
   if (aiEnabled()) {
     try {
-      const rv = await reviewProducts({ supplier, products: clean });
+      const rv = await reviewProducts({ supplier, products: clean }, { type: 'product_import', id });
+      usages.push(['checking the rows', rv.usage]);
       for (const is of rv.issues) if (clean[is.row]) (clean[is.row].ai_issues ||= []).push(is);
       if (rv.summary) notes.push(`AI check: ${rv.summary}`);
     } catch (e) { notes.push(`AI check skipped: ${e.message}`); }
   }
 
+  if (usages.length) {
+    const total = addUsage(...usages.map(x => x[1]));
+    notes.push(`AI usage: ${usages.map(([l, u]) => `${l} ${Number(u?.total || 0).toLocaleString('en-US')} tokens`).join(' · ')} — total ${res.locals.aiLine(total)}`);
+  }
   const { error } = await admin.from('product_imports').insert({
     id, file_name: f.originalname, file_path: filePath, method, supplier, supplier_match: match, rows: clean,
     ai_notes: notes.join('\n') || null, ai_model: model, created_by: req.user.id,

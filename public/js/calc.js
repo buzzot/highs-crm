@@ -140,6 +140,7 @@ if (form) {
       const ul = document.createElement('ul'); ul.className = 'issues';
       (r.issues || []).forEach(i => { const li = document.createElement('li'); li.className = i.severity; li.textContent = `${i.severity.toUpperCase()} · ${i.field} — ${i.message}`; ul.appendChild(li); });
       box.appendChild(ul);
+      if (r.usage_line) { const u = document.createElement('p'); u.className = 'muted small ailine'; u.textContent = r.usage_line; box.appendChild(u); }
     } catch (e) { box.textContent = 'AI check failed: ' + e.message; }
   });
 

@@ -11,6 +11,7 @@ import adminRoutes from './routes/admin/index.js';
 import { fmt } from './lib/format.js';
 import { icon } from './lib/icons.js';
 import { homeFor } from './lib/util.js';
+import { aiContext, getPrices, usageLine } from './lib/ai-usage.js';
 import { showValue, deliveryLabel } from './lib/request-revisions.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -30,6 +31,14 @@ app.use((req, res, next) => {
   next();
 });
 app.use(loadUser);
+// AI calls made while handling this request are attributed to the signed-in person; views get aiLine(usage)
+app.use(async (req, res, next) => {
+  if (req.user && ['admin', 'staff'].includes(req.user.role)) {
+    const prices = await getPrices();
+    res.locals.aiLine = u => usageLine(u, prices);
+  } else res.locals.aiLine = () => '';
+  aiContext.run({ userId: req.user?.id || null }, next);
+});
 
 app.get('/', (req, res) => {
   if (!req.user) return res.redirect('/login');

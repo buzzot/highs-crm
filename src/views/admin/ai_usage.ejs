@@ -1,0 +1,88 @@
+<%- include('../partials/head') %>
+<%
+  const n = x => Number(x || 0).toLocaleString('en-US');
+  const money = c => c == null ? '—' : '$' + (c < 0.01 && c > 0 ? c.toFixed(4) : c.toFixed(2));
+  const fname = k => features[k] || k;
+  const maxDay = Math.max(1, ...days.map(d => d.total));
+  const hasPrices = Number(prices.input_per_m) > 0 || Number(prices.output_per_m) > 0;
+%>
+<div class="pagehead">
+  <div><h1>AI usage</h1><p class="muted">Every AI call — quote checks, sourcing briefs, product imports and comparisons — with the tokens it used. Last 30 days.</p></div>
+</div>
+<% if (missing) { %><div class="alert warn">Usage is not being recorded yet — run <code>supabase/migrations/0013_ai_usage.sql</code> in Supabase.</div><% } %>
+
+<div class="kpis">
+  <% [['Today', totals.today], ['Last 7 days', totals.week], ['Last 30 days', totals.month]].forEach(([l, t]) => { %>
+    <div class="kpi"><span class="n"><%= n(t.total) %></span><span class="l"><%= l %> · tokens · <%= n(t.calls) %> call<%= t.calls === 1 ? '' : 's' %><%= hasPrices ? ' · ≈ ' + money(t.cost) : '' %></span></div>
+  <% }) %>
+</div>
+
+<div class="card">
+  <h2>Tokens per day</h2>
+  <div class="usagebars">
+    <% days.forEach(d => { %>
+      <div class="ub" title="<%= fmt.date(d.key) %>: <%= n(d.total) %> tokens, <%= d.calls %> calls">
+        <span class="bar" style="height: <%= Math.round(d.total / maxDay * 100) %>%"></span>
+        <span class="lbl"><%= d.key.slice(8) %></span>
+      </div>
+    <% }) %>
+  </div>
+</div>
+
+<div class="grid2 even">
+  <div class="card">
+    <h2>By feature</h2>
+    <table class="tbl"><thead><tr><th>Feature</th><th class="right">Calls</th><th class="right">Input</th><th class="right">Output</th><th class="right">Total</th><% if (hasPrices) { %><th class="right">≈ Cost</th><% } %></tr></thead><tbody>
+      <% if (!byFeature.length) { %><tr><td colspan="6" class="muted">No AI calls yet.</td></tr><% } %>
+      <% byFeature.forEach(g => { %><tr><td><%= fname(g.key) %><% if (g.failed) { %> <span class="badge warn"><%= g.failed %> failed</span><% } %></td><td class="right num"><%= n(g.calls) %></td><td class="right num"><%= n(g.input) %></td><td class="right num"><%= n(g.output) %></td><td class="right num"><%= n(g.total) %></td><% if (hasPrices) { %><td class="right num"><%= money(g.cost) %></td><% } %></tr><% }) %>
+    </tbody></table>
+  </div>
+  <div>
+    <div class="card">
+      <h2>By person</h2>
+      <table class="tbl"><thead><tr><th>Person</th><th class="right">Calls</th><th class="right">Tokens</th><% if (hasPrices) { %><th class="right">≈ Cost</th><% } %></tr></thead><tbody>
+        <% byUser.forEach(g => { %><tr><td><%= g.key %></td><td class="right num"><%= n(g.calls) %></td><td class="right num"><%= n(g.total) %></td><% if (hasPrices) { %><td class="right num"><%= money(g.cost) %></td><% } %></tr><% }) %>
+      </tbody></table>
+    </div>
+    <div class="card">
+      <h2>By model</h2>
+      <table class="tbl"><tbody>
+        <% byModel.forEach(g => { %><tr><td><%= g.key %></td><td class="right num"><%= n(g.calls) %> calls</td><td class="right num"><%= n(g.total) %> tokens</td></tr><% }) %>
+      </tbody></table>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Latest calls</h2>
+  <table class="tbl">
+    <thead><tr><th>When</th><th>Feature</th><th>Person</th><th>Model</th><th class="right">Input</th><th class="right">Output</th><th class="right">Total</th><% if (hasPrices) { %><th class="right">≈ Cost</th><% } %><th></th></tr></thead>
+    <tbody>
+    <% if (!recent.length) { %><tr><td colspan="9" class="muted">No AI calls yet.</td></tr><% } %>
+    <% recent.forEach(x => { const link = x.entity_type === 'request' ? '/admin/sourcing/' + x.entity_id : x.entity_type === 'quote' ? '/admin/pricing/quotes/' + x.entity_id : x.entity_type === 'product_import' ? '/admin/products/import/' + x.entity_id : null; %>
+      <tr class="<%= x.ok ? '' : 'dim' %>">
+        <td class="muted small"><%= fmt.datetime(x.created_at) %></td>
+        <td><%= fname(x.feature) %><% if (!x.ok) { %> <span class="badge warn" title="<%= x.error %>">failed</span><% } %></td>
+        <td><%= x.who %></td>
+        <td class="muted small"><%= x.model || '—' %></td>
+        <td class="right num"><%= n(x.u.input + x.u.cacheRead + x.u.cacheWrite) %></td>
+        <td class="right num"><%= n(x.u.output) %></td>
+        <td class="right num"><%= n(x.u.total) %></td>
+        <% if (hasPrices) { %><td class="right num"><%= money(x.cost) %></td><% } %>
+        <td><% if (link) { %><a class="small" href="<%= link %>">open</a><% } %></td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Cost estimate</h2>
+  <p class="muted small">Enter your Anthropic prices (USD per million tokens) for the model you use, from your Anthropic Console pricing page, to see an estimated cost next to the tokens. Leave 0 to show tokens only.</p>
+  <form method="post" action="/admin/ai-usage/prices" class="row tight">
+    <label>Input, $ per 1M tokens <input type="number" step="0.01" min="0" name="input_per_m" value="<%= prices.input_per_m || 0 %>"></label>
+    <label>Output, $ per 1M tokens <input type="number" step="0.01" min="0" name="output_per_m" value="<%= prices.output_per_m || 0 %>"></label>
+    <div class="actions"><button class="btn primary">Save prices</button></div>
+  </form>
+</div>
+<%- include('../partials/foot') %>

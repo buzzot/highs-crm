@@ -59,7 +59,8 @@ r.post('/check', async (req, res) => {
   const calc = compute(b, settings);
   const ctx = await context(b);
   try {
-    res.json(await verifyQuote({ quote: b, calc, ...ctx, settings }));
+    const out = await verifyQuote({ quote: b, calc, ...ctx, settings });
+    res.json({ ...out, usage_line: out.usage ? res.locals.aiLine(out.usage) : null });
   } catch (e) {
     res.status(502).json({ ok: false, score: 0, issues: [{ severity: 'high', field: 'ai', message: e.message }], summary: 'AI check failed.' });
   }

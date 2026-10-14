@@ -38,11 +38,12 @@ r.get('/:id', async (req, res) => {
     admin.from('request_items').select('*').eq('request_id', id).order('position'),
   ]);
   if (!request) return notFound(res, 'Request');
+  const { data: briefUse } = await admin.from('ai_usage').select('*').eq('feature', 'sourcing_brief').eq('entity_type', 'request').eq('entity_id', id).eq('ok', true).order('created_at', { ascending: false }).limit(1).maybeSingle();
   const { data: pending } = await admin.from('request_revisions').select('*, creator:profiles!request_revisions_created_by_fkey(full_name, email)').eq('request_id', id).eq('status', 'pending').maybeSingle();
   const allDocs = docs || [];
   res.render('admin/sourcing/detail', {
     title: request.ref, request, quotes: quotes || [], docs: allDocs.filter(d => !d.revision_id), items: items || [],
-    pending: pending || null, pendingDiff: pending ? diff(snapshot(request, items || []), pending.data) : null,
+    pending: pending || null, briefUsage: briefUse ? { model: briefUse.model, input: briefUse.input_tokens, output: briefUse.output_tokens, cacheRead: briefUse.cache_read_tokens, cacheWrite: briefUse.cache_write_tokens, total: briefUse.input_tokens + briefUse.output_tokens + briefUse.cache_read_tokens + briefUse.cache_write_tokens, at: briefUse.created_at } : null, pendingDiff: pending ? diff(snapshot(request, items || []), pending.data) : null,
     pendingDocs: pending ? allDocs.filter(d => d.revision_id === pending.id) : [], events: events || [], staff: staff || [],
     orders: orders || [], statuses: REQUEST_STATUSES, msg: req.query.msg, err: req.query.err,
   });
@@ -88,11 +89,12 @@ r.post('/:id/brief', async (req, res) => {
   if (!request) return notFound(res, 'Request');
   const { data: products } = await admin.from('request_items').select('name, description, quantity, unit, target_unit_price').eq('request_id', req.params.id).order('position');
   if (products?.length) request.products = products;
-  const brief = await summarizeRequest(request);
+  const result = await summarizeRequest(request, req.params.id);
+  const brief = result?.text;
   if (!brief) return back(res, `/admin/sourcing/${req.params.id}`, { err: 'AI is not configured (set ANTHROPIC_API_KEY).' });
   await admin.from('requests').update({ ai_brief: brief }).eq('id', req.params.id);
   await admin.from('requests').update({ status: 'reviewing' }).eq('id', req.params.id).eq('status', 'new');
-  back(res, `/admin/sourcing/${req.params.id}`, { msg: 'AI brief generated.' });
+  back(res, `/admin/sourcing/${req.params.id}`, { msg: `AI brief generated — ${res.locals.aiLine(result.usage)}` });
 });
 
 // Accepted quote → order
