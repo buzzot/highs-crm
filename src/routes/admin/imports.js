@@ -65,8 +65,13 @@ r.post('/', upload.single('file'), async (req, res) => {
     if (['xlsx', 'xlsm', 'csv', 'txt'].includes(ext)) {
       const wb = ext === 'csv' || ext === 'txt' ? readCsv(f.buffer.toString('utf8').replace(/^﻿/, '')) : readXlsx(f.buffer);
       const parsed = parseWorkbook(wb);
+      // a clear product table (name + price on most rows) is read directly: exact, includes every row and its picture
+      const solid = parsed && parsed.products.length >= 1 && parsed.products.filter(p => p.name && p.unit_price != null).length >= parsed.products.length * 0.7;
       if (parsed?.template) {
         method = 'template'; supplier = parsed.supplier; rows = parsed.products;
+      } else if (solid) {
+        method = 'spreadsheet'; supplier = parsed.supplier; rows = parsed.products;
+        notes.push(`Read directly from the spreadsheet: ${rows.length} products, ${rows.filter(p => p.image).length} with pictures. Check the unit weights (calculated from N.W. ÷ pcs per carton) and the notes column.`);
       } else if (aiEnabled()) {
         method = 'ai';
         const ai = await extractProducts({ text: workbookToText(wb), filename: f.originalname }, { type: 'product_import', id });

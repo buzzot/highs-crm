@@ -40,6 +40,7 @@ const str = v => (v == null || v === '' ? null : String(v).trim() || null);
 // ---------------- template parsing ----------------
 // Header aliases (English template headers, Chinese sub-headers and common supplier wording).
 const COLS = {
+  weights: ['n.w. / g.w.', 'n.w./g.w.', 'nw/gw', 'n.w / g.w', 'net / gross weight', 'n.w. / g.w. (kg)'],
   photo: ['photo', 'picture', 'image', 'pic', '照片', '图片'],
   name: ['product name', 'name', 'description', 'item', 'product', '产品名称', '品名', '名称'],
   supplier_sku: ['supplier sku', 'sku', 'item no', 'item no.', 'model', 'model no', 'article', 'art no', '货号', '型号', '款号'],
@@ -59,7 +60,10 @@ const COLS = {
   unit_price: ['unit price', 'price', 'fob price', 'exw price', '单价', '价格'],
   currency: ['currency', '币种'],
   moq: ['moq (pcs)', 'moq', 'min order', 'minimum order', '起订量'],
-  notes: ['notes', 'remarks', 'remark', '备注'],
+  notes: ['notes', 'factory notes', 'remarks', 'remark', '备注'],
+  material: ['material', '材质'],
+  packaging: ['packaging type', 'packaging', 'packing type', '包装'],
+  lead_time: ['production lead time', 'lead time', '交期'],
 };
 const norm = s => String(s ?? '').toLowerCase().replace(/[\s_]+/g, ' ').replace(/[：:]/g, '').trim();
 
@@ -82,11 +86,11 @@ export function mapHeaders(headerRow = []) {
 }
 
 const SUPPLIER_FIELDS = {
-  name: ['company name', '公司名称', 'company', 'supplier', 'supplier name'],
-  address: ['company address', '公司地址', 'address', '地址'],
+  name: ['company name', 'factory name', 'factory', '公司名称', 'company', 'supplier', 'supplier name'],
+  address: ['company address', 'factory address', '公司地址', 'address', '地址'],
   contact_name: ['contact person', '联系人', 'contact'],
   email: ['email', 'e-mail', '邮箱'],
-  phone: ['phone', 'tel', 'mobile', '电话', '手机'],
+  phone: ['phone', 'whatsapp', 'tel', 'mobile', '电话', '手机'],
   wechat: ['wechat', 'weixin', '微信'],
   website: ['website', 'website / alibaba store', 'alibaba', '网站'],
 };
@@ -107,6 +111,33 @@ export function parseSupplierSheet(rows = []) {
   return out;
 }
 
+/** Supplier details printed above the product table ("Factory Address | …" pairs, several per row). */
+export function parseSupplierBlock(rows = []) {
+  const out = {};
+  const isLabel = c => { const parts = String(c ?? '').split('/').map(norm).filter(Boolean); return parts.some(l => Object.values(SUPPLIER_FIELDS).some(a => a.includes(l))); };
+  for (const row of rows) {
+    for (let i = 0; i < (row || []).length; i++) {
+      const parts = String(row[i] ?? '').split('/').map(norm).filter(Boolean);
+      if (!parts.length || !isLabel(row[i])) continue;
+      const v = row.slice(i + 1).find(c => str(c)); // next filled cell
+      if (!v || isLabel(v)) continue;
+      for (const [field, aliases] of Object.entries(SUPPLIER_FIELDS)) {
+        if (out[field]) continue;
+        if (parts.some(l => aliases.includes(l))) { out[field] = str(v); break; }
+      }
+    }
+  }
+  return out;
+}
+
+/** Value printed next to a label above the table: "Currency | USD", "MOQ | 5000". */
+function labelled(rows, names) {
+  for (const row of rows) for (let i = 0; i < (row || []).length - 1; i++) {
+    if (names.includes(norm(row[i]))) { const v = row.slice(i + 1).find(c => str(c)); if (v != null) return v; }
+  }
+  return null;
+}
+
 /** Turn one spreadsheet row into a product draft using a header map. */
 export function rowToProduct(row, map) {
   const g = k => (k in map ? row[map[k]] : undefined);
@@ -114,25 +145,33 @@ export function rowToProduct(row, map) {
   const ctn = [num(g('carton_length_cm')), num(g('carton_width_cm')), num(g('carton_height_cm'))];
   const ud = unit.every(n => n != null) ? unit : dims(g('unit_size'));
   const cd = ctn.every(n => n != null) ? ctn : dims(g('carton_size'));
+  // "2.9/3.3" under N.W. / G.W.: per carton → unit weight = net / pcs per carton
+  let nw = num(g('unit_weight_kg')), gw = num(g('carton_weight_kg'));
+  const w = String(g('weights') ?? '').split(/[\/\\]/).map(num);
+  const qty = num(g('carton_qty'));
+  if (w.length >= 2 && w[0] != null) { gw = w[1] ?? gw; nw = qty ? Math.round(w[0] / qty * 10000) / 10000 : nw; }
+  const extra = [['Material', g('material')], ['Packaging', g('packaging')], ['Lead time', g('lead_time')]]
+    .map(([k, v]) => (str(v) ? `${k}: ${String(v).replace(/\s+/g, ' ').trim()}` : null)).filter(Boolean);
+  const notes = [...extra, str(g('notes'))].filter(Boolean).join(' · ') || null;
   return {
     name: str(g('name')),
     supplier_sku: str(g('supplier_sku')),
     category: str(g('category')),
     hs_code: hsCode(g('hs_code')),
-    unit_weight_kg: num(g('unit_weight_kg')),
+    unit_weight_kg: nw,
     unit_length_cm: ud?.[0] ?? null, unit_width_cm: ud?.[1] ?? null, unit_height_cm: ud?.[2] ?? null,
     carton_qty: num(g('carton_qty')),
-    carton_weight_kg: num(g('carton_weight_kg')),
+    carton_weight_kg: gw,
     carton_length_cm: cd?.[0] ?? null, carton_width_cm: cd?.[1] ?? null, carton_height_cm: cd?.[2] ?? null,
     unit_price: num(g('unit_price')),
-    currency: currency(g('currency')),
-    moq: num(g('moq')),
-    notes: str(g('notes')),
+    currency: currency(g('currency'), map._cur || 'CNY'),
+    moq: num(g('moq')) ?? map._moq ?? null,
+    notes,
   };
 }
 
 const isExample = p => /^example/i.test(p.supplier_sku || '') || /^示例/.test(p.name || '');
-const isBlank = p => !p.name && !p.supplier_sku && p.unit_price == null;
+const isBlank = p => !p.name && p.unit_price == null; // a sku alone is a footer / label row
 
 /**
  * Parse a workbook (from readXlsx). Works for our template and for simple supplier price lists
@@ -147,6 +186,14 @@ export function parseWorkbook(wb) {
       const map = mapHeaders(sheet.rows[h] || []);
       if (!('name' in map) || !(('unit_price' in map) || ('supplier_sku' in map))) continue;
       const photoCol = map.photo ?? 0;
+      const above = sheet.rows.slice(0, h);
+      // currency: "(USD)" in the price header, else a "Currency" cell above the table
+      const hc = String(sheet.rows[h][map.unit_price] ?? '').match(/\(([A-Za-z]{3})\)|\b(USD|CNY|RMB|EUR)\b|([$¥€])/);
+      const cur = hc ? currency(hc[1] || hc[2] || hc[3], null) : null;
+      const topCur = labelled(above, ['currency', '币种']);
+      map._cur = cur || (topCur ? currency(topCur, null) : null) || 'CNY';
+      const moqTop = num(labelled(above, ['moq', 'moq (pcs)', '起订量']));
+      if (moqTop > 0) map._moq = moqTop;
       const imagesByRow = {};
       for (const img of sheet.images) if (img.row > h) (imagesByRow[img.row] ||= []).push(img);
       const products = [];
@@ -161,7 +208,7 @@ export function parseWorkbook(wb) {
       }
       return {
         template: !!supplierSheet && /^products$/i.test(sheet.name),
-        supplier: supplierSheet ? parseSupplierSheet(supplierSheet.rows) : {},
+        supplier: supplierSheet ? parseSupplierSheet(supplierSheet.rows) : parseSupplierBlock(above),
         products,
       };
     }
