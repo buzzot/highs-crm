@@ -1,6 +1,6 @@
 <%- include('../../partials/head') %>
 <div class="pagehead">
-  <div><a class="back" href="/admin/sourcing">← Sourcing</a><h1><%= request.ref %> · <%= request.title %></h1>
+  <div><a class="back" href="/admin/sourcing">← Sourcing</a><h1><%= request.ref %> · <%= request.title %><% if (String(request.ref).startsWith('IRQ-')) { %> <span class="tag" title="Started by staff, not by the client">staff</span><% } %></h1>
     <p class="muted"><a href="/admin/clients/<%= request.organizations.id %>"><%= request.organizations.name %></a> · submitted by <%= request.creator?.full_name || request.creator?.email || '—' %> · <%= fmt.date(request.created_at) %></p></div>
   <span class="pill lg <%= request.status %>"><%= fmt.status(request.status) %></span>
 </div>

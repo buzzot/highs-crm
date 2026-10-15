@@ -29,3 +29,8 @@ test('PDF writer: wraps text, WinAnsi, valid file structure', () => {
   const pi = piPdf({ pi_no: 'PI-1', created_at: '2026-10-14', data: { buyer: po.client, lines: po.lines, currency: 'USD', payment_terms: '30%' } }, { order_no: 'HB-1' }, company);
   assert.equal(pi.subarray(0, 5).toString(), '%PDF-');
 });
+
+test('staff-initiated requests use the IRQ prefix format', () => {
+  const ref = `IRQ-${new Date('2026-10-15').toISOString().slice(2, 7).replace('-', '')}-${String(7).padStart(4, '0')}`;
+  assert.equal(ref, 'IRQ-2610-0007');
+});

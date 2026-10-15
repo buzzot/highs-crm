@@ -26,6 +26,8 @@ const CURRENCY_OK = ['USD', 'EUR', 'GBP', 'CNY'];
 import { validateCompany, COMPANY_FIELDS } from '../lib/company.js';
 
 const r = Router();
+// requests started by staff (IRQ-…) stay hidden from the client until a quote has been sent
+const visibleReq = x => !(String(x.ref || '').startsWith('IRQ-') && ['new', 'reviewing'].includes(x.status));
 // Explicit column lists: clients have column-level grants only (see migration 0002).
 const REQ = 'id, ref, title, description, quantity, target_unit_price, target_currency, destination_country, destination_city, needed_by, delivery_mode, status, created_at, updated_at';
 const QUOTE = 'id, request_id, request_item_id, quantity, sell_currency, unit_price, freight_estimate, duties_estimate, other_costs, landed_unit_price, incoterm, lead_time_days, valid_until, status, notes, created_at';
@@ -59,18 +61,19 @@ r.post('/company', async (req, res) => {
 });
 
 r.get('/', async (req, res) => {
-  const [{ data: requests }, { data: orders }] = await Promise.all([
-    req.db.from('requests').select(REQ).order('created_at', { ascending: false }).limit(10),
+  const [{ data: requestsRaw }, { data: orders }] = await Promise.all([
+    req.db.from('requests').select(REQ).order('created_at', { ascending: false }).limit(30),
     req.db.from('orders').select(`${ORDER}, shipments(eta, status)`).order('created_at', { ascending: false }).limit(10),
   ]);
+  const requests = (requestsRaw || []).filter(visibleReq).slice(0, 10);
   const open = (orders || []).filter(o => !['delivered', 'closed', 'cancelled'].includes(o.status));
   // counts over everything, not just the 10 most recent
   const [{ data: allReq }, { data: allOrd }] = await Promise.all([
-    req.db.from('requests').select('status'), req.db.from('orders').select('status'),
+    req.db.from('requests').select('status, ref'), req.db.from('orders').select('status'),
   ]);
   const kpi = {
-    openRequests: (allReq || []).filter(x => ['new', 'reviewing'].includes(x.status)).length,
-    quotesWaiting: (allReq || []).filter(x => x.status === 'quoted').length,
+    openRequests: (allReq || []).filter(visibleReq).filter(x => ['new', 'reviewing'].includes(x.status)).length,
+    quotesWaiting: (allReq || []).filter(visibleReq).filter(x => x.status === 'quoted').length,
     inProgress: (allOrd || []).filter(x => ['new', 'confirmed', 'deposit_paid', 'in_production', 'qc', 'packed'].includes(x.status)).length,
     onTheWay: (allOrd || []).filter(x => ['shipped', 'in_transit', 'customs'].includes(x.status)).length,
   };
@@ -80,7 +83,7 @@ r.get('/', async (req, res) => {
 // ---- requests ----
 r.get('/requests', async (req, res) => {
   const { data } = await req.db.from('requests').select(REQ).order('created_at', { ascending: false });
-  const all = data || [];
+  const all = (data || []).filter(visibleReq);
   const groups = {
     all: () => true,
     open: x => ['new', 'reviewing'].includes(x.status),

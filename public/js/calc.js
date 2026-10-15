@@ -85,7 +85,9 @@ if (form) {
     if (items.length === 1) sel.value = items[0].id;
     wrap.hidden = !items.length;
   }
+  const irqSync = () => { const box = $('irq_box'); if (box) box.hidden = $('f_request').value !== '__irq__'; };
   $('f_request').addEventListener('change', () => {
+    irqSync();
     fillItems();
     const r = request(), it = item();
     if (r) { const qty = it?.quantity || r.quantity; if (qty) $('f_qty').value = qty; if (r.target_currency) { $('f_scur').value = r.target_currency; syncFx(); } }

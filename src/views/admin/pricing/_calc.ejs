@@ -8,7 +8,14 @@
   <fieldset <%= ro ? 'disabled' : '' %>>
   <div class="calcgrid">
     <div class="inputs">
-      <label>Client request <select name="request_id" id="f_request"><option value="">— none (calculator only) —</option><% requests.forEach(r => { %><option value="<%= r.id %>" <%= q.request_id === r.id ? 'selected' : '' %>><%= r.ref %> · <%= r.title %> · <%= r.organizations?.name || '' %></option><% }) %></select></label>
+      <label>Client request <select name="request_id" id="f_request"><option value="">— none (calculator only) —</option><option value="__irq__" <%= q.request_id === '__irq__' ? 'selected' : '' %>>＋ New internal request (no client request)…</option><% requests.forEach(r => { %><option value="<%= r.id %>" <%= q.request_id === r.id ? 'selected' : '' %>><%= r.ref %> · <%= r.title %> · <%= r.organizations?.name || '' %></option><% }) %></select></label>
+      <div id="irq_box" class="irqbox" <%= q.request_id === '__irq__' ? '' : 'hidden' %>>
+        <p class="muted small">No client asked for this. A request numbered IRQ-… is created in Sourcing so the quote stays traceable.</p>
+        <div class="row">
+          <label class="grow2">Client <select name="irq_org"><option value="">— choose —</option><% (typeof orgs !== 'undefined' ? orgs : []).forEach(o => { %><option value="<%= o.id %>" <%= q.irq_org === o.id ? 'selected' : '' %>><%= o.name %></option><% }) %></select></label>
+          <label class="grow2">Request title <span class="muted small">optional — defaults to the product</span><input name="irq_title" value="<%= q.irq_title || '' %>"></label>
+        </div>
+      </div>
       <% const selReq = requests.find(r => r.id === q.request_id); const selItems = (selReq?.request_items || []).slice().sort((a, b) => a.position - b.position); %>
       <label id="f_item_wrap" <%= selItems.length ? '' : 'hidden' %>>Product in this request
         <select name="request_item_id" id="f_item"><option value="">— whole request —</option><% selItems.forEach(i => { %><option value="<%= i.id %>" <%= q.request_item_id === i.id ? 'selected' : '' %>><%= i.name %><%= i.quantity ? ' · ' + i.quantity + ' ' + (i.unit || 'pcs') : '' %></option><% }) %></select></label>

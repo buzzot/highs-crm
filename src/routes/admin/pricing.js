@@ -42,7 +42,8 @@ async function formLists() {
     ({ data: requests } = await admin.from('requests').select('id, ref, title, quantity, target_unit_price, target_currency, organizations(name)')
       .in('status', ['new', 'reviewing', 'quoted']).order('created_at', { ascending: false }));
   }
-  return { products: products || [], suppliers: suppliers || [], requests: requests || [] };
+  const { data: orgs } = await admin.from('organizations').select('id, name').eq('active', true).order('name');
+  return { products: products || [], suppliers: suppliers || [], requests: requests || [], orgs: orgs || [] };
 }
 
 // Pricing home: calculator + quotes register
@@ -96,10 +97,18 @@ r.get('/quotes/new', async (req, res) => {
 async function saveQuote(req, res, id) {
   const settings = await getSettings(admin);
   const b = clean(req.body, QUOTE_FIELDS);
-  if (!b.request_id) {
+  const formError = async error => {
     const lists = await formLists();
-    return res.status(400).render('admin/pricing/quote_form', { title: id ? 'Edit quote' : 'New quote', q: { ...req.body, id }, settings, ...lists, incoterms: INCOTERMS, currencies: CURRENCIES, error: 'Pick the client request this quote answers.' });
+    return res.status(400).render('admin/pricing/quote_form', { title: id ? 'Edit quote' : 'New quote', q: { ...req.body, id }, settings, ...lists, incoterms: INCOTERMS, currencies: CURRENCIES, error });
+  };
+  let irq = null;
+  if (b.request_id === '__irq__') { // quote started by staff, no client request: make an IRQ request for traceability
+    if (id) return formError('Pick a client request.');
+    if (!/^[0-9a-f-]{36}$/i.test(req.body.irq_org || '')) return formError('Choose the client this quote is for.');
+    irq = { org_id: req.body.irq_org, title: String(req.body.irq_title || '').trim().slice(0, 200) };
+    b.request_id = null;
   }
+  if (!b.request_id && !irq) return formError('Pick the client request this quote answers, or start a new internal request.');
   if (b.product_id) { // the supplier belongs to the product
     const { data: pr } = await admin.from('products').select('supplier_id').eq('id', b.product_id).maybeSingle();
     if (pr?.supplier_id) b.supplier_id = pr.supplier_id;
@@ -110,6 +119,21 @@ async function saveQuote(req, res, id) {
   }
   if (!b.request_item_id && !id) delete b.request_item_id; // keeps working before migration 0009
   const calc = compute(b, settings);
+  if (irq) {
+    const { data: pr } = b.product_id ? await admin.from('products').select('name, sku').eq('id', b.product_id).maybeSingle() : { data: null };
+    const title = irq.title || pr?.name || 'Staff-initiated quote';
+    let made = null, lastErr = null;
+    for (let n = 0; n < 6 && !made; n++) {
+      const ref = `IRQ-${new Date().toISOString().slice(2, 7).replace('-', '')}-${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`;
+      const { data, error } = await admin.from('requests').insert({ ref, org_id: irq.org_id, created_by: req.user.id, assigned_to: req.user.id, title, description: 'Initiated by staff — no client request.', quantity: calc.quantity, target_currency: b.sell_currency || 'USD', status: 'reviewing' }).select('id, ref').single();
+      if (!error) made = data; else lastErr = error;
+    }
+    if (!made) return formError(lastErr?.message || 'Could not create the request.');
+    const { data: item } = await admin.from('request_items').insert({ request_id: made.id, position: 0, name: title, description: pr?.sku ? `SKU ${pr.sku}` : null, quantity: calc.quantity, unit: 'pcs' }).select('id').single();
+    b.request_id = made.id;
+    if (item) b.request_item_id = item.id;
+    await log({ entityType: 'request', entityId: made.id, action: 'request_initiated_by_staff', actorId: req.user.id, detail: { note: made.ref } });
+  }
   const row = {
     ...b, quantity: calc.quantity, margin_pct: calc.marginPct, fx_rate: Number(b.fx_rate) || 1,
     freight_estimate: Number(b.freight_estimate) || 0, duties_estimate: Number(b.duties_estimate) || 0, other_costs: Number(b.other_costs) || 0,
