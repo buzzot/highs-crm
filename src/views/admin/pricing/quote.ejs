@@ -27,7 +27,7 @@
       <% if (editable) { %><form method="post" action="/admin/pricing/quotes/<%= q.id %>/verify"><button class="btn"><%= ai ? 'Re-run check' : 'Run AI check' %></button></form><% } %>
     </div>
 
-    <div class="card">
+    <div class="card nextstep">
       <h2>Next step</h2>
       <% if (q.status === 'draft') { %>
         <form method="post" action="/admin/pricing/quotes/<%= q.id %>/send">
@@ -48,7 +48,7 @@
         <% if (order) { %><p>Order <a href="/admin/orders/<%= order.id %>"><%= order.order_no %></a> created.</p>
         <% } else { %><form method="post" action="/admin/sourcing/quotes/<%= q.id %>/convert"><button class="btn primary wide">Create order</button></form><% } %>
       <% } else { %><p class="muted">This quote is <%= q.status %>.</p><% } %>
-      <div class="actions">
+      <div class="actions secondary">
         <form method="post" action="/admin/pricing/quotes/<%= q.id %>/duplicate"><button class="btn small">Duplicate</button></form>
         <% if (editable) { %><form method="post" action="/admin/pricing/quotes/<%= q.id %>/withdraw" onsubmit="return confirm('Withdraw this quote?')"><button class="btn small">Withdraw</button></form><% } %>
       </div>

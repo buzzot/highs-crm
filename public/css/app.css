@@ -1073,3 +1073,8 @@ fieldset.plain { border: 0; padding: 0; margin: 0; min-width: 0; }
 .sched input { width: 100%; } .sched td:nth-child(2) input { max-width: 90px; }
 .irqbox { border: 1px dashed var(--line); border-radius: var(--radius); padding: 10px 12px; margin: 8px 0 12px; background: var(--surface-2, transparent); }
 .irqbox[hidden] { display: none; }
+.nextstep form + form, .nextstep p + form { margin-top: 10px; }
+.nextstep .actions.secondary { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.nextstep .actions.secondary form { margin: 0; }
+.nextstep label.check, .nextstep form > label { display: block; margin-bottom: 10px; }
+.nextstep .btn.wide { margin-top: 4px; }
