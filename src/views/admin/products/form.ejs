@@ -24,19 +24,18 @@
     </div>
     <% } %>
     <div class="photodrop" id="photoDrop" tabindex="0">
-      <input type="file" name="photos" id="photoInput" multiple accept="image/jpeg,image/png,image/webp,image/gif">
+      <input type="file" name="photos" id="photoInput" multiple accept="image/jpeg,image/png,image/webp,image/gif<%= typeof aiOn !== 'undefined' && aiOn ? ',application/pdf' : '' %>">
       <span class="dicon">🖼</span>
-      <strong>Drag photos here, click to choose, or paste (Ctrl/⌘ V)</strong>
-      <span class="muted small">JPG, PNG, WebP or GIF · up to 12 photos, 10 MB each<%= photos.length ? '' : ' · the first photo becomes the main one' %></span>
+      <strong>Drag photos<%= typeof aiOn !== 'undefined' && aiOn ? ' or a PDF' : '' %> here, click to choose, or paste (Ctrl/⌘ V)</strong>
+      <span class="muted small">JPG, PNG, WebP or GIF · up to 12 photos, 10 MB each<%= photos.length ? '' : ' · the first photo becomes the main one' %><%= typeof aiOn !== 'undefined' && aiOn ? ' · a PDF (catalogue page, datasheet) is only read by the AI scan, not saved' : '' %></span>
     </div>
     <div class="pgrid" id="photoPreview"></div>
     <% if (typeof aiOn !== 'undefined' && aiOn) { %>
     <div class="aiscan" id="aiScan">
       <div class="aiscan-head">
-        <div><strong>✨ AI scan</strong> <span class="muted small">reads the new photos above (or a PDF) and suggests name, model no., specs, size, weight, price…</span></div>
-        <div class="aiscan-actions"><label class="btn small" title="Add a catalogue page or datasheet"><input type="file" id="aiPdf" accept="application/pdf" hidden multiple>+ PDF</label><button type="button" class="btn small primary" id="aiRun">Scan with AI</button></div>
+        <div><strong>✨ AI scan</strong> <span class="muted small">reads the files you added above and suggests name, model no., specs, size, weight, price… — you approve before anything is filled in.</span></div>
+        <div class="aiscan-actions"><button type="button" class="btn small primary" id="aiRun" disabled>Scan with AI</button></div>
       </div>
-      <div class="muted small" id="aiPdfNames"></div>
       <div class="aiscan-msg" id="aiMsg" hidden></div>
       <div class="aiscan-review" id="aiReview" hidden>
         <p class="small"><strong>Review the suggestions.</strong> Tick what you want to use, then press “Use selected”. <span class="muted">Nothing is saved until you press Save below.</span></p>
@@ -84,21 +83,24 @@
   (function () {
     const drop = document.getElementById('photoDrop'), input = document.getElementById('photoInput'), prev = document.getElementById('photoPreview');
     if (!drop) return;
-    const OK = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    const OK = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', ...(document.getElementById('aiScan') ? ['application/pdf'] : [])];
     let files = [];
     const sync = () => {
       const dt = new DataTransfer(); files.forEach(f => dt.items.add(f)); input.files = dt.files;
       prev.innerHTML = '';
       files.forEach((f, i) => {
         const card = document.createElement('div'); card.className = 'pthumb new';
-        const img = document.createElement('img'); img.src = URL.createObjectURL(f); img.onload = () => URL.revokeObjectURL(img.src);
+        const pdf = f.type === 'application/pdf';
+        const img = document.createElement(pdf ? 'div' : 'img');
+        if (pdf) { img.className = 'pdfthumb'; img.textContent = '📄'; card.title = f.name; } else { img.src = URL.createObjectURL(f); img.onload = () => URL.revokeObjectURL(img.src); }
         const x = document.createElement('button'); x.type = 'button'; x.className = 'pdel'; x.title = 'Remove'; x.textContent = '×';
         x.onclick = () => { files.splice(i, 1); sync(); };
-        const cap = document.createElement('span'); cap.className = 'pcap'; cap.textContent = (f.size / 1048576).toFixed(1) + ' MB';
+        const cap = document.createElement('span'); cap.className = 'pcap'; cap.textContent = pdf ? 'PDF · AI scan only' : (f.size / 1048576).toFixed(1) + ' MB';
         if (f.size > 10 * 1048576) { card.classList.add('toobig'); cap.textContent = 'too large (max 10 MB)'; }
         card.append(img, x, cap); prev.appendChild(card);
       });
       drop.classList.toggle('has', files.length > 0);
+      document.dispatchEvent(new CustomEvent('photofiles'));
     };
     window.__photoFiles = () => files;
     const add = list => { for (const f of list) if (OK.includes(f.type) && files.length < 12) files.push(f); sync(); };
@@ -120,13 +122,14 @@
       ['unit_cost', 'Unit cost'], ['cost_currency', 'Currency'], ['moq', 'MOQ'], ['unit_weight_kg', 'Unit weight kg'], ['unit_length_cm', 'Unit length cm'], ['unit_width_cm', 'Unit width cm'], ['unit_height_cm', 'Unit height cm'],
       ['carton_qty', 'Pcs / carton'], ['carton_weight_kg', 'Carton weight kg'], ['carton_length_cm', 'Carton length cm'], ['carton_width_cm', 'Carton width cm'], ['carton_height_cm', 'Carton height cm']];
     const field = k => form.elements[k];
-    let pdfs = [], card = null;
-    $('aiPdf').addEventListener('change', e => { pdfs = [...pdfs, ...e.target.files].slice(0, 3); e.target.value = ''; $('aiPdfNames').textContent = pdfs.map(f => '📄 ' + f.name).join('  '); });
+    let card = null;
+    const scanFiles = () => (window.__photoFiles ? window.__photoFiles() : []).filter(f => f.size <= 10 * 1048576).slice(0, 6);
+    const refresh = () => { $('aiRun').disabled = !scanFiles().length; };
+    document.addEventListener('photofiles', refresh); refresh();
     const msg = (t, err) => { const m = $('aiMsg'); m.hidden = !t; m.textContent = t || ''; m.className = 'aiscan-msg' + (err ? ' err' : ''); };
     $('aiRun').addEventListener('click', async () => {
-      const imgs = (window.__photoFiles ? window.__photoFiles() : []).filter(f => f.size <= 10 * 1048576).slice(0, 6 - pdfs.length);
-      const all = [...imgs, ...pdfs];
-      if (!all.length) return msg('Add a photo above (or a PDF) first.', true);
+      const all = scanFiles();
+      if (!all.length) return msg('Add a photo or a PDF above first.', true);
       const fd = new FormData(); all.forEach(f => fd.append('files', f)); fd.append('name', field('name').value); fd.append('description', field('description').value);
       const btn = $('aiRun'); btn.disabled = true; btn.textContent = 'Reading…'; msg('Reading the files — about 10–20 seconds…'); $('aiReview').hidden = true;
       try {
@@ -134,7 +137,7 @@
         const j = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(j.error || 'Scan failed.');
         card = j.card; show(j);
-      } catch (e) { msg(e.message, true); } finally { btn.disabled = false; btn.textContent = 'Scan with AI'; }
+      } catch (e) { msg(e.message, true); } finally { btn.textContent = 'Scan with AI'; refresh(); }
     });
     function show(j) {
       const rows = $('aiRows'); rows.innerHTML = ''; let n = 0;
