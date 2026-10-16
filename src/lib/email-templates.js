@@ -313,7 +313,7 @@ export function spoEmail({ po, supplier, order, message, senderName }) {
   <table role="presentation" cellpadding="0" cellspacing="0" style="margin:10px 0 18px;font-size:14px;">${facts.map(([k, v]) => `<tr><td style="padding:3px 18px 3px 0;color:#7a8494;">${esc(k)}</td><td style="padding:3px 0;color:#16202e;">${esc(v)}</td></tr>`).join('')}</table>
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-family:${F};">
     <tr>${th('Product')}${th('SKU')}${th('Qty', 1)}${th('Unit price', 1)}${th('Amount', 1)}</tr>
-    ${po.lines.map(l => `<tr>${td(l.description)}${td(l.sku)}${td(`${n(l.quantity)} ${l.unit || 'pcs'}`, 1)}${td(n(l.unit_price), 1)}${td(money(l.quantity * l.unit_price), 1)}</tr>`).join('')}
+    ${po.lines.map(l => `<tr>${td(l.description)}${td(l.sku)}${td(`${n(l.quantity)} ${l.unit || 'pcs'}`, 1)}${td(Math.abs(l.unit_price) < 0.1 && l.unit_price ? n(l.unit_price) : money(l.unit_price), 1)}${td(money(l.quantity * l.unit_price), 1)}</tr>`).join('')}
     <tr><td colspan="4" style="padding:8px;text-align:right;font-weight:700;font-size:13px;">TOTAL ${esc(po.currency)}</td><td style="padding:8px;text-align:right;font-weight:700;font-size:13px;">${money(po.total)}</td></tr>
   </table>
   <p style="font-size:15px;line-height:1.6;color:#2f3a4a;margin:20px 0 6px;"><strong style="font-weight:600;">Please reply to this email to:</strong></p>

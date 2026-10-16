@@ -6,7 +6,7 @@ if (form) {
   const $ = id => document.getElementById(id);
   const data = JSON.parse($('pricingData').textContent);
   const minMargin = Number(form.dataset.minMargin || 20);
-  const money = (v, cur, d = 2) => (Number.isFinite(v) ? new Intl.NumberFormat('en-US', { style: 'currency', currency: cur || 'USD', minimumFractionDigits: d, maximumFractionDigits: d }).format(v) : '—');
+  const money = (v, cur, d = 2) => { if (!Number.isFinite(v)) return '—'; const dd = d >= 4 && !(v !== 0 && Math.abs(v) < 0.1) ? 2 : d; return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur || 'USD', minimumFractionDigits: Math.min(dd, 2), maximumFractionDigits: dd }).format(v); }; // unit prices: 2 decimals, up to 4 only for tiny prices
   const fxFor = (from, to) => {
     if (from === to) return 1;
     if (data.fx[`${from}_${to}`]) return Number(data.fx[`${from}_${to}`]);

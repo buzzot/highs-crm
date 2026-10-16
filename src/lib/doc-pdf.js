@@ -10,7 +10,7 @@ export const money = (v, cur) => {
   return `${cur ? cur + ' ' : ''}${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 const qtyFmt = v => (v == null || v === '' ? '' : Number(v).toLocaleString('en-US', { maximumFractionDigits: 3 }));
-const priceFmt = v => (v == null || v === '' ? '' : Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 }));
+const priceFmt = v => (v == null || v === '' ? '' : Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: Number(v) !== 0 && Math.abs(Number(v)) < 0.1 ? 4 : 2 }));
 
 /**
  * @param {{ title: string, no: string, date: string, status?: string,
