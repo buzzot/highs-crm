@@ -5,7 +5,7 @@ import { verifyQuote } from '../../lib/ai.js';
 import { log } from '../../lib/activity.js';
 import { sendEmail } from '../../lib/mailer.js';
 import { getCompany } from '../../lib/purchase.js';
-import { combineQuotes, quotationPdf, LIVE } from '../../lib/combined-quote.js';
+import { combineQuotes, dropReplaced, quotationPdf, LIVE } from '../../lib/combined-quote.js';
 import { quoteSentEmail } from '../../lib/email-templates.js';
 import { requireAdmin } from '../../middleware/auth.js';
 import { cargoLine, cargoTotals, AIR_KG_PER_CBM } from '../../lib/cargo.js';
@@ -149,6 +149,13 @@ r.post('/quotes/multi', async (req, res) => {
 
 
 // ---- one combined quotation for a whole request: preview with totals, PDF, send together ----
+// sending a new quote for a request line replaces an older one that was sent but not answered
+async function supersedeOlder(rid, fresh) {
+  const items = fresh.map(q => q.request_item_id).filter(Boolean);
+  if (!items.length) return;
+  await admin.from('quotes').update({ status: 'superseded' }).eq('request_id', rid).eq('status', 'sent').in('request_item_id', items).not('id', 'in', `(${fresh.map(q => q.id).join(',')})`);
+}
+
 async function loadCombined(rid, statuses = LIVE) {
   const { data: request } = await admin.from('requests').select('*, organizations(*)').eq('id', rid).maybeSingle();
   if (!request) return null;
@@ -159,7 +166,7 @@ async function loadCombined(rid, statuses = LIVE) {
   const item = id => (items || []).find(i => i.id === id);
   const nameOf = q => item(q.request_item_id)?.name || q.products?.name || 'Item';
   const skuOf = q => item(q.request_item_id)?.sku || q.products?.sku || '';
-  const list = quotes || [];
+  const list = dropReplaced(quotes || []);
   return { request, org: request.organizations, quotes: list, combined: combineQuotes(list, { nameOf, skuOf }) };
 }
 
@@ -210,6 +217,7 @@ r.post('/requests/:rid/send-all', async (req, res) => {
   const low = drafts.filter(q => !compute(q, settings).meetsMinimum);
   if (low.length && !override) return back(res, to, { err: `${low.length} line${low.length > 1 ? 's are' : ' is'} below the ${settings.pricing.min_margin_pct}% minimum margin. Raise the margin, or an admin can tick the override.` });
   if (drafts.some(q => !q.ai_check) && !bool(req.body.skip_ai)) return back(res, to, { err: 'Some lines have no AI check yet. Run it on each line, or tick "send without AI check".' });
+  await supersedeOlder(rid, drafts);
   await admin.from('quotes').update({ status: 'sent' }).in('id', drafts.map(q => q.id));
   await admin.from('requests').update({ status: 'quoted' }).eq('id', rid);
   await log({ entityType: 'request', entityId: rid, action: 'quote_sent', actorId: req.user.id, clientVisible: true, detail: { note: `${drafts.length} lines` } });
@@ -373,6 +381,7 @@ r.post('/quotes/:id/send', async (req, res) => {
   if (!q.ai_check && !bool(req.body.skip_ai)) {
     return back(res, `/admin/pricing/quotes/${q.id}`, { err: 'Run the AI check first (or tick "send without AI check").' });
   }
+  await supersedeOlder(q.request_id, [q]);
   await admin.from('quotes').update({ status: 'sent' }).eq('id', q.id);
   await admin.from('requests').update({ status: 'quoted' }).eq('id', q.request_id);
   await log({ entityType: 'request', entityId: q.request_id, action: 'quote_sent', actorId: req.user.id, clientVisible: true, detail: { quote_id: q.id } });

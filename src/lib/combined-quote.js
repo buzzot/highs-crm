@@ -10,6 +10,21 @@ const day = d => new Date(d || Date.now()).toLocaleDateString('en-GB', { day: '2
 export const LIVE = ['draft', 'sent', 'accepted'];
 
 /**
+ * A request line quoted again (e.g. after a rejected PO) leaves an older sent/accepted quote behind. Keep only the newest live quote per request line,
+ * so the same product is never counted twice. Rejected / expired / superseded quotes are kept as history.
+ */
+export function dropReplaced(quotes) {
+  const live = new Set(['sent', 'accepted']), key = q => q.request_item_id || q.product_id || q.id;
+  const newest = new Map();
+  for (const q of quotes || []) {
+    if (!q || !live.has(q.status)) continue;
+    const cur = newest.get(key(q));
+    if (!cur || String(q.created_at || '') > String(cur.created_at || '')) newest.set(key(q), q);
+  }
+  return (quotes || []).filter(q => q && (!live.has(q.status) || newest.get(key(q)) === q));
+}
+
+/**
  * @param quotes   rows from `quotes` (any mix; only same-currency lines are summed)
  * @param opts.nameOf / skuOf   (quote) => text for the line
  */

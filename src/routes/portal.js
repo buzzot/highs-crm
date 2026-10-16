@@ -5,7 +5,7 @@ import { admin } from '../lib/supabase.js';
 import { log } from '../lib/activity.js';
 import { aiEnabled, extractProductInfo } from '../lib/ai.js';
 import { companyAiOn } from '../lib/ai-access.js';
-import { combineQuotes, poLinesFromCombined, quotationPdf } from '../lib/combined-quote.js';
+import { combineQuotes, dropReplaced, poLinesFromCombined, quotationPdf } from '../lib/combined-quote.js';
 import { getCompany, poFromQuote, poPdf, totalOf, text as txt } from '../lib/purchase.js';
 import { staffEmails } from '../lib/request-changes.js';
 import { sendEmail } from '../lib/mailer.js';
@@ -171,12 +171,13 @@ r.get('/requests/:id', async (req, res) => {
     req.db.from('request_revisions').select('*').eq('request_id', request.id).order('created_at', { ascending: false }).limit(1),
   ]);
   const { data: pos } = await admin.from('purchase_orders').select('id, po_no, quote_id, status').eq('request_id', request.id).eq('org_id', req.user.org_id).in('status', ['draft', 'submitted', 'approved']);
-  const bundles = bundlesFor(quotes || [], items || []);
+  const shown = dropReplaced(quotes || []);
+  const bundles = bundlesFor(shown, items || []);
   const last = revs?.[0] || null;
   const pending = last?.status === 'pending' ? last : null;
   const pendingDiff = pending ? diff(snapshot(request, items || []), pending.data) : null;
   res.render('portal/request_detail', {
-    title: request.ref, request, pos: pos || [], bundles, quotes: quotes || [], docs: (docs || []).filter(d => !d.revision_id), events: events || [], items: items || [],
+    title: request.ref, request, pos: pos || [], bundles, quotes: shown, docs: (docs || []).filter(d => !d.revision_id), events: events || [], items: items || [],
     pending, pendingDiff, lastDecision: last && ['approved', 'rejected'].includes(last.status) ? last : null, canEdit: EDITABLE.includes(request.status),
   });
 });
@@ -304,7 +305,8 @@ r.post('/quotes/:id/:decision(accept|reject)', async (req, res) => {
 // the client accepts or rejects all sent lines of a request in one click
 r.post('/requests/:rid/quotes/:decision(accept|reject)', async (req, res) => {
   const { data: request } = await req.db.from('requests').select('id').eq('id', req.params.rid).maybeSingle();
-  const { data: sent } = request ? await req.db.from('quotes').select('id').eq('request_id', request.id).eq('status', 'sent') : { data: [] };
+  const { data: sentAll } = request ? await req.db.from('quotes').select('id, request_item_id, product_id, status, created_at').eq('request_id', request.id).eq('status', 'sent') : { data: [] };
+  const sent = dropReplaced(sentAll || []);
   if (!sent?.length) return res.status(400).render('error', { title: 'Not allowed', message: 'There is no quotation waiting for your answer.' });
   const accept = req.params.decision === 'accept';
   await admin.from('quotes').update({ status: accept ? 'accepted' : 'rejected' }).in('id', sent.map(q => q.id));
@@ -316,12 +318,13 @@ r.post('/requests/:rid/quotes/:decision(accept|reject)', async (req, res) => {
 async function clientQuotation(req, statuses) {
   const { data: request } = await req.db.from('requests').select(REQ).eq('id', req.params.rid).maybeSingle();
   if (!request) return null;
-  const [{ data: quotes }, { data: items }, { data: org }] = await Promise.all([
+  let [{ data: quotes }, { data: items }, { data: org }] = await Promise.all([
     req.db.from('quotes').select(QUOTE).eq('request_id', request.id).in('status', statuses).order('created_at'),
     req.db.from('request_items').select('id, name, sku').eq('request_id', request.id),
     admin.from('organizations').select('*').eq('id', req.user.org_id).single(),
   ]);
   const it = q => (items || []).find(i => i.id === q.request_item_id);
+  quotes = dropReplaced(quotes || []);
   const combined = combineQuotes(quotes || [], { nameOf: q => it(q)?.name || 'Item', skuOf: q => it(q)?.sku || '' });
   return { request, org, quotes: quotes || [], combined };
 }

@@ -33,3 +33,10 @@ test('quotation PDF renders', () => {
   const pdf = quotationPdf({ request: { ref: 'IRQ-1', title: 'x' }, combined: c, org: { name: 'Acme' }, company: { name: 'Lumi Trade' } });
   assert.equal(Buffer.from(pdf).subarray(0, 4).toString(), '%PDF');
 });
+
+test('dropReplaced keeps only the newest live quote per request line', async () => {
+  const { dropReplaced } = await import('../src/lib/combined-quote.js');
+  const q = (id, item, status, at) => ({ id, request_item_id: item, status, created_at: at });
+  const out = dropReplaced([q('a', 'i1', 'accepted', '2026-10-16T07:45'), q('b', 'i1', 'accepted', '2026-10-16T08:27'), q('c', 'i1', 'rejected', '2026-10-15'), q('d', 'i2', 'sent', '2026-10-16')]);
+  assert.deepEqual(out.map(x => x.id), ['b', 'c', 'd']);
+});
