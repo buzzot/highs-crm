@@ -40,3 +40,12 @@ test('PO from a quote with freight adds an estimated logistics line equal to the
   assert.equal(po.lines.length, 2); assert.equal(po.lines[1].description, 'Freight & logistics (estimate)');
   assert.equal(totalOf(po.lines), 30140);
 });
+
+test('quote email shows the note and, for one product, quantity x price = total', async () => {
+  const { quoteSentEmail } = await import('../src/lib/email-templates.js');
+  const m = quoteSentEmail({ request: { ref: 'REQ-1', title: 'Housing' }, url: 'https://x/y', count: 1, currency: 'CNY', attached: true, notes: 'Pins included\nPay 30% upfront',
+    line: { quantity: 200, unit_price: 148.2, goods: 29640, logistics: 500, total: 30140 } });
+  assert.match(m.html, /200 × CNY 148\.20 = CNY 30,140\.00/); assert.match(m.html, /Pins included<br>Pay 30% upfront/); assert.match(m.html, /quotation is attached/);
+  assert.match(m.text, /Note from us:\nPins included/);
+  assert.doesNotMatch(m.html, /&amp;amp;/);
+});

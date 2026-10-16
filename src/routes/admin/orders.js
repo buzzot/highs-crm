@@ -56,6 +56,19 @@ r.get('/new', async (req, res) => {
   ]);
   res.render('admin/orders/new', { title: 'New order', clients: clients || [], suppliers: suppliers || [], currencies: CURRENCIES, org: req.query.org_id || '' });
 });
+// quick-add a client from the new-order form (JSON): name is enough; a client with the same name is reused
+r.post('/quick-client', async (req, res) => {
+  const t = k => String(req.body[k] || '').trim().slice(0, 200) || null;
+  const name = t('name');
+  if (!name) return res.status(400).json({ error: 'Enter the client name.' });
+  const { data: same } = await admin.from('organizations').select('id, name, default_currency').ilike('name', name.replace(/[%_,()]/g, ' ')).limit(5);
+  const dup = (same || []).find(x => x.name.trim().toLowerCase() === name.toLowerCase());
+  if (dup) return res.json({ id: dup.id, name: dup.name, default_currency: dup.default_currency, existing: true });
+  const cur = CURRENCIES.includes(req.body.default_currency) ? req.body.default_currency : undefined;
+  const { data, error } = await admin.from('organizations').insert({ name, email: t('email'), phone: t('phone'), country: t('country'), city: t('city'), ...(cur ? { default_currency: cur } : {}) }).select('id, name, default_currency').single();
+  if (error) return res.status(400).json({ error: error.message });
+  res.json({ ...data, existing: false });
+});
 r.post('/', async (req, res) => {
   const b = clean(req.body, ['org_id', 'supplier_id', 'currency', 'expected_ship_date', 'client_notes', 'internal_notes']);
   const { data, error } = await admin.from('orders').insert(b).select('id').single();

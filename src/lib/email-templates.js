@@ -112,17 +112,22 @@ export function changeSubmittedEmail({ request, orgName, who, url }) {
 }
 
 // ---- offer sent to the client ----
-export function quoteSentEmail({ request, validUntil, leadTimeDays, url, count, total, currency, attached }) {
+export function quoteSentEmail({ request, validUntil, leadTimeDays, url, count, total, currency, attached, notes, line }) {
   const facts = [validUntil ? `valid until ${validUntil}` : null, leadTimeDays ? `lead time ${leadTimeDays} days` : null].filter(Boolean).join(' · ');
-  const sum = count > 1 && total != null ? `${count} products, total ${currency || ''} ${Number(total).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`.replace('  ', ' ') : '';
+  const money = v => `${currency || ''} ${Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`.trim();
+  const sum = count > 1 && total != null ? `${count} products, total ${money(total)}` : '';
+  // a single product: show quantity, unit price and the total right in the email
+  const one = line && count <= 1 ? `${Number(line.quantity).toLocaleString('en-US')} × ${money(line.unit_price)} = ${money(line.total)}${line.logistics > 0 ? ` (goods ${money(line.goods)} + estimated freight & logistics ${money(line.logistics)})` : ''}` : '';
+  const note = String(notes || '').trim();
+  const noteHtml = note ? `<br><br><strong>Note from us:</strong><br>${esc(note).replace(/\n/g, '<br>')}` : '';
   return {
     subject: `Your offer for ${request.ref} is ready`,
     html: layout({
       preheader: `We prepared an offer for ${request.ref}.`, eyebrow: 'New offer', title: 'Your offer is ready',
-      introHtml: `We prepared an offer for <strong>${esc(request.ref)} · ${esc(request.title)}</strong>${facts ? ` (${esc(facts)})` : ''}.${sum ? ` It covers ${esc(sum)}.` : ''} ${attached ? 'The quotation is attached. ' : ''}Open it in your portal to review the price and accept it.`,
+      introHtml: `We prepared an offer for <strong>${esc(request.ref)} · ${esc(request.title)}</strong>${facts ? ` (${esc(facts)})` : ''}.${sum ? ` It covers ${esc(sum)}.` : ''}${one ? `<br><br><strong>${esc(one)}</strong>` : ''}${noteHtml}<br><br>${attached ? 'The quotation is attached. ' : ''}Open it in your portal to review the price and accept it.`,
       buttonText: 'View the offer', buttonUrl: url, fineHtml: 'Questions? Just reply to this email.',
     }),
-    text: `Your offer for ${request.ref} is ready${facts ? ` (${facts})` : ''}${sum ? `. ${sum}` : ''}. View it: ${url}`,
+    text: `Your offer for ${request.ref} is ready${facts ? ` (${facts})` : ''}${sum ? `. ${sum}` : ''}${one ? `. ${one}` : ''}.${note ? `\n\nNote from us:\n${note}` : ''}\n\nView it: ${url}`,
   };
 }
 

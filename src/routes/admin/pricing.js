@@ -156,6 +156,9 @@ async function supersedeOlder(rid, fresh) {
   await admin.from('quotes').update({ status: 'superseded' }).eq('request_id', rid).eq('status', 'sent').in('request_item_id', items).not('id', 'in', `(${fresh.map(q => q.id).join(',')})`);
 }
 
+// client-visible notes of the quotes being sent (one per line, shown in the email)
+const noteOf = quotes => [...new Set((quotes || []).map(q => String(q.notes || '').trim()).filter(Boolean))].join('\n\n');
+
 async function loadCombined(rid, statuses = LIVE) {
   const { data: request } = await admin.from('requests').select('*, organizations(*)').eq('id', rid).maybeSingle();
   if (!request) return null;
@@ -233,7 +236,7 @@ r.post('/requests/:rid/send-all', async (req, res) => {
       const x = await loadCombined(rid, ['sent', 'accepted']), c = x.combined;
       let attachments;
       try { attachments = [{ filename: `${rq.ref}-quotation.pdf`, content: Buffer.from(quotationPdf({ request: x.request, combined: c, org: x.org, company: await getCompany(admin) })) }]; } catch (e) { console.error(`[quote] pdf failed: ${e.message}`); }
-      await sendEmail({ to: sentTo, attachments, ...quoteSentEmail({ request: rq, validUntil: c.valid_until, leadTimeDays: c.lead_time_days, count: c.count, total: c.mixed ? null : c.grandTotal, currency: c.currency, attached: !!attachments, url: `${(process.env.APP_URL || '').replace(/\/+$/, '')}/portal/requests/${rq.id}` }) });
+      await sendEmail({ to: sentTo, attachments, ...quoteSentEmail({ request: rq, validUntil: c.valid_until, leadTimeDays: c.lead_time_days, count: c.count, total: c.mixed ? null : c.grandTotal, currency: c.currency, attached: !!attachments, notes: noteOf(x.quotes), url: `${(process.env.APP_URL || '').replace(/\/+$/, '')}/portal/requests/${rq.id}` }) });
     }
   } catch (e) { console.error(`[quote] email to client failed: ${e.message}`); return back(res, to, { msg: `${drafts.length} quotes sent — the client can see them in the portal, but the email notification failed.` }); }
   back(res, to, { msg: `${drafts.length} quotes sent${sentTo.length ? ` and the client was notified (${sentTo.join(', ')}).` : ' — the client can see them in the portal (no active client user to email).'}` });
@@ -394,7 +397,17 @@ r.post('/quotes/:id/send', async (req, res) => {
     people = (people || []).filter(x => x.role === 'client'); // a staff-initiated request (IRQ) is written to the company's users
     if (!people?.length) ({ data: people } = await admin.from('profiles').select('email').eq('org_id', rq.org_id).eq('role', 'client').eq('active', true));
     sentTo = [...new Set((people || []).map(p => p.email).filter(Boolean))];
-    if (sentTo.length) await sendEmail({ to: sentTo, ...quoteSentEmail({ request: rq, validUntil: q.valid_until, leadTimeDays: q.lead_time_days, url: `${(process.env.APP_URL || '').replace(/\/+$/, '')}/portal/requests/${rq.id}` }) });
+    if (sentTo.length) {
+      let attachments, c, line;
+      try {
+        const x = await loadCombined(q.request_id, ['sent', 'accepted']);
+        const only = { ...x, quotes: x.quotes.filter(z => z.id === q.id) };
+        c = combineQuotes(only.quotes, { nameOf: z => x.combined.lines.find(l => l.id === z.id)?.name || 'Item', skuOf: z => x.combined.lines.find(l => l.id === z.id)?.sku || '' });
+        line = c.lines[0];
+        attachments = [{ filename: `${rq.ref}-quotation.pdf`, content: Buffer.from(quotationPdf({ request: x.request, combined: c, org: x.org, company: await getCompany(admin) })) }];
+      } catch (e) { console.error(`[quote] pdf failed: ${e.message}`); }
+      await sendEmail({ to: sentTo, attachments, ...quoteSentEmail({ request: rq, validUntil: q.valid_until, leadTimeDays: q.lead_time_days, count: 1, currency: q.sell_currency, line, attached: !!attachments, notes: q.notes, url: `${(process.env.APP_URL || '').replace(/\/+$/, '')}/portal/requests/${rq.id}` }) });
+    }
   } catch (e) { console.error(`[quote] email to client failed: ${e.message}`); return back(res, `/admin/pricing/quotes/${q.id}`, { msg: 'Quote sent — the client can see it in their portal, but the email notification failed.' }); }
   back(res, `/admin/pricing/quotes/${q.id}`, { msg: `Quote sent — the client can see it in their portal${sentTo.length ? ` and was notified by email (${sentTo.join(', ')}).` : '.'}` });
 });

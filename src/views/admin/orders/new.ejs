@@ -5,8 +5,23 @@
   <p class="muted">Most orders are created from an accepted quote on the Sourcing page. Use this for repeat orders or deals agreed offline — add items on the next screen.</p>
   <form method="post" action="/admin/orders">
     <div class="row">
-      <label class="grow2">Client <select name="org_id" required><option value="">—</option><% clients.forEach(c => { %><option value="<%= c.id %>" <%= org === c.id ? 'selected' : '' %>><%= c.name %></option><% }) %></select></label>
+      <label class="grow2">Client <select name="org_id" required><option value="">—</option><% clients.forEach(c => { %><option value="<%= c.id %>" <%= org === c.id ? 'selected' : '' %>><%= c.name %></option><% }) %><option value="__new">+ Add new client…</option></select></label>
       <label>Currency <select name="currency"><% currencies.forEach(c => { %><option><%= c %></option><% }) %></select></label>
+    </div>
+    <div class="newsup" id="newClient" hidden>
+      <strong>New client</strong> <span class="muted small">— just the basics; complete the rest on the client page, where you can also invite their users</span>
+      <div class="row">
+        <label class="grow2">Company name <input id="nc_name" maxlength="200"></label>
+        <label>Country <input id="nc_country"></label>
+        <label>City <input id="nc_city"></label>
+      </div>
+      <div class="row">
+        <label>Email <input type="email" id="nc_email"></label>
+        <label>Phone <input id="nc_phone"></label>
+        <label>Currency <select id="nc_cur"><% currencies.forEach(c => { %><option><%= c %></option><% }) %></select></label>
+      </div>
+      <div class="aiscan-msg err" id="nc_err" hidden></div>
+      <div class="actions"><button type="button" class="btn small primary" id="nc_save">Add client</button><button type="button" class="btn small" id="nc_cancel">Cancel</button></div>
     </div>
     <div class="row">
       <label class="grow2">Supplier <select name="supplier_id"><option value="">—</option><% suppliers.forEach(s => { %><option value="<%= s.id %>"><%= s.name %></option><% }) %></select></label>
@@ -17,4 +32,30 @@
     <div class="actions"><button class="btn primary">Create order</button></div>
   </form>
 </div>
+<script>
+  // "+ Add new client…": create the client in place, select it and use its currency
+  (function () {
+    const sel = document.querySelector('select[name=org_id]'), cur = document.querySelector('select[name=currency]'), box = document.getElementById('newClient'); if (!sel || !box) return;
+    const $ = id => document.getElementById(id); let prev = sel.value;
+    const err = t => { const e = $('nc_err'); e.hidden = !t; e.textContent = t || ''; };
+    const close = () => { box.hidden = true; err(''); if (sel.value === '__new') sel.value = prev; };
+    sel.addEventListener('change', () => { if (sel.value === '__new') { box.hidden = false; $('nc_cur').value = cur.value; $('nc_name').focus(); } else { prev = sel.value; box.hidden = true; } });
+    $('nc_cancel').addEventListener('click', close);
+    $('nc_save').addEventListener('click', async () => {
+      const name = $('nc_name').value.trim(); if (!name) return err('Enter the client name.');
+      const btn = $('nc_save'); btn.disabled = true; err('');
+      try {
+        const res = await fetch('/admin/orders/quick-client', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ name, country: $('nc_country').value, city: $('nc_city').value, email: $('nc_email').value, phone: $('nc_phone').value, default_currency: $('nc_cur').value }) });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(j.error || 'Could not add the client.');
+        if (![...sel.options].some(o => o.value === j.id)) sel.insertBefore(new Option(j.name, j.id), sel.querySelector('option[value=__new]'));
+        sel.value = j.id; prev = j.id; box.hidden = true;
+        const c = j.default_currency || $('nc_cur').value; if ([...cur.options].some(o => o.value === c || o.text === c)) cur.value = c;
+        ['nc_name', 'nc_country', 'nc_city', 'nc_email', 'nc_phone'].forEach(i => { $(i).value = ''; });
+      } catch (e) { err(e.message); } finally { btn.disabled = false; }
+    });
+    sel.form.addEventListener('submit', () => { if (sel.value === '__new') sel.value = prev; });
+  })();
+</script>
 <%- include('../../partials/foot') %>
