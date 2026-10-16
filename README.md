@@ -153,3 +153,7 @@ Combined client POs now keep each line's `product_id`, so the order's products l
 Run `supabase/migrations/0022_purchasing_standalone.sql` (makes `supplier_pos.order_id` optional, adds `title`).
 Purchasing → **+ New purchase order** (no order selected) builds a PO to one supplier from catalogue/free lines.
 Once the client order is confirmed, open the PO (or the order page) and **Link to order**; supplier replies and documents then attach to the order. Unlinked POs keep documents on the supplier.
+
+### Freight shown separately or included (migration 0023)
+Run `supabase/migrations/0023_freight_mode.sql` **before** deploying (the client portal selects the new `quotes.freight_mode` column).
+Each quotation has one switch — on the quote forms and on the Quotation page (drafts): **Shown as a separate line** (default) or **Included in the unit price**. With "included", freight + duties + other costs are spread into each line's unit price (`shownOf` in `src/lib/freight-mode.js`); the client portal, quotation PDF, email, the client's PO and so the order/PI show all-in prices and no freight line. Staff screens keep the real goods price, freight and margin.

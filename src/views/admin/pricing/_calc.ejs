@@ -58,6 +58,10 @@
         <label>Duties & taxes total <input type="number" step="0.01" name="duties_estimate" id="f_duties" value="<%= q.duties_estimate ?? 0 %>"></label>
         <label>Other total <input type="number" step="0.01" name="other_costs" id="f_other" value="<%= q.other_costs ?? 0 %>"></label>
       </div>
+      <div class="row">
+        <label>Freight on the quotation <select name="freight_mode"><option value="separate" <%= (q.freight_mode || 'separate') === 'separate' ? 'selected' : '' %>>Shown as a separate line</option><option value="included" <%= q.freight_mode === 'included' ? 'selected' : '' %>>Included in the unit price</option></select></label>
+        <p class="muted small grow2" style="align-self:end;margin:0">“Included” adds freight, duties and other costs to the unit price, so the client sees one all-in price and no freight line. Your real figures stay here.</p>
+      </div>
       <h3>Terms</h3>
       <div class="row">
         <label>Incoterm <select name="incoterm"><% incoterms.forEach(i => { %><option <%= q.incoterm === i ? 'selected' : '' %>><%= i %></option><% }) %></select></label>

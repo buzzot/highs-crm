@@ -14,20 +14,27 @@
       <tr>
         <td><strong><%= l.name %></strong><div class="muted small"><%= [l.sku, q.suppliers?.name].filter(Boolean).join(' · ') %></div></td>
         <td class="right"><%= l.quantity.toLocaleString('en-US') %></td>
-        <td class="right"><%= m(l.unit_price, 4) %></td>
-        <td class="right"><%= m(l.goods) %></td>
-        <td class="right"><%= m(l.logistics) %></td>
+        <td class="right"><%= m(l.shown.unit_price, 4) %><% if (l.shown.included) { %><div class="muted small">factory-sell <%= m(l.unit_price, 4) %> + freight <%= m(l.logistics) %></div><% } %></td>
+        <td class="right"><%= m(l.shown.goods) %></td>
+        <td class="right"><%= l.shown.included ? 'included' : m(l.shown.logistics) %></td>
         <td class="right"><strong><%= m(l.total) %></strong></td>
         <td class="right"><% if (q.ai_check) { %><span class="tag <%= q.ai_check.ok ? 'ok' : 'warn' %>" title="AI check score"><%= q.ai_check.score %></span> <% } %><span class="pill <%= q.status %>"><%= fmt.status(q.status || l.status) %></span> <a class="btn small" href="/admin/pricing/quotes/<%= q.id %>">Edit</a></td>
       </tr>
     <% }) %>
     </tbody>
     <tfoot>
-      <tr><td colspan="3" class="right muted">Goods total</td><td class="right"><%= m(combined.goodsTotal) %></td><td></td><td></td><td></td></tr>
-      <tr><td colspan="4" class="right muted">Freight &amp; logistics<% if (combined.duties || combined.other) { %> <span class="small">(freight <%= m(combined.freight) %>, duties <%= m(combined.duties) %>, other <%= m(combined.other) %>)</span><% } %></td><td class="right"><%= m(combined.logisticsTotal) %></td><td></td><td></td></tr>
+      <tr><td colspan="3" class="right muted">Goods total</td><td class="right"><%= m(combined.shown.goodsTotal) %></td><td></td><td></td><td></td></tr>
+      <tr><td colspan="4" class="right muted">Freight &amp; logistics<% if (combined.duties || combined.other) { %> <span class="small">(freight <%= m(combined.freight) %>, duties <%= m(combined.duties) %>, other <%= m(combined.other) %>)</span><% } %></td><td class="right"><%= combined.included ? 'included' : m(combined.shown.logisticsTotal) %></td><td></td><td></td></tr>
       <tr class="grand"><td colspan="5" class="right"><strong>Total quotation<%= combined.incoterm ? ' (' + combined.incoterm + ')' : '' %></strong></td><td class="right"><strong><%= combined.mixed ? '—' : m(combined.grandTotal) %></strong></td><td></td></tr>
     </tfoot>
   </table>
+  <% if (drafts.length) { %>
+  <form method="post" action="/admin/pricing/requests/<%= request.id %>/freight-mode" class="sendall freightmode">
+    <span><strong>Freight on the quotation</strong> <span class="muted small">— one setting for all lines</span></span>
+    <select name="freight_mode"><option value="separate" <%= !combined.included ? 'selected' : '' %>>Shown as a separate line</option><option value="included" <%= combined.included ? 'selected' : '' %>>Included in the unit prices</option></select>
+    <button class="btn small">Apply</button>
+  </form>
+  <% } else if (combined.included) { %><p class="small"><span class="tag ok">Freight included in the prices</span> <span class="muted">the client sees all-in unit prices and no freight line.</span></p><% } %>
   <p class="muted small">Lead time <%= combined.lead_time_days ? combined.lead_time_days + ' days (the longest line)' : '—' %> · valid until <%= combined.valid_until ? fmt.date(combined.valid_until) : '—' %> (the earliest line). Freight is an estimate. The client accepts all lines in one click and sends one purchase order.</p>
 </div>
 <% if (combined.cost != null) { %>
@@ -38,6 +45,7 @@
     <div><span class="muted small">Gross profit</span><strong><%= m(combined.profit) %></strong></div>
     <div><span class="muted small">Margin on cost</span><strong class="<%= combined.marginPct < min ? 'bad' : '' %>"><%= fmt.pct(combined.marginPct) %></strong></div>
     <div><span class="muted small">Lines below <%= min %>%</span><strong class="<%= low ? 'bad' : '' %>"><%= low %></strong></div>
+    <% if (combined.included) { %><div><span class="muted small">Freight &amp; logistics inside the prices</span><strong><%= m(combined.logisticsTotal) %></strong></div><% } %>
     <div><span class="muted small">Lines with AI check</span><strong><%= drafts.length - noAi %> / <%= drafts.length %></strong></div>
   </div>
 </div>

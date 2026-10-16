@@ -6,6 +6,7 @@ import { log } from '../../lib/activity.js';
 import { sendEmail } from '../../lib/mailer.js';
 import { getCompany } from '../../lib/purchase.js';
 import { combineQuotes, dropReplaced, quotationPdf, LIVE } from '../../lib/combined-quote.js';
+import { modeOf } from '../../lib/freight-mode.js';
 import { quoteSentEmail } from '../../lib/email-templates.js';
 import { requireAdmin } from '../../middleware/auth.js';
 import { cargoLine, cargoTotals, AIR_KG_PER_CBM } from '../../lib/cargo.js';
@@ -14,7 +15,7 @@ import { clean, bool, back, notFound, getSettings, fxRate, INCOTERMS, CURRENCIES
 
 const r = Router();
 const QUOTE_FIELDS = ['request_id', 'request_item_id', 'product_id', 'supplier_id', 'quantity', 'unit_cost', 'cost_currency', 'fx_rate', 'margin_pct', 'sell_currency',
-  'freight_estimate', 'duties_estimate', 'other_costs', 'incoterm', 'lead_time_days', 'valid_until', 'notes'];
+  'freight_estimate', 'duties_estimate', 'other_costs', 'freight_mode', 'incoterm', 'lead_time_days', 'valid_until', 'notes'];
 
 function compute(b, settings) {
   return calcQuote({
@@ -120,7 +121,7 @@ r.post('/quotes/multi', async (req, res) => {
     const p = byId.get(l.product_id), cur = CURRENCIES.includes(l.cost_currency) ? l.cost_currency : 'CNY', fx = fxRate(settings, cur, sell);
     const row = { product_id: p.id, supplier_id: p.supplier_id, quantity: Math.max(1, Math.round(Number(l.quantity) || 0)), unit_cost: Number(String(l.unit_cost).replace(',', '.')) || 0, cost_currency: cur, fx_rate: fx,
       margin_pct: Number(l.margin_pct) || settings.pricing.default_margin_pct, sell_currency: sell, freight_estimate: Number(l.freight) || 0, duties_estimate: 0, other_costs: 0,
-      incoterm: b.incoterm || 'FOB', lead_time_days: Number(b.lead_time_days) > 0 ? Math.round(Number(b.lead_time_days)) : null, valid_until: /^\d{4}-\d{2}-\d{2}$/.test(b.valid_until || '') ? b.valid_until : null };
+      ...(modeOf(b.freight_mode) === 'included' ? { freight_mode: 'included' } : {}), incoterm: b.incoterm || 'FOB', lead_time_days: Number(b.lead_time_days) > 0 ? Math.round(Number(b.lead_time_days)) : null, valid_until: /^\d{4}-\d{2}-\d{2}$/.test(b.valid_until || '') ? b.valid_until : null };
     return { p, row, calc: compute(row, settings) };
   });
   if (!lines.length) return bad('No valid products.');
@@ -210,6 +211,14 @@ r.post('/requests/:rid/verify-all', async (req, res) => {
   back(res, to, { msg: flagged ? `${msg} Open the flagged lines to read the issues.` : msg });
 });
 
+// one switch per quotation: freight shown separately, or included in the unit prices (drafts only — what was sent stays as sent)
+r.post('/requests/:rid/freight-mode', async (req, res) => {
+  const rid = req.params.rid, to = `/admin/pricing/requests/${rid}/quote`, mode = modeOf(req.body.freight_mode);
+  const { data, error } = await admin.from('quotes').update({ freight_mode: mode }).eq('request_id', rid).eq('status', 'draft').select('id');
+  if (error) return back(res, to, { err: /freight_mode/.test(error.message) ? 'Run supabase/migrations/0023_freight_mode.sql in Supabase first.' : error.message });
+  back(res, to, { msg: mode === 'included' ? 'Freight is now included in the unit prices — the client will see all-in prices and no freight line.' : 'Freight will be shown as a separate line.' });
+});
+
 // send every draft quote of a request in one go (one email to the client)
 r.post('/requests/:rid/send-all', async (req, res) => {
   const settings = await getSettings(admin);
@@ -236,7 +245,7 @@ r.post('/requests/:rid/send-all', async (req, res) => {
       const x = await loadCombined(rid, ['sent', 'accepted']), c = x.combined;
       let attachments;
       try { attachments = [{ filename: `${rq.ref}-quotation.pdf`, content: Buffer.from(quotationPdf({ request: x.request, combined: c, org: x.org, company: await getCompany(admin) })) }]; } catch (e) { console.error(`[quote] pdf failed: ${e.message}`); }
-      await sendEmail({ to: sentTo, attachments, ...quoteSentEmail({ request: rq, validUntil: c.valid_until, leadTimeDays: c.lead_time_days, count: c.count, total: c.mixed ? null : c.grandTotal, currency: c.currency, attached: !!attachments, notes: noteOf(x.quotes), url: `${(process.env.APP_URL || '').replace(/\/+$/, '')}/portal/requests/${rq.id}` }) });
+      await sendEmail({ to: sentTo, attachments, ...quoteSentEmail({ request: rq, validUntil: c.valid_until, leadTimeDays: c.lead_time_days, count: c.count, total: c.mixed ? null : c.shown.grandTotal, currency: c.currency, attached: !!attachments, notes: noteOf(x.quotes), url: `${(process.env.APP_URL || '').replace(/\/+$/, '')}/portal/requests/${rq.id}` }) });
     }
   } catch (e) { console.error(`[quote] email to client failed: ${e.message}`); return back(res, to, { msg: `${drafts.length} quotes sent — the client can see them in the portal, but the email notification failed.` }); }
   back(res, to, { msg: `${drafts.length} quotes sent${sentTo.length ? ` and the client was notified (${sentTo.join(', ')}).` : ' — the client can see them in the portal (no active client user to email).'}` });
@@ -269,6 +278,7 @@ r.get('/quotes/new', async (req, res) => {
 async function saveQuote(req, res, id) {
   const settings = await getSettings(admin);
   const b = clean(req.body, QUOTE_FIELDS);
+  b.freight_mode = modeOf(b.freight_mode);
   const formError = async error => {
     const lists = await formLists();
     return res.status(400).render('admin/pricing/quote_form', { title: id ? 'Edit quote' : 'New quote', q: { ...req.body, id }, settings, ...lists, incoterms: INCOTERMS, currencies: CURRENCIES, error });
@@ -316,10 +326,12 @@ async function saveQuote(req, res, id) {
     const { data: cur } = await admin.from('quotes').select('status').eq('id', id).single();
     if (!cur) return notFound(res, 'Quote');
     if (!['draft', 'sent'].includes(cur.status)) return back(res, `/admin/pricing/quotes/${id}`, { err: `A ${cur.status} quote can't be edited — duplicate it instead.` });
-    const { error } = await admin.from('quotes').update({ ...row, ai_check: null, status: 'draft' }).eq('id', id);
+    let { error } = await admin.from('quotes').update({ ...row, ai_check: null, status: 'draft' }).eq('id', id);
+    if (error && /freight_mode/.test(error.message)) { const { freight_mode, ...rest } = row; ({ error } = await admin.from('quotes').update({ ...rest, ai_check: null, status: 'draft' }).eq('id', id)); } // before migration 0023
     if (error) return back(res, `/admin/pricing/quotes/${id}`, { err: error.message });
   } else {
-    const { data, error } = await admin.from('quotes').insert({ ...row, created_by: req.user.id }).select('id').single();
+    let { data, error } = await admin.from('quotes').insert({ ...row, created_by: req.user.id }).select('id').single();
+    if (error && /freight_mode/.test(error.message)) { const { freight_mode, ...rest } = row; ({ data, error } = await admin.from('quotes').insert({ ...rest, created_by: req.user.id }).select('id').single()); } // before migration 0023
     if (error) {
       const lists = await formLists();
       return res.status(400).render('admin/pricing/quote_form', { title: 'New quote', q: req.body, settings, ...lists, incoterms: INCOTERMS, currencies: CURRENCIES, error: error.message });
@@ -327,6 +339,8 @@ async function saveQuote(req, res, id) {
     qid = data.id;
     await admin.from('requests').update({ status: 'reviewing' }).eq('id', b.request_id).eq('status', 'new');
   }
+  // one switch per quotation: the other draft lines of this request follow this line's choice
+  if (b.request_id) await admin.from('quotes').update({ freight_mode: b.freight_mode }).eq('request_id', b.request_id).eq('status', 'draft').neq('id', qid);
   if (req.body.action === 'verify') return verifyAndBack(req, res, qid);
   back(res, `/admin/pricing/quotes/${qid}`, { msg: 'Quote saved as draft.' });
 }
@@ -403,7 +417,7 @@ r.post('/quotes/:id/send', async (req, res) => {
         const x = await loadCombined(q.request_id, ['sent', 'accepted']);
         const only = { ...x, quotes: x.quotes.filter(z => z.id === q.id) };
         c = combineQuotes(only.quotes, { nameOf: z => x.combined.lines.find(l => l.id === z.id)?.name || 'Item', skuOf: z => x.combined.lines.find(l => l.id === z.id)?.sku || '' });
-        line = c.lines[0];
+        const l0 = c.lines[0]; line = { quantity: l0.quantity, unit_price: l0.shown.unit_price, goods: l0.shown.goods, logistics: l0.shown.logistics, total: l0.shown.total };
         attachments = [{ filename: `${rq.ref}-quotation.pdf`, content: Buffer.from(quotationPdf({ request: x.request, combined: c, org: x.org, company: await getCompany(admin) })) }];
       } catch (e) { console.error(`[quote] pdf failed: ${e.message}`); }
       await sendEmail({ to: sentTo, attachments, ...quoteSentEmail({ request: rq, validUntil: q.valid_until, leadTimeDays: q.lead_time_days, count: 1, currency: q.sell_currency, line, attached: !!attachments, notes: q.notes, url: `${(process.env.APP_URL || '').replace(/\/+$/, '')}/portal/requests/${rq.id}` }) });

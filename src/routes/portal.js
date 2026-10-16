@@ -5,7 +5,7 @@ import { admin } from '../lib/supabase.js';
 import { log } from '../lib/activity.js';
 import { aiEnabled, extractProductInfo } from '../lib/ai.js';
 import { companyAiOn } from '../lib/ai-access.js';
-import { combineQuotes, dropReplaced, poLinesFromCombined, quotationPdf } from '../lib/combined-quote.js';
+import { combineQuotes, dropReplaced, poLinesFromCombined, quotationPdf, shownOf } from '../lib/combined-quote.js';
 import { getCompany, poFromQuote, poPdf, totalOf, text as txt } from '../lib/purchase.js';
 import { staffEmails } from '../lib/request-changes.js';
 import { sendEmail } from '../lib/mailer.js';
@@ -31,7 +31,7 @@ const r = Router();
 const visibleReq = x => !(String(x.ref || '').startsWith('IRQ-') && ['new', 'reviewing'].includes(x.status));
 // Explicit column lists: clients have column-level grants only (see migration 0002).
 const REQ = 'id, ref, title, description, quantity, target_unit_price, target_currency, destination_country, destination_city, needed_by, delivery_mode, status, created_at, updated_at';
-const QUOTE = 'id, request_id, request_item_id, quantity, sell_currency, unit_price, freight_estimate, duties_estimate, other_costs, landed_unit_price, incoterm, lead_time_days, valid_until, status, notes, created_at';
+const QUOTE = 'id, request_id, request_item_id, quantity, sell_currency, unit_price, freight_estimate, duties_estimate, other_costs, landed_unit_price, freight_mode, incoterm, lead_time_days, valid_until, status, notes, created_at';
 const ORDER = 'id, order_no, request_id, status, currency, subtotal, client_notes, expected_ship_date, payment_status, amount_due, amount_paid, payment_due_date, payment_schedule, created_at, updated_at';
 const ITEM = 'id, description, quantity, unit_price, hs_code';
 const SHIP = 'id, order_id, mode, incoterm, origin_port, destination_port, container_no, tracking_no, bl_no, export_declaration_no, export_official, etd, eta, atd, ata, status, gross_weight_kg, volume_cbm, cartons, created_at';
@@ -171,7 +171,7 @@ r.get('/requests/:id', async (req, res) => {
     req.db.from('request_revisions').select('*').eq('request_id', request.id).order('created_at', { ascending: false }).limit(1),
   ]);
   const { data: pos } = await admin.from('purchase_orders').select('id, po_no, quote_id, status').eq('request_id', request.id).eq('org_id', req.user.org_id).in('status', ['draft', 'submitted', 'approved']);
-  const shown = dropReplaced(quotes || []);
+  const shown = dropReplaced(quotes || []).map(q => ({ ...q, shown: shownOf(q) }));
   const bundles = bundlesFor(shown, items || []);
   const last = revs?.[0] || null;
   const pending = last?.status === 'pending' ? last : null;

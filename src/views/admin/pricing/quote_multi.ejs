@@ -48,6 +48,10 @@
         <label>Total freight <span class="muted small" id="f_cur">USD</span> <input type="number" step="0.01" min="0" id="f_total" placeholder="0"></label>
         <label class="fb-btn"><span class="muted small">&nbsp;</span><button type="button" class="btn" id="f_reset" hidden>Spread again</button></label>
       </div>
+      <div class="row">
+        <label>Freight on the quotation <select name="freight_mode"><option value="separate">Shown as a separate line</option><option value="included">Included in the unit prices</option></select></label>
+        <p class="muted small grow2" style="align-self:end;margin:0">“Included” adds each line's freight to its unit price, so the client sees one all-in price per product and no freight line.</p>
+      </div>
       <p class="muted small" id="f_note">Type the forwarder's total, or a rate and it is calculated from the cargo above. You can still overwrite any line's freight; the other lines then share what is left.</p>
     </div>
     <table class="tbl compact multiq">
