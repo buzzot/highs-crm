@@ -179,6 +179,27 @@ r.get('/requests/:rid/quote.pdf', async (req, res) => {
   res.send(Buffer.from(quotationPdf({ request: x.request, combined: x.combined, org: x.org, company: await getCompany(admin) })));
 });
 
+// AI check on every draft line of a request (the lines that already have a check are kept unless "again" is ticked)
+r.post('/requests/:rid/verify-all', async (req, res) => {
+  const settings = await getSettings(admin);
+  const to = `/admin/pricing/requests/${req.params.rid}/quote`;
+  const { data: drafts } = await admin.from('quotes').select('*').eq('request_id', req.params.rid).eq('status', 'draft').order('created_at');
+  const todo = (drafts || []).filter(q => bool(req.body.again) || !q.ai_check);
+  if (!todo.length) return back(res, to, { msg: drafts?.length ? 'Every draft line already has an AI check.' : 'No draft lines to check.' });
+  let passed = 0, flagged = 0, failed = null;
+  for (const q of todo) {
+    try {
+      const result = await verifyQuote({ quote: q, calc: compute(q, settings), ...(await context(q)), settings });
+      await admin.from('quotes').update({ ai_check: result }).eq('id', q.id);
+      if (result.ok) passed++; else flagged++;
+    } catch (e) { failed = e.message; break; }
+  }
+  const done = passed + flagged;
+  const msg = `AI check: ${done} of ${todo.length} line${todo.length > 1 ? 's' : ''} checked — ${passed} passed, ${flagged} flagged.`;
+  if (failed) return back(res, to, { err: `${msg} Stopped: ${failed}` });
+  back(res, to, { msg: flagged ? `${msg} Open the flagged lines to read the issues.` : msg });
+});
+
 // send every draft quote of a request in one go (one email to the client)
 r.post('/requests/:rid/send-all', async (req, res) => {
   const settings = await getSettings(admin);

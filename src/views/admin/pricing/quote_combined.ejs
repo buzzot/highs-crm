@@ -18,7 +18,7 @@
         <td class="right"><%= m(l.goods) %></td>
         <td class="right"><%= m(l.logistics) %></td>
         <td class="right"><strong><%= m(l.total) %></strong></td>
-        <td class="right"><span class="pill <%= q.status %>"><%= fmt.status(q.status || l.status) %></span> <a class="btn small" href="/admin/pricing/quotes/<%= q.id %>">Edit</a></td>
+        <td class="right"><% if (q.ai_check) { %><span class="tag <%= q.ai_check.ok ? 'ok' : 'warn' %>" title="AI check score"><%= q.ai_check.score %></span> <% } %><span class="pill <%= q.status %>"><%= fmt.status(q.status || l.status) %></span> <a class="btn small" href="/admin/pricing/quotes/<%= q.id %>">Edit</a></td>
       </tr>
     <% }) %>
     </tbody>
@@ -45,6 +45,11 @@
 <div class="card">
   <h2>Next step</h2>
   <% if (drafts.length) { %>
+    <form method="post" action="/admin/pricing/requests/<%= request.id %>/verify-all" class="sendall aiall">
+      <span><%= noAi ? `${noAi} of ${drafts.length} line${drafts.length === 1 ? ' has' : 's have'} no AI check yet.` : 'Every line has an AI check.' %> Scores show next to each line.</span>
+      <% if (!noAi) { %><input type="hidden" name="again" value="1"><% } %>
+      <button class="btn"><%= noAi ? 'Run AI check on all lines' : 'Run AI check again' %></button>
+    </form>
     <form method="post" action="/admin/pricing/requests/<%= request.id %>/send-all" class="sendall">
       <span><strong><%= drafts.length %></strong> draft line<%= drafts.length === 1 ? '' : 's' %> go out as one quotation<%= combined.mixed ? '' : ' of ' + m(combined.grandTotal) %>, with the PDF attached.</span>
       <label class="check"><input type="checkbox" name="skip_ai"> without AI check</label>

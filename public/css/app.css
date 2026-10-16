@@ -1098,3 +1098,4 @@ fieldset.plain { border: 0; padding: 0; margin: 0; min-width: 0; }
 .quotesum tfoot td{border-top:0;padding-top:6px;padding-bottom:6px}
 .quotesum tfoot tr.grand td{border-top:2px solid var(--ink,#1b2430);font-size:16px;padding-top:10px}
 .quotesum td.right,.quotesum th.right{font-variant-numeric:tabular-nums}
+.aiall{margin-bottom:10px}
