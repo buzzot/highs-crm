@@ -15,20 +15,23 @@ const r = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 8 } });
 const isId = v => /^[0-9a-f-]{36}$/i.test(v || '');
 const missingTable = e => /supplier_pos|supplier_po_responses/.test(e?.message || '');
+const ent = po => (po.order_id ? ['order', po.order_id] : ['supplier', po.supplier_id]); // where activity about an unlinked PO is logged
 const MIGRATION = 'Run supabase/migrations/0021_purchasing.sql in Supabase first, then reload the schema cache.';
 
 // ---- list ----
 r.get('/', async (req, res) => {
   const status = SPO_STATUSES.includes(req.query.status) ? req.query.status : '';
+  const unlinked = req.query.order === 'none';
   let q = admin.from('supplier_pos').select('*, suppliers(id, name), orders(id, order_no, organizations(name))').order('created_at', { ascending: false }).limit(300);
   if (status) q = q.eq('status', status);
-  if (isId(req.query.order)) q = q.eq('order_id', req.query.order);
+  if (unlinked) q = q.is('order_id', null);
+  else if (isId(req.query.order)) q = q.eq('order_id', req.query.order);
   const { data: pos, error } = await q;
-  const all = error ? [] : (await admin.from('supplier_pos').select('status')).data || [];
-  const count = s => all.filter(x => x.status === s).length;
+  const all = error ? [] : (await admin.from('supplier_pos').select('status, order_id')).data || [];
+  const counts = Object.fromEntries(SPO_STATUSES.map(s => [s, all.filter(x => x.status === s).length]));
   res.render('admin/purchasing/index', {
-    title: 'Purchasing', pos: pos || [], status, labels: SPO_LABEL, statuses: SPO_STATUSES,
-    kpi: { total: all.length, waiting: count('sent'), review: count('replied'), confirmed: count('confirmed'), drafts: count('draft') },
+    title: 'Purchasing', pos: pos || [], status, unlinked, labels: SPO_LABEL, statuses: SPO_STATUSES, counts,
+    kpi: { total: all.length, waiting: counts.sent, review: counts.replied, confirmed: counts.confirmed, drafts: counts.draft, unlinked: all.filter(x => !x.order_id && !['cancelled', 'declined'].includes(x.status)).length },
     error: error ? (missingTable(error) ? MIGRATION : error.message) : null,
   });
 });
@@ -53,8 +56,18 @@ async function newContext(orderId) {
   return { order, rows, suppliers: suppliers || [], existing: existing || [] };
 }
 
+// a PO without an order: pick the supplier and add products by hand
+r.get('/new', async (req, res, next) => {
+  if (isId(req.query.order)) return next();
+  const [{ data: suppliers }, { data: products }, { data: orders }] = await Promise.all([
+    admin.from('suppliers').select('id, name, email, payment_terms').order('name'),
+    admin.from('products').select('id, name, sku, supplier_id, unit_cost, cost_currency').order('name'),
+    admin.from('orders').select('id, order_no, status, organizations(name)').not('status', 'in', '("closed","cancelled","delivered")').order('created_at', { ascending: false }).limit(100),
+  ]);
+  res.render('admin/purchasing/new_manual', { title: 'New purchase order', suppliers: suppliers || [], products: products || [], orders: orders || [], currencies: CURRENCIES, error: req.query.err || null, supplier_id: isId(req.query.supplier) ? req.query.supplier : '' });
+});
+
 r.get('/new', async (req, res) => {
-  if (!isId(req.query.order)) return back(res, '/admin/orders', { err: 'Open an order and choose "Create supplier POs".' });
   const x = await newContext(req.query.order).catch(e => ({ error: e.message }));
   if (x?.error || !x) return back(res, `/admin/orders/${req.query.order}`, { err: x?.error || 'Order not found.' });
   res.render('admin/purchasing/new', { title: `Supplier POs · ${x.order.order_no}`, ...x, currencies: CURRENCIES, error: req.query.err || null });
@@ -91,6 +104,52 @@ r.post('/new', async (req, res) => {
   res.redirect(made.length === 1 ? `/admin/purchasing/${made[0].id}?msg=${encodeURIComponent(msg)}` : `/admin/purchasing?order=${orderId}&msg=${encodeURIComponent(msg)}`);
 });
 
+r.post('/new-manual', async (req, res) => {
+  const b = req.body, to = '/admin/purchasing/new';
+  if (!isId(b.supplier_id)) return back(res, to, { err: 'Choose the supplier.' });
+  const arr = Array.isArray(b.line) ? b.line : Object.values(b.line || {});
+  const lines = arr.filter(l => l && String(l.description || '').trim() && Number(l.quantity) > 0).map(l => ({ description: String(l.description).trim().slice(0, 500), sku: String(l.sku || '').trim().slice(0, 80),
+    quantity: Number(l.quantity), unit: String(l.unit || 'pcs').trim().slice(0, 20) || 'pcs', unit_price: Number(String(l.unit_price).replace(',', '.')) || 0, product_id: isId(l.product_id) ? l.product_id : null, order_item_id: null }));
+  if (!lines.length) return back(res, `${to}?supplier=${b.supplier_id}`, { err: 'Add at least one product with a quantity.' });
+  const { data: sup } = await admin.from('suppliers').select('id, email, payment_terms').eq('id', b.supplier_id).maybeSingle();
+  if (!sup) return back(res, to, { err: 'Supplier not found.' });
+  const orderId = isId(b.order_id) ? b.order_id : null;
+  let po = null, lastErr = null;
+  for (let n = 0; n < 5 && !po; n++) {
+    const { data, error } = await admin.from('supplier_pos').insert({ order_id: orderId, supplier_id: sup.id, title: String(b.title || '').trim().slice(0, 200) || null, currency: CURRENCIES.includes(b.currency) ? b.currency : 'CNY',
+      lines, total: totalOf(lines), required_date: /^\d{4}-\d{2}-\d{2}$/.test(b.required_date || '') ? b.required_date : null, payment_terms: sup.payment_terms || null, sent_to: sup.email || null, created_by: req.user.id }).select('id, ref').single();
+    if (!error) po = data; else lastErr = error;
+  }
+  if (!po) return back(res, `${to}?supplier=${sup.id}`, { err: /order_id/.test(lastErr?.message || '') && /null/.test(lastErr?.message || '') ? 'Run supabase/migrations/0022_purchasing_standalone.sql first.' : missingTable(lastErr) ? MIGRATION : lastErr?.message || 'Could not create the PO.' });
+  await log({ entityType: orderId ? 'order' : 'supplier', entityId: orderId || sup.id, action: 'supplier_pos_created', actorId: req.user.id, detail: { note: po.ref } });
+  res.redirect(`/admin/purchasing/${po.id}?msg=${encodeURIComponent(`${po.ref} created${orderId ? '' : ' — not linked to an order yet'}. Check it, then send.`)}`);
+});
+
+// link a PO to an order (the order confirmed later) — or take the link off again
+async function linkPo(req, res, poId, orderId, backTo) {
+  const po = await load(poId);
+  if (!po) return notFound(res, 'Purchase order');
+  const to = backTo || `/admin/purchasing/${po.id}`;
+  const now = new Date().toISOString();
+  if (!orderId) {
+    await admin.from('supplier_pos').update({ order_id: null, updated_at: now }).eq('id', po.id);
+    return back(res, to, { msg: `${po.ref} is no longer linked to an order.` });
+  }
+  if (!isId(orderId)) return back(res, to, { err: 'Choose an order.' });
+  const { data: order } = await admin.from('orders').select('id, order_no').eq('id', orderId).maybeSingle();
+  if (!order) return back(res, to, { err: 'Order not found.' });
+  await admin.from('supplier_pos').update({ order_id: order.id, updated_at: now }).eq('id', po.id);
+  // the supplier's documents (PI, packing list) move to the order too
+  const { data: resp } = await admin.from('supplier_po_responses').select('extracted').eq('po_id', po.id);
+  const docIds = [...new Set((resp || []).flatMap(x => (x.extracted?.files || []).map(f => f.id)))];
+  if (docIds.length) await admin.from('documents').update({ entity_type: 'order', entity_id: order.id }).in('id', docIds);
+  await log({ entityType: 'order', entityId: order.id, action: 'supplier_po_linked', actorId: req.user.id, detail: { note: po.ref } });
+  back(res, to, { msg: `${po.ref} linked to order ${order.order_no}.` });
+}
+r.post('/link', (req, res) => linkPo(req, res, req.body.po_id, req.body.order_id, /^\/admin\//.test(req.body.redirect || '') ? req.body.redirect : null));
+r.post('/:id/link', (req, res) => linkPo(req, res, req.params.id, req.body.order_id));
+r.post('/:id/unlink', (req, res) => linkPo(req, res, req.params.id, null));
+
 // ---- one PO ----
 async function load(id) {
   if (!isId(id)) return null;
@@ -104,7 +163,8 @@ r.get('/:id', async (req, res) => {
   const { data: responses } = await admin.from('supplier_po_responses').select('*').eq('po_id', po.id).order('received_at', { ascending: false });
   const ids = [...new Set((responses || []).flatMap(x => (x.extracted?.files || []).map(f => f.id)))];
   const { data: docs } = ids.length ? await admin.from('documents').select('id, title, kind, mime_type').in('id', ids) : { data: [] };
-  res.render('admin/purchasing/detail', { title: po.ref, po, supplier: po.suppliers, order: po.orders, responses: responses || [], docs: docs || [], labels: SPO_LABEL, replyTo: replyAddress(po.token, ''), msg: req.query.msg, err: req.query.err });
+  const { data: openOrders } = po.order_id ? { data: [] } : await admin.from('orders').select('id, order_no, status, organizations(name)').not('status', 'in', '("closed","cancelled","delivered")').order('created_at', { ascending: false }).limit(100);
+  res.render('admin/purchasing/detail', { openOrders: openOrders || [], title: po.ref, po, supplier: po.suppliers, order: po.orders, responses: responses || [], docs: docs || [], labels: SPO_LABEL, replyTo: replyAddress(po.token, ''), msg: req.query.msg, err: req.query.err });
 });
 
 r.post('/:id', async (req, res) => {
@@ -114,7 +174,7 @@ r.post('/:id', async (req, res) => {
   const b = req.body, s = (v, n = 500) => String(v ?? '').trim().slice(0, n) || null;
   const lines = parseLines(b).map((l, i) => ({ ...l, order_item_id: po.lines[i]?.order_item_id || null, product_id: l.product_id || po.lines[i]?.product_id || null }));
   if (!lines.length) return back(res, `/admin/purchasing/${po.id}`, { err: 'Keep at least one line with a quantity.' });
-  await admin.from('supplier_pos').update({ lines, total: totalOf(lines), required_date: /^\d{4}-\d{2}-\d{2}$/.test(b.required_date || '') ? b.required_date : null,
+  await admin.from('supplier_pos').update({ title: s(b.title, 200), lines, total: totalOf(lines), required_date: /^\d{4}-\d{2}-\d{2}$/.test(b.required_date || '') ? b.required_date : null,
     payment_terms: s(b.payment_terms, 300), ship_to: s(b.ship_to, 600), notes: s(b.notes, 2000), message: s(b.message, 2000), want_packing: bool(b.want_packing), sent_to: s(b.sent_to, 200), updated_at: new Date().toISOString() }).eq('id', po.id);
   back(res, `/admin/purchasing/${po.id}`, { msg: 'Saved.' });
 });
@@ -143,7 +203,7 @@ r.post('/:id/send', async (req, res) => {
   } catch (e) { return back(res, to, { err: `Email failed: ${e.message}` }); }
   const now = new Date().toISOString();
   await admin.from('supplier_pos').update({ status: po.status === 'draft' ? 'sent' : po.status, sent_to: sentTo.join(', '), sent_at: now, sent_by: req.user.id, updated_at: now }).eq('id', po.id);
-  await log({ entityType: 'order', entityId: po.order_id, action: 'supplier_po_sent', actorId: req.user.id, detail: { note: `${po.ref} → ${sentTo.join(', ')}` } });
+  await log({ entityType: ent(po)[0], entityId: ent(po)[1], action: 'supplier_po_sent', actorId: req.user.id, detail: { note: `${po.ref} → ${sentTo.join(', ')}` } });
   back(res, to, { msg: `Sent to ${sentTo.join(', ')}. Their reply will appear below when it arrives.` });
 });
 
@@ -168,7 +228,7 @@ r.post('/:id/status', async (req, res) => {
   if (!['sent', 'confirmed', 'declined', 'cancelled'].includes(st)) return back(res, `/admin/purchasing/${po.id}`, { err: 'Unknown status.' });
   const now = new Date().toISOString();
   await admin.from('supplier_pos').update({ status: st, updated_at: now, ...(st === 'confirmed' ? { confirmed_at: po.confirmed_at || now } : {}) }).eq('id', po.id);
-  await log({ entityType: 'order', entityId: po.order_id, action: 'supplier_po_status', actorId: req.user.id, detail: { note: `${po.ref}: ${st}` } });
+  await log({ entityType: ent(po)[0], entityId: ent(po)[1], action: 'supplier_po_status', actorId: req.user.id, detail: { note: `${po.ref}: ${st}` } });
   back(res, `/admin/purchasing/${po.id}`, { msg: `Marked as ${SPO_LABEL[st].toLowerCase()}.` });
 });
 
@@ -177,7 +237,7 @@ r.post('/:id/delete', async (req, res) => {
   if (!po) return notFound(res, 'Purchase order');
   if (po.status !== 'draft') return back(res, `/admin/purchasing/${po.id}`, { err: 'Only a draft can be deleted — cancel it instead.' });
   await admin.from('supplier_pos').delete().eq('id', po.id);
-  back(res, `/admin/orders/${po.order_id}`, { msg: `${po.ref} deleted.` });
+  back(res, po.order_id ? `/admin/orders/${po.order_id}` : '/admin/purchasing', { msg: `${po.ref} deleted.` });
 });
 
 export default r;

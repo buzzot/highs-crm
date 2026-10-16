@@ -75,6 +75,14 @@
         <% _spos.forEach(p => { %><tr><td><a href="/admin/purchasing/<%= p.id %>"><strong><%= p.ref %></strong></a></td><td><%= p.suppliers?.name || '—' %></td><td class="right"><%= fmt.money(p.total, p.currency) %></td><td><span class="pill spo-<%= p.status %>"><%= _lbl[p.status] %></span></td><td class="small muted"><%= p.last_reply_at ? 'reply ' + fmt.datetime(p.last_reply_at) : (p.sent_at ? 'sent ' + fmt.datetime(p.sent_at) : '') %></td></tr><% }) %>
       </tbody></table>
       <% } %>
+      <% const _free = typeof freePos !== 'undefined' ? freePos : []; if (_free.length) { %>
+      <form method="post" action="/admin/purchasing/link" class="linkpo">
+        <input type="hidden" name="order_id" value="<%= order.id %>"><input type="hidden" name="redirect" value="/admin/orders/<%= order.id %>#purchasing">
+        <span class="muted small">Link a PO made earlier:</span>
+        <select name="po_id"><% _free.forEach(p => { %><option value="<%= p.id %>"><%= p.ref %> · <%= p.suppliers?.name || 'supplier' %> · <%= fmt.money(p.total, p.currency) %><%= p.title ? ' · ' + p.title : '' %></option><% }) %></select>
+        <button class="btn small">Link to this order</button>
+      </form>
+      <% } %>
     </div>
 
     <div class="card">

@@ -1115,3 +1115,29 @@ fieldset.plain { border: 0; padding: 0; margin: 0; min-width: 0; }
 .newspo input:not([type=checkbox]), .newspo select { width: 100%; }
 .newspo tr.nosup td { background: var(--warn-soft); }
 .newspo input[type=number]{text-align:right}
+
+/* purchasing list */
+.statgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 0 0 16px; }
+.stat { display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); color: var(--ink); text-decoration: none; border-left: 4px solid var(--line); }
+.stat:hover { text-decoration: none; border-color: var(--accent); }
+.stat strong { font-size: 28px; font-weight: 600; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.stat.attn { border-left-color: var(--warn); background: var(--warn-soft); }
+.stat.attn strong { color: var(--warn); }
+.stat.ok { border-left-color: var(--ok); }
+.stat.sel { border-color: var(--accent); }
+.card.flush { padding: 0; overflow: hidden; }
+.toolbar { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.toolbar .tabs { margin: 0; }
+.searchbox { width: 260px; max-width: 100%; }
+.purchtbl th, .purchtbl td { padding-left: 16px; padding-right: 16px; }
+.purchtbl tr.click { cursor: pointer; }
+.purchtbl tr.click:hover td { background: var(--bg, #f6f8fa); }
+.purchtbl strong.plain { font-weight: 500; }
+.emptybox { text-align: center; padding: 48px 20px; }
+.emptybox p { max-width: 460px; margin: 6px auto 16px; }
+.emptybox .actions { justify-content: center; }
+.linkpo { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.linkpo select { max-width: 460px; }
+.linkbox { background: var(--warn-soft); border: 1px solid #f0d9a8; border-radius: 10px; padding: 12px 14px; margin: 0 0 16px; }
+.linkbox form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+.manualpo select, .manualpo input:not([type=checkbox]) { width: 100%; }

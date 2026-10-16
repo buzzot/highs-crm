@@ -148,3 +148,8 @@ Run `supabase/migrations/0021_purchasing.sql`. The **Purchasing** menu (staff) l
 
 Replies come back through the same inbound-email webhook as freight quotes (`/hooks/inbound-email`, reply address `QUOTE_REPLY_ADDRESS` with `+token`, or the `SPO-…` reference in the subject). The reply is read (AI when `ANTHROPIC_API_KEY` is set, simple keyword rules otherwise) into: confirmed / declined / question, ready date, PI number and amount, packing estimate. Attached files are stored on the order (PI → *proforma invoice*, packing list → *packing list*, internal only) and the PO shows date, result and documents. WeChat answers or phone calls are logged by hand on the PO page. Statuses: draft → sent → replied (needs a look) → confirmed / declined; a red ball on the menu counts replies to check.
 Combined client POs now keep each line's `product_id`, so the order's products link to their suppliers.
+
+### Purchasing — standalone POs (migration 0022)
+Run `supabase/migrations/0022_purchasing_standalone.sql` (makes `supplier_pos.order_id` optional, adds `title`).
+Purchasing → **+ New purchase order** (no order selected) builds a PO to one supplier from catalogue/free lines.
+Once the client order is confirmed, open the PO (or the order page) and **Link to order**; supplier replies and documents then attach to the order. Unlinked POs keep documents on the supplier.

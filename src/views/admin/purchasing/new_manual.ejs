@@ -1,0 +1,58 @@
+<%- include('../../partials/head') %>
+<div class="pagehead"><div><a class="back" href="/admin/purchasing">← Purchasing</a><h1>New purchase order</h1>
+  <p class="muted">A purchase order to one supplier — no client order needed. Link it to an order later, when the order is confirmed.</p></div></div>
+<% if (error) { %><div class="alert err"><%= error %></div><% } %>
+<form method="post" action="/admin/purchasing/new-manual" class="poform manualpo" id="mpo">
+  <div class="card">
+    <h2>Supplier</h2>
+    <div class="row">
+      <label class="grow2">Supplier
+        <select name="supplier_id" id="m_sup" required><option value="">— choose —</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= s.id === supplier_id ? 'selected' : '' %>><%= s.name %></option><% }) %></select></label>
+      <label class="grow2">Label <span class="muted small">optional, for us — e.g. “Stock for November”</span><input name="title" maxlength="200"></label>
+    </div>
+    <div class="row">
+      <label>Currency <select name="currency" id="m_cur"><% currencies.forEach(c => { %><option <%= c === 'CNY' ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+      <label>Required by <input type="date" name="required_date"></label>
+      <label class="grow2">Link to an order <span class="muted small">optional — can be done later</span>
+        <select name="order_id"><option value="">— not linked yet —</option><% orders.forEach(o => { %><option value="<%= o.id %>"><%= o.order_no %> · <%= o.organizations?.name || '' %></option><% }) %></select></label>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Products</h2>
+    <div class="tablewrap"><table class="tbl compact newspo" id="m_lines">
+      <thead><tr><th>Catalogue product</th><th>Description</th><th>SKU</th><th class="right">Qty</th><th class="right">Unit price</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+    <div class="actions"><button type="button" class="btn small" id="m_add">+ Add line</button></div>
+    <p class="muted small">Pick a product from the catalogue to fill in its name, SKU and factory price, or type a free line. Prices are what we pay the supplier, in the currency above.</p>
+    <div class="actions"><button class="btn primary">Create purchase order</button><a class="btn" href="/admin/purchasing">Cancel</a></div>
+  </div>
+</form>
+<script type="application/json" id="mData"><%- JSON.stringify({ products: products.map(p => ({ id: p.id, name: p.name, sku: p.sku, supplier_id: p.supplier_id, unit_cost: p.unit_cost, cost_currency: p.cost_currency })) }).replace(/</g, '\\u003c') %></script>
+<script>
+(function () {
+  const data = JSON.parse(document.getElementById('mData').textContent), body = document.querySelector('#m_lines tbody'), sup = document.getElementById('m_sup'), cur = document.getElementById('m_cur');
+  let n = 0;
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const options = () => '<option value="">— free line —</option>' + data.products.filter(p => !sup.value || p.supplier_id === sup.value).map(p => `<option value="${p.id}">${esc(p.name)}${p.sku ? ' · ' + esc(p.sku) : ''}</option>`).join('');
+  function addRow() {
+    const i = n++, tr = document.createElement('tr');
+    tr.innerHTML = `<td><select class="pick">${options()}</select><input type="hidden" name="line[${i}][product_id]"></td>
+      <td><input name="line[${i}][description]" placeholder="Product name"></td><td><input name="line[${i}][sku]"></td>
+      <td class="right"><input type="number" min="1" name="line[${i}][quantity]"></td><td class="right"><input type="number" step="0.0001" min="0" name="line[${i}][unit_price]"></td>
+      <td><button type="button" class="link small danger" title="Remove line">×</button></td>`;
+    const q = s => tr.querySelector(s);
+    q('.pick').addEventListener('change', e => {
+      const p = data.products.find(x => x.id === e.target.value);
+      q('input[type=hidden]').value = p ? p.id : '';
+      if (p) { q('[name$="[description]"]').value = p.name; q('[name$="[sku]"]').value = p.sku || ''; q('[name$="[unit_price]"]').value = p.unit_cost ?? ''; if (p.cost_currency && ![...body.querySelectorAll('[name$="[description]"]')].some((el, k) => el !== q('[name$="[description]"]') && el.value)) cur.value = p.cost_currency; }
+    });
+    q('button').addEventListener('click', () => { tr.remove(); });
+    body.appendChild(tr);
+  }
+  sup.addEventListener('change', () => body.querySelectorAll('.pick').forEach(s => { const keep = s.value; s.innerHTML = options(); s.value = [...s.options].some(o => o.value === keep) ? keep : ''; }));
+  document.getElementById('m_add').addEventListener('click', addRow);
+  for (let k = 0; k < 3; k++) addRow();
+})();
+</script>
+<%- include('../../partials/foot') %>

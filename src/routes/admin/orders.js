@@ -89,8 +89,9 @@ r.get('/:id', async (req, res) => {
     admin.from('order_payments').select('*').eq('order_id', id).order('created_at'),
   ]);
   const { data: spos } = await admin.from('supplier_pos').select('id, ref, status, total, currency, sent_at, last_reply_at, suppliers(name)').eq('order_id', id).order('created_at'); // empty before migration 0021
+  const { data: freePos } = await admin.from('supplier_pos').select('id, ref, title, total, currency, status, suppliers(name)').is('order_id', null).not('status', 'in', '("cancelled","declined")').order('created_at', { ascending: false }); // empty before migration 0021/0022
   res.render('admin/orders/detail', {
-    spos: spos || [], pay: pay || {}, payments: payRows || [],
+    freePos: freePos || [], spos: spos || [], pay: pay || {}, payments: payRows || [],
     pis: pis || [], pos: pos || [], title: order.order_no, order, items: items || [], shipments: shipments || [], packing: packing || [], events: events || [],
     docs: docs || [], suppliers: suppliers || [], products: products || [], statuses: ORDER_STATUSES,
     land: landed(order, items), msg: req.query.msg, err: req.query.err,

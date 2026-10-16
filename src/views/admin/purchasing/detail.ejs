@@ -1,8 +1,8 @@
 <%- include('../../partials/head') %>
 <% const draft = po.status === 'draft'; const OUT = { confirmed: 'Confirmed', declined: 'Declined', question: 'Question', info: 'Info' }; %>
 <div class="pagehead">
-  <div><a class="back" href="/admin/purchasing">← Purchasing</a><h1>Purchase order <%= po.ref %></h1>
-    <p class="muted"><% if (supplier) { %><a href="/admin/suppliers/<%= supplier.id %>"><%= supplier.name %></a><% } else { %>no supplier<% } %> · order <a href="/admin/orders/<%= order.id %>"><%= order.order_no %></a> · <%= order.organizations?.name %> · <%= po.sent_at ? 'sent ' + fmt.datetime(po.sent_at) : 'not sent yet' %></p></div>
+  <div><a class="back" href="/admin/purchasing">← Purchasing</a><h1>Purchase order <%= po.ref %><% if (po.title) { %> <span class="muted">· <%= po.title %></span><% } %></h1>
+    <p class="muted"><% if (supplier) { %><a href="/admin/suppliers/<%= supplier.id %>"><%= supplier.name %></a><% } else { %>no supplier<% } %> · <% if (order) { %>order <a href="/admin/orders/<%= order.id %>"><%= order.order_no %></a> · <%= order.organizations?.name %><% } else { %><span class="tag warn">not linked to an order</span><% } %> · <%= po.sent_at ? 'sent ' + fmt.datetime(po.sent_at) : 'not sent yet' %></p></div>
   <div class="headactions"><a class="btn" href="/admin/purchasing/<%= po.id %>/pdf" target="_blank"><%- icon('file') %> PDF</a><span class="pill lg spo-<%= po.status %>"><%= labels[po.status] %></span></div>
 </div>
 <% if (msg) { %><div class="alert ok"><%= msg %></div><% } %>
@@ -12,12 +12,22 @@
 <% if (po.status === 'replied') { %><div class="alert warn"><strong>The supplier replied</strong> — read the reply below and mark the order confirmed or declined.</div><% } %>
 <% if (po.status === 'declined') { %><div class="alert err"><strong>Declined by the supplier</strong> — see the reply below.</div><% } %>
 
+<% if (!order) { %>
+<div class="linkbox"><strong>Not linked to an order yet.</strong> <span class="muted">When the client order is confirmed, link this PO to it — the supplier's documents then appear on the order.</span>
+  <form method="post" action="/admin/purchasing/<%= po.id %>/link">
+    <select name="order_id" required><option value="">— choose the order —</option><% openOrders.forEach(o => { %><option value="<%= o.id %>"><%= o.order_no %> · <%= o.organizations?.name || '' %> · <%= fmt.status(o.status) %></option><% }) %></select>
+    <button class="btn small primary">Link to order</button>
+  </form></div>
+<% } else { %>
+<p class="small muted" style="margin:-8px 0 12px"><form method="post" action="/admin/purchasing/<%= po.id %>/unlink" class="inline" onsubmit="return confirm('Remove the link to <%= order.order_no %>?')"><button class="link small">Unlink from <%= order.order_no %></button></form></p>
+<% } %>
 <form method="post" action="/admin/purchasing/<%= po.id %>" class="poform">
 <fieldset <%= draft ? '' : 'disabled' %> class="plain">
   <div class="card">
     <h2>Lines</h2>
     <%- include('../../partials/po_lines', { lines: po.lines, currency: po.currency, edit: draft }) %>
     <div class="row">
+      <label class="grow2">Label <span class="muted small">for us only</span><input name="title" value="<%= po.title || '' %>"></label>
       <label>Required by <input type="date" name="required_date" value="<%= po.required_date || '' %>"></label>
       <label class="grow2">Payment terms <input name="payment_terms" value="<%= po.payment_terms || '' %>"></label>
       <label class="grow2">Ship to / pickup <input name="ship_to" value="<%= po.ship_to || '' %>" placeholder="e.g. deliver to forwarder warehouse in Shenzhen"></label>

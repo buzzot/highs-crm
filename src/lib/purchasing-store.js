@@ -35,10 +35,11 @@ export async function saveSupplierReply({ po, channel, from = null, subject = nu
   const result = outcome && ['confirmed', 'declined', 'question', 'info'].includes(outcome) ? outcome : extracted.outcome || 'info';
 
   // keep the files with the order (internal only)
+  const where = po.order_id ? ['order', po.order_id] : ['supplier', po.supplier_id]; // an unlinked PO keeps its files with the supplier until it is linked
   const stored = [];
   for (const f of att) {
     try {
-      const doc = await uploadDocument({ file: { ...f, size: f.size ?? f.buffer.length }, entityType: 'order', entityId: po.order_id, kind: kindOf(f.originalname), title: `Supplier ${po.ref} — ${f.originalname}`, clientVisible: false, uploadedBy: userId });
+      const doc = await uploadDocument({ file: { ...f, size: f.size ?? f.buffer.length }, entityType: where[0], entityId: where[1], kind: kindOf(f.originalname), title: `Supplier ${po.ref} — ${f.originalname}`, clientVisible: false, uploadedBy: userId });
       stored.push({ id: doc.id, name: f.originalname });
     } catch (e) { notes.push(`${f.originalname} not stored: ${e.message}`); }
   }
@@ -55,6 +56,6 @@ export async function saveSupplierReply({ po, channel, from = null, subject = nu
   else if (result === 'declined') patch.status = 'declined';
   else if (po.status !== 'confirmed') patch.status = 'replied'; // a later question or document does not undo a confirmation
   await admin.from('supplier_pos').update(patch).eq('id', po.id);
-  await log({ entityType: 'order', entityId: po.order_id, action: 'supplier_po_reply', actorId: userId, detail: { note: `${po.ref}: ${final.summary || result}` } });
+  await log({ entityType: where[0], entityId: where[1], action: 'supplier_po_reply', actorId: userId, detail: { note: `${po.ref}: ${final.summary || result}` } });
   return { response: resp, extracted: final, status: patch.status || po.status };
 }
