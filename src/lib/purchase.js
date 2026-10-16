@@ -74,7 +74,7 @@ export function parseLines(body) {
   const raw = body?.lines;
   const arr = Array.isArray(raw) ? raw : raw && typeof raw === 'object' ? Object.values(raw) : [];
   const n = v => { const x = Number(String(v ?? '').replace(',', '.')); return Number.isFinite(x) && x >= 0 ? x : 0; };
-  return arr.map(l => ({ description: String(l?.description || '').trim().slice(0, 500), sku: String(l?.sku || '').trim().slice(0, 80), quantity: n(l?.quantity), unit: String(l?.unit || 'pcs').trim().slice(0, 20) || 'pcs', unit_price: n(l?.unit_price) }))
+  return arr.map(l => ({ description: String(l?.description || '').trim().slice(0, 500), sku: String(l?.sku || '').trim().slice(0, 80), quantity: n(l?.quantity), unit: String(l?.unit || 'pcs').trim().slice(0, 20) || 'pcs', unit_price: n(l?.unit_price), ...(/^[0-9a-f-]{36}$/i.test(l?.product_id || '') ? { product_id: l.product_id } : {}) }))
     .filter(l => l.description && l.quantity > 0);
 }
 export const text = (v, max = 4000) => (String(v ?? '').trim().slice(0, max) || null);

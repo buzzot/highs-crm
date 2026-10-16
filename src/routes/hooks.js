@@ -7,6 +7,7 @@ import { Router } from '../lib/router.js';
 import { admin } from '../lib/supabase.js';
 import { normalizeInbound, matchKeys, mailgunSignatureOk } from '../lib/freight.js';
 import { saveResponse, usefulFiles } from '../lib/freight-store.js';
+import { saveSupplierReply } from '../lib/purchasing-store.js';
 import { parseQuoteForm } from '../lib/quote-form.js';
 import { readXlsx } from '../lib/xlsx-read.js';
 import { timingSafeEqual } from 'node:crypto';
@@ -33,6 +34,18 @@ r.post('/inbound-email', express.json({ limit: '15mb' }), express.urlencoded({ e
     for (const f of files.filter(f => /\.xlsx$/i.test(f.originalname || ''))) {
       try { const tok = parseQuoteForm(readXlsx(f.buffer))?.token; if (tok) ({ data: rfq } = await admin.from('freight_rfqs').select('*').eq('token', tok).maybeSingle()); } catch { /* not a workbook */ }
       if (rfq) break;
+    }
+  }
+  if (!rfq) { // not a freight quote: maybe a supplier answering our purchase order
+    let spo = null;
+    if (keys.token) ({ data: spo } = await admin.from('supplier_pos').select('*').eq('token', keys.token).maybeSingle());
+    if (!spo && keys.ref?.startsWith('SPO-')) ({ data: spo } = await admin.from('supplier_pos').select('*').eq('ref', keys.ref).maybeSingle());
+    if (spo) {
+      try {
+        const out = await saveSupplierReply({ po: spo, channel: 'email', from: mail.from, subject: mail.subject, text: mail.text, files: req.files || [] });
+        console.log(`[inbound] reply for ${spo.ref} from ${mail.from}: ${out.extracted?.summary || 'saved'}`);
+        return res.json({ ok: true, matched: true, purchase_order: spo.ref });
+      } catch (e) { console.error('[inbound] supplier PO:', e.message); return res.status(500).json({ ok: false, error: e.message }); }
     }
   }
   if (!rfq) {

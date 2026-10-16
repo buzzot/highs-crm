@@ -1099,3 +1099,19 @@ fieldset.plain { border: 0; padding: 0; margin: 0; min-width: 0; }
 .quotesum tfoot tr.grand td{border-top:2px solid var(--ink,#1b2430);font-size:16px;padding-top:10px}
 .quotesum td.right,.quotesum th.right{font-variant-numeric:tabular-nums}
 .aiall{margin-bottom:10px}
+
+/* purchasing */
+.pill.spo-draft { background: var(--info-soft); color: var(--info); }
+.pill.spo-sent { background: #f1e9fb; color: #6b3fa0; }
+.pill.spo-replied, .pill.spo-question { background: var(--warn-soft); color: var(--warn); }
+.pill.spo-confirmed { background: var(--ok-soft); color: var(--ok); }
+.pill.spo-declined, .pill.spo-cancelled { background: var(--bad-soft); color: var(--bad); }
+.reply { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 0 0 10px; }
+.reply .rhead { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 4px; }
+.reply p { margin: 4px 0 8px; }
+.reply .dl { margin: 0 0 8px; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 8px; }
+.chip { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; font-size: 13px; background: var(--surface); }
+.newspo input:not([type=checkbox]), .newspo select { width: 100%; }
+.newspo tr.nosup td { background: var(--warn-soft); }
+.newspo input[type=number]{text-align:right}

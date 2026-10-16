@@ -67,6 +67,16 @@
       </details>
     </div>
 
+    <div class="card" id="purchasing">
+      <% const _spos = typeof spos !== 'undefined' ? spos : []; const _lbl = { draft: 'Draft', sent: 'Waiting for reply', replied: 'Replied — check', confirmed: 'Confirmed', declined: 'Declined', cancelled: 'Cancelled' }; %>
+      <h2>Purchasing <span class="count"><%= _spos.length %></span> <span class="hactions"><a class="btn small primary" href="/admin/purchasing/new?order=<%= order.id %>">Create supplier POs</a></span></h2>
+      <% if (!_spos.length) { %><p class="muted">No purchase orders to suppliers yet. “Create supplier POs” groups this order's products by supplier — one PO each — and emails them with a request for confirmation, the proforma invoice and an estimated packing list.</p><% } else { %>
+      <table class="tbl compact"><tbody>
+        <% _spos.forEach(p => { %><tr><td><a href="/admin/purchasing/<%= p.id %>"><strong><%= p.ref %></strong></a></td><td><%= p.suppliers?.name || '—' %></td><td class="right"><%= fmt.money(p.total, p.currency) %></td><td><span class="pill spo-<%= p.status %>"><%= _lbl[p.status] %></span></td><td class="small muted"><%= p.last_reply_at ? 'reply ' + fmt.datetime(p.last_reply_at) : (p.sent_at ? 'sent ' + fmt.datetime(p.sent_at) : '') %></td></tr><% }) %>
+      </tbody></table>
+      <% } %>
+    </div>
+
     <div class="card">
       <h2>Shipments <a class="more" href="/admin/logistics/shipments/new?order_id=<%= order.id %>">+ shipment</a></h2>
       <% if (!shipments.length) { %><p class="muted">No shipment yet.</p><% } %>

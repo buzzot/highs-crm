@@ -21,7 +21,7 @@ export function combineQuotes(quotes, { nameOf = () => 'Item', skuOf = () => '' 
     const freight = num(q.freight_estimate), duties = num(q.duties_estimate), other = num(q.other_costs);
     const goods = r2(quantity * unit_price), logistics = r2(freight + duties + other);
     const cost = q.unit_cost != null && q.fx_rate != null ? r2(num(q.unit_cost) * num(q.fx_rate) * quantity) : null;
-    return { id: q.id, name: nameOf(q), sku: skuOf(q), quantity, unit_price, goods, freight, duties, other, logistics, total: r2(goods + logistics), cost, status: q.status, margin_pct: q.margin_pct };
+    return { id: q.id, product_id: q.product_id || null, name: nameOf(q), sku: skuOf(q), quantity, unit_price, goods, freight, duties, other, logistics, total: r2(goods + logistics), cost, status: q.status, margin_pct: q.margin_pct };
   });
   const sum = k => r2(lines.reduce((t, l) => t + l[k], 0));
   const costKnown = lines.length > 0 && lines.every(l => l.cost != null);
@@ -39,7 +39,7 @@ export function combineQuotes(quotes, { nameOf = () => 'Item', skuOf = () => '' 
 
 /** The lines a combined PO starts from: goods at ex-logistics prices, plus one estimated-logistics line so the PO total equals the quote total. */
 export function poLinesFromCombined(c) {
-  const lines = c.lines.map(l => ({ description: l.name, sku: l.sku || '', quantity: l.quantity, unit: 'pcs', unit_price: l.unit_price }));
+  const lines = c.lines.map(l => ({ description: l.name, sku: l.sku || '', quantity: l.quantity, unit: 'pcs', unit_price: l.unit_price, ...(l.product_id ? { product_id: l.product_id } : {}) }));
   if (c.logisticsTotal > 0) lines.push({ description: 'Freight & logistics (estimate)', sku: '', quantity: 1, unit: 'lot', unit_price: c.logisticsTotal });
   return lines;
 }

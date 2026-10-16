@@ -1,0 +1,83 @@
+<%- include('../../partials/head') %>
+<% const draft = po.status === 'draft'; const OUT = { confirmed: 'Confirmed', declined: 'Declined', question: 'Question', info: 'Info' }; %>
+<div class="pagehead">
+  <div><a class="back" href="/admin/purchasing">← Purchasing</a><h1>Purchase order <%= po.ref %></h1>
+    <p class="muted"><% if (supplier) { %><a href="/admin/suppliers/<%= supplier.id %>"><%= supplier.name %></a><% } else { %>no supplier<% } %> · order <a href="/admin/orders/<%= order.id %>"><%= order.order_no %></a> · <%= order.organizations?.name %> · <%= po.sent_at ? 'sent ' + fmt.datetime(po.sent_at) : 'not sent yet' %></p></div>
+  <div class="headactions"><a class="btn" href="/admin/purchasing/<%= po.id %>/pdf" target="_blank"><%- icon('file') %> PDF</a><span class="pill lg spo-<%= po.status %>"><%= labels[po.status] %></span></div>
+</div>
+<% if (msg) { %><div class="alert ok"><%= msg %></div><% } %>
+<% if (err) { %><div class="alert err"><%= err %></div><% } %>
+
+<% if (po.status === 'confirmed') { %><div class="alert ok"><strong>Confirmed by the supplier</strong> <%= po.confirmed_at ? '· ' + fmt.datetime(po.confirmed_at) : '' %></div><% } %>
+<% if (po.status === 'replied') { %><div class="alert warn"><strong>The supplier replied</strong> — read the reply below and mark the order confirmed or declined.</div><% } %>
+<% if (po.status === 'declined') { %><div class="alert err"><strong>Declined by the supplier</strong> — see the reply below.</div><% } %>
+
+<form method="post" action="/admin/purchasing/<%= po.id %>" class="poform">
+<fieldset <%= draft ? '' : 'disabled' %> class="plain">
+  <div class="card">
+    <h2>Lines</h2>
+    <%- include('../../partials/po_lines', { lines: po.lines, currency: po.currency, edit: draft }) %>
+    <div class="row">
+      <label>Required by <input type="date" name="required_date" value="<%= po.required_date || '' %>"></label>
+      <label class="grow2">Payment terms <input name="payment_terms" value="<%= po.payment_terms || '' %>"></label>
+      <label class="grow2">Ship to / pickup <input name="ship_to" value="<%= po.ship_to || '' %>" placeholder="e.g. deliver to forwarder warehouse in Shenzhen"></label>
+    </div>
+    <label>Notes on the PDF <textarea name="notes" rows="2"><%= po.notes || '' %></textarea></label>
+  </div>
+  <div class="card">
+    <h2>Email to the supplier</h2>
+    <div class="row">
+      <label class="grow2">To <span class="muted small">one or more addresses</span><input name="sent_to" value="<%= po.sent_to || supplier?.email || '' %>" placeholder="supplier@example.com"></label>
+      <label class="check"><input type="checkbox" name="want_packing" <%= po.want_packing ? 'checked' : '' %>> also ask for an estimated packing list (Excel attached)</label>
+    </div>
+    <label>Personal note <span class="muted small">— added above the table</span><textarea name="message" rows="2"><%= po.message || '' %></textarea></label>
+    <p class="muted small">The email carries the PDF and asks the supplier to reply with: order confirmation and ready date, proforma invoice (PI)<%= po.want_packing ? ', and an estimated packing list' : '' %>. The reply is matched by the reference <strong><%= po.ref %></strong> in the subject<%= replyTo ? ' and the reply address' : '' %>.</p>
+  </div>
+</fieldset>
+<div class="card"><div class="actions">
+  <% if (draft) { %><button class="btn" formaction="/admin/purchasing/<%= po.id %>">Save</button><% } %>
+  <% if (['draft', 'sent', 'replied'].includes(po.status)) { %><button class="btn primary" formaction="/admin/purchasing/<%= po.id %>/send" onclick="return confirm('Email this purchase order to the supplier now?')"><%= draft ? 'Send to supplier' : 'Send again' %></button><% } %>
+  <% if (draft) { %><button class="btn danger" formaction="/admin/purchasing/<%= po.id %>/delete" onclick="return confirm('Delete this draft?')">Delete draft</button><% } %>
+</div></div>
+</form>
+
+<div class="card">
+  <h2>Supplier replies <span class="count"><%= responses.length %></span></h2>
+  <% if (!responses.length) { %><p class="muted"><%= draft ? 'Send the PO first.' : 'Nothing received yet. Email replies appear here by themselves; paste a WeChat answer below.' %></p><% } %>
+  <% responses.forEach(x => { const e = x.extracted || {}; const files = (e.files || []).map(f => docs.find(d => d.id === f.id) || { id: f.id, title: f.name }); %>
+    <div class="reply">
+      <div class="rhead"><strong><%= fmt.datetime(x.received_at) %></strong> <span class="pill spo-<%= x.outcome || "info" %>"><%= OUT[x.outcome] || 'Info' %></span> <span class="muted small"><%= x.channel %><%= x.from_address ? ' · ' + x.from_address : '' %></span></div>
+      <% if (e.summary) { %><p><%= e.summary %></p><% } %>
+      <dl class="dl">
+        <% if (e.ready_date) { %><dt>Ready date</dt><dd><%= fmt.date(e.ready_date) %></dd><% } %>
+        <% if (e.pi_no || e.pi_amount) { %><dt>Proforma invoice</dt><dd><%= [e.pi_no, e.pi_amount != null ? fmt.money(e.pi_amount, e.pi_currency || po.currency) : null].filter(Boolean).join(' · ') %></dd><% } %>
+        <% if (e.packing && (e.packing.cartons || e.packing.gross_kg || e.packing.cbm)) { %><dt>Estimated packing</dt><dd><%= [e.packing.cartons && e.packing.cartons + ' cartons', e.packing.pcs_per_carton && e.packing.pcs_per_carton + ' pcs/ctn', e.packing.gross_kg && e.packing.gross_kg + ' kg', e.packing.cbm && e.packing.cbm + ' cbm'].filter(Boolean).join(' · ') %></dd><% } %>
+        <% if (e.changes) { %><dt>Changes proposed</dt><dd><%= e.changes %></dd><% } %>
+        <% if (e.questions) { %><dt>Questions</dt><dd><%= e.questions %></dd><% } %>
+      </dl>
+      <% if (files.length) { %><div class="chips"><% files.forEach(d => { %><a class="chip" href="/admin/documents/<%= d.id %>/download" target="_blank"><%- icon('file') %> <%= d.title %><% if (d.kind === 'proforma_invoice') { %> <span class="tag ok">PI</span><% } else if (d.kind === 'packing_list') { %> <span class="tag">packing list</span><% } %></a> <% }) %></div><% } %>
+      <% if (x.body) { %><details><summary class="muted small">Message</summary><p class="pre"><%= x.body %></p></details><% } %>
+    </div>
+  <% }) %>
+</div>
+
+<% if (!draft) { %>
+<div class="card">
+  <h2>Log a reply <span class="muted small">— WeChat, a phone call or a file that did not arrive by email</span></h2>
+  <form method="post" action="/admin/purchasing/<%= po.id %>/reply" enctype="multipart/form-data">
+    <div class="row">
+      <label>Channel <select name="channel"><option value="wechat">WeChat</option><option value="email">Email (pasted)</option><option value="manual">Phone / other</option></select></label>
+      <label>Result <select name="outcome"><option value="">Read it from the message</option><option value="confirmed">Confirmed</option><option value="declined">Declined</option><option value="question">Question</option><option value="info">Info only</option></select></label>
+    </div>
+    <label>Message <textarea name="body" rows="3" placeholder="Paste what the supplier wrote"></textarea></label>
+    <label>Files <span class="muted small">proforma invoice, packing list, screenshot</span><input type="file" name="files" multiple></label>
+    <div class="actions"><button class="btn primary">Save reply</button></div>
+  </form>
+  <div class="actions" style="margin-top:12px">
+    <% if (po.status !== 'confirmed') { %><form method="post" action="/admin/purchasing/<%= po.id %>/status" class="inline"><input type="hidden" name="status" value="confirmed"><button class="btn">Mark confirmed</button></form><% } %>
+    <% if (po.status !== 'declined') { %><form method="post" action="/admin/purchasing/<%= po.id %>/status" class="inline"><input type="hidden" name="status" value="declined"><button class="btn">Mark declined</button></form><% } %>
+    <% if (po.status !== 'cancelled') { %><form method="post" action="/admin/purchasing/<%= po.id %>/status" class="inline" onsubmit="return confirm('Cancel this purchase order?')"><input type="hidden" name="status" value="cancelled"><button class="btn danger">Cancel PO</button></form><% } %>
+  </div>
+</div>
+<% } %>
+<%- include('../../partials/foot') %>

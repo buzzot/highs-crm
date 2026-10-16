@@ -8,7 +8,7 @@
     <tr>
       <td class="muted"><%= i + 1 %></td>
       <% if (ed) { %>
-        <td><input name="lines[<%= i %>][description]" value="<%= l.description %>" required></td>
+        <td><input name="lines[<%= i %>][description]" value="<%= l.description %>" required><% if (l.product_id) { %><input type="hidden" name="lines[<%= i %>][product_id]" value="<%= l.product_id %>"><% } %></td>
         <td><input name="lines[<%= i %>][sku]" value="<%= l.sku || '' %>"></td>
         <td class="right"><input type="number" step="any" min="0" name="lines[<%= i %>][quantity]" value="<%= l.quantity %>" class="short"></td>
         <td><input name="lines[<%= i %>][unit]" value="<%= l.unit || 'pcs' %>" class="short"></td>

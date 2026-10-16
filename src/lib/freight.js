@@ -35,12 +35,12 @@ export function normalizeInbound(payload) {
   return { from, to, subject, text };
 }
 
-/** Find the request token: quotes+TOKEN@…, or "#TOKEN]" in the subject; else the FQ reference. */
+/** Find the request token: quotes+TOKEN@…, or "#TOKEN]" in the subject; else the FQ (freight) or SPO (supplier PO) reference. */
 export function matchKeys({ to = [], subject = '' }) {
   for (const a of to) { const m = a.match(/^[^+@]+\+([a-z0-9]{6,16})@/i); if (m) return { token: m[1].toLowerCase() }; }
   const t = subject.match(/#([a-z0-9]{6,16})\]/i);
   if (t) return { token: t[1].toLowerCase() };
-  const r = subject.match(/\bFQ-\d{4}-\d{1,4}\b/i);
+  const r = subject.match(/\b(?:FQ|SPO)-\d{4}-\d{1,4}\b/i);
   return r ? { ref: r[0].toUpperCase() } : {};
 }
 

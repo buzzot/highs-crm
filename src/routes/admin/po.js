@@ -85,7 +85,7 @@ po.post('/:id/approve', async (req, res) => {
     let hs = null;
     if (q?.product_id) hs = (await admin.from('products').select('hs_code').eq('id', q.product_id).maybeSingle()).data?.hs_code || null;
     await admin.from('order_items').insert(patch.lines.map((l, i) => ({
-      order_id: orderId, product_id: single || i === 0 ? q?.product_id || null : null, description: l.description,
+      order_id: orderId, product_id: l.product_id || (single || i === 0 ? q?.product_id || null : null), description: l.description,
       quantity: Math.round(l.quantity), unit_cost: unitCostSell != null && single ? Math.round(unitCostSell * 10000) / 10000 : null, unit_price: l.unit_price, hs_code: i === 0 ? hs : null,
     })));
     await log({ entityType: 'order', entityId: orderId, action: 'order_confirmed', actorId: req.user.id, clientVisible: true, detail: { note: `from ${p.po_no}` } });

@@ -1,0 +1,33 @@
+<%- include('../../partials/head') %>
+<div class="pagehead"><div><a class="back" href="/admin/orders/<%= order.id %>">← <%= order.order_no %></a><h1>Supplier POs for <%= order.order_no %></h1>
+  <p class="muted"><%= order.organizations?.name %> · products from the same supplier (and currency) go into one purchase order. Prices are what we pay the supplier.</p></div></div>
+<% if (error) { %><div class="alert err"><%= error %></div><% } %>
+<% if (existing.length) { %><div class="alert warn">Already created for this order: <% existing.forEach((p, i) => { %><%= i ? ', ' : '' %><a href="/admin/purchasing/<%= p.id %>"><%= p.ref %></a> (<%= p.suppliers?.name || 'supplier' %>)<% }) %>. Lines already ordered are unticked.</div><% } %>
+<form method="post" action="/admin/purchasing/new" class="poform">
+  <input type="hidden" name="order_id" value="<%= order.id %>">
+  <div class="card">
+    <h2>Products to order</h2>
+    <% if (!rows.length) { %><p class="muted">This order has no products yet.</p><% } else { %>
+    <div class="tablewrap"><table class="tbl compact newspo">
+      <thead><tr><th></th><th>Product</th><th class="right">Qty</th><th>Supplier</th><th class="right">Unit price</th><th>Currency</th></tr></thead>
+      <tbody>
+      <% rows.forEach((x, i) => { %>
+        <tr class="<%= x.supplier_id ? '' : 'nosup' %>">
+          <td><input type="checkbox" name="line[<%= i %>][include]" value="1" <%= x.already ? '' : 'checked' %>>
+            <input type="hidden" name="line[<%= i %>][order_item_id]" value="<%= x.order_item_id %>"><input type="hidden" name="line[<%= i %>][product_id]" value="<%= x.product_id || '' %>">
+            <input type="hidden" name="line[<%= i %>][sku]" value="<%= x.sku %>"><input type="hidden" name="line[<%= i %>][unit]" value="<%= x.unit %>"></td>
+          <td><input name="line[<%= i %>][description]" value="<%= x.description %>"><% if (x.sku) { %><div class="muted small"><%= x.sku %></div><% } %></td>
+          <td class="right"><input type="number" min="1" name="line[<%= i %>][quantity]" value="<%= x.quantity %>"></td>
+          <td><select name="line[<%= i %>][supplier_id]"><option value="">— choose —</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= s.id === x.supplier_id ? 'selected' : '' %>><%= s.name %></option><% }) %></select></td>
+          <td class="right"><input type="number" step="0.0001" min="0" name="line[<%= i %>][unit_price]" value="<%= x.unit_price %>"></td>
+          <td><select name="line[<%= i %>][currency]"><% currencies.forEach(c => { %><option <%= c === x.currency ? 'selected' : '' %>><%= c %></option><% }) %></select></td>
+        </tr>
+      <% }) %>
+      </tbody>
+    </table></div>
+    <p class="muted small">The supplier is taken from the product. Pick one for lines that show “— choose —”. Unit price is the factory price from the product card; change it if the price was negotiated.</p>
+    <div class="actions"><button class="btn primary">Create purchase orders</button><a class="btn" href="/admin/orders/<%= order.id %>">Cancel</a></div>
+    <% } %>
+  </div>
+</form>
+<%- include('../../partials/foot') %>

@@ -287,3 +287,46 @@ export function paymentDecidedEmail({ order, amount, confirmed, note, url }) {
     text: confirmed ? `Payment ${amt} for order ${order.order_no} confirmed. ${url}` : `Payment ${amt} for order ${order.order_no} could not be confirmed. ${note || ''} ${url}`,
   };
 }
+
+
+// ---- purchase order to a supplier (PDF attached; asks for confirmation, PI and an estimated packing list) ----
+export function spoEmail({ po, supplier, order, message, senderName }) {
+  const F = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+  const n = v => Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 4 });
+  const money = v => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const td = (v, right) => `<td style="padding:7px 8px;border-bottom:1px solid #eef0f3;font-size:13px;color:#16202e;${right ? 'text-align:right;' : ''}">${esc(v ?? '')}</td>`;
+  const th = (v, right) => `<th style="padding:7px 8px;border-bottom:2px solid #dfe3e8;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#7a8494;text-align:${right ? 'right' : 'left'};">${esc(v)}</th>`;
+  const facts = [['PO number', po.ref], ['Our order', order?.order_no], ['Required by', po.required_date], ['Payment terms', po.payment_terms], ['Ship to', po.ship_to], ['Currency', po.currency]].filter(([, v]) => v);
+  const asks = [
+    ['Confirm the order by replying to this email (price, quantity, and the date the goods will be ready).', '请回复本邮件确认订单（价格、数量及备货完成日期）。'],
+    ['Send your proforma invoice (PI).', '请提供形式发票（PI）。'],
+    ...(po.want_packing ? [['Send an ESTIMATED packing list: cartons, pieces per carton, carton size, gross and net weight per carton. You can use the attached Excel.', '请提供预估装箱单：箱数、每箱数量、箱规、每箱毛重/净重。可使用附件 Excel。']] : []),
+  ];
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:0;background:#f1f3f6;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f3f6;"><tr><td align="center" style="padding:28px 12px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:720px;background:#fff;border:1px solid #e3e6eb;border-radius:14px;">
+<tr><td style="padding:26px 30px 6px;font-family:${F};">
+  <div style="font-size:20px;font-weight:700;color:#0f3d5c;">Lumi<span style="color:#0b8a7a;">Trade</span></div>
+  <div style="margin-top:14px;font-size:22px;font-weight:700;color:#16202e;">Purchase order ${esc(po.ref)}</div>
+  <p style="font-size:15px;line-height:1.6;color:#2f3a4a;">Dear ${esc(supplier?.contact_name || supplier?.name || 'partner')},<br>please find our purchase order attached (PDF). The items are listed below.</p>
+  ${message ? `<p style="font-size:15px;line-height:1.6;color:#2f3a4a;white-space:pre-line;">${esc(message)}</p>` : ''}
+  <table role="presentation" cellpadding="0" cellspacing="0" style="margin:10px 0 18px;font-size:14px;">${facts.map(([k, v]) => `<tr><td style="padding:3px 18px 3px 0;color:#7a8494;">${esc(k)}</td><td style="padding:3px 0;color:#16202e;">${esc(v)}</td></tr>`).join('')}</table>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-family:${F};">
+    <tr>${th('Product')}${th('SKU')}${th('Qty', 1)}${th('Unit price', 1)}${th('Amount', 1)}</tr>
+    ${po.lines.map(l => `<tr>${td(l.description)}${td(l.sku)}${td(`${n(l.quantity)} ${l.unit || 'pcs'}`, 1)}${td(n(l.unit_price), 1)}${td(money(l.quantity * l.unit_price), 1)}</tr>`).join('')}
+    <tr><td colspan="4" style="padding:8px;text-align:right;font-weight:700;font-size:13px;">TOTAL ${esc(po.currency)}</td><td style="padding:8px;text-align:right;font-weight:700;font-size:13px;">${money(po.total)}</td></tr>
+  </table>
+  <p style="font-size:15px;line-height:1.6;color:#2f3a4a;margin:20px 0 6px;"><strong style="font-weight:600;">Please reply to this email to:</strong></p>
+  <ol style="margin:0 0 14px 18px;padding:0;font-size:15px;line-height:1.6;color:#2f3a4a;">${asks.map(([en, zh]) => `<li>${esc(en)}<br><span style="color:#6b7686;font-size:14px;">${esc(zh)}</span></li>`).join('')}</ol>
+  <div style="margin:16px 0 18px;padding:12px 16px;border:1px solid #f1c2c2;border-left:4px solid #c62828;border-radius:8px;background:#fdf3f3;font-size:14px;line-height:1.6;color:#c62828;">
+    <strong style="font-weight:600;">Important: please answer by replying to this email</strong> and keep the reference ${esc(po.ref)} in the subject.<br>
+    Replies sent as a new email may not reach our system. A copy via WeChat is welcome.
+    <div style="margin-top:6px;color:#b23b3b;font-size:13px;">重要：请直接回复本邮件，并保留主题中的编号 ${esc(po.ref)}。新建邮件可能无法被系统接收，可同时发微信。</div>
+  </div>
+  <p style="font-size:15px;color:#2f3a4a;">Best regards,<br>${senderName ? `${esc(senderName)}<br>` : ''}<strong style="font-weight:600;color:#0f3a5c;">Lumi Trade</strong></p>
+</td></tr>
+<tr><td style="padding:14px 30px 24px;font-family:${F};font-size:12px;color:#7a8494;border-top:1px solid #eef0f3;">Lumi Trade · Purchasing</td></tr>
+</table></td></tr></table></body></html>`;
+  const text = [`Purchase order ${po.ref}`, ...facts.map(([k, v]) => `${k}: ${v}`), '', ...po.lines.map(l => `- ${l.description}${l.sku ? ' (' + l.sku + ')' : ''}: ${l.quantity} ${l.unit || 'pcs'} x ${l.unit_price} = ${money(l.quantity * l.unit_price)}`), `TOTAL ${po.currency} ${money(po.total)}`, '', message || '', 'Please reply to this email to:', ...asks.map(([en, zh], i) => `${i + 1}. ${en}\n   ${zh}`), '', `Important: answer by REPLYING to this email and keep ${po.ref} in the subject. 重要：请直接回复本邮件。`, '', 'Best regards,', senderName || '', 'Lumi Trade'].join('\n');
+  return { subject: `Purchase order ${po.ref}${order?.order_no ? ' · ' + order.order_no : ''}`, html, text };
+}

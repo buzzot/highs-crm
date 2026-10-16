@@ -430,3 +430,36 @@ Dates as YYYY-MM-DD (assume the current or next year when the year is missing). 
   const { input, usage } = await forcedTool({ tool: QUOTE_TOOL, content, system, maxTokens: 4000, feature: 'freight_quote_read', entity });
   return { ...input, usage };
 }
+
+
+const SUPPLIER_REPLY_TOOL = {
+  name: 'record_supplier_reply',
+  description: "Record what a supplier answered to our purchase order (email text, proforma invoice PDF/Excel, packing list or screenshot).",
+  input_schema: {
+    type: 'object',
+    properties: {
+      outcome: { type: 'string', enum: ['confirmed', 'declined', 'question', 'info'], description: 'confirmed = they accept the order (even with small notes); declined = they cannot supply; question = they ask us something before confirming; info = documents or news without a clear answer' },
+      ready_date: { ...strOrNull, description: 'Date the goods will be ready / shipped from the factory, YYYY-MM-DD (assume the current or next year when missing)' },
+      pi_no: { ...strOrNull, description: 'Proforma invoice number, if a PI is attached or quoted' },
+      pi_amount: { ...numOrNull, description: 'Total of the proforma invoice' },
+      pi_currency: { ...strOrNull, description: 'ISO code' },
+      changes: { ...strOrNull, description: 'Any change to price, quantity, specification or lead time they propose, as written' },
+      packing: { type: ['object', 'null'], properties: { cartons: numOrNull, pcs_per_carton: numOrNull, gross_kg: { ...numOrNull, description: 'total gross weight' }, cbm: { ...numOrNull, description: 'total volume' }, summary: strOrNull }, description: 'Estimated packing list data if provided' },
+      questions: { ...strOrNull, description: 'Anything they ask us' },
+      summary: { type: 'string', description: 'One line in English, e.g. "Confirmed, ready 28 Oct, PI SH-0912 USD 4,520; 85 cartons, 612 kg, 3.1 cbm"' },
+    },
+    required: ['outcome', 'summary'],
+  },
+};
+
+/** @param {{ text?: string, context?: object, pdf?: Buffer, image?: { data: Buffer, mediaType: string }, sheetText?: string }} src */
+export async function extractSupplierReply({ text, context, pdf, image, sheetText }, entity = null) {
+  const system = `You read replies from Chinese or international suppliers (English/Chinese mixed, from email or WeChat, sometimes with a proforma invoice PDF, packing list Excel or screenshot) to a purchase order we sent.
+Decide whether they confirmed the order, declined, or are asking something. Extract only what is written; never invent numbers, dates or invoice numbers. Dates as YYYY-MM-DD.`;
+  const content = [];
+  if (pdf) content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdf.toString('base64') } });
+  if (image) content.push({ type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.data.toString('base64') } });
+  content.push({ type: 'text', text: `Our purchase order: ${JSON.stringify(context || {})}\n\nReply:\n${String(text || '(no text)').slice(0, 15000)}${sheetText ? `\n\nAttached spreadsheet:\n${sheetText.slice(0, 30000)}` : ''}` });
+  const { input, usage } = await forcedTool({ tool: SUPPLIER_REPLY_TOOL, content, system, maxTokens: 3000, feature: 'supplier_reply_read', entity });
+  return { ...input, usage };
+}
