@@ -1141,3 +1141,13 @@ fieldset.plain { border: 0; padding: 0; margin: 0; min-width: 0; }
 .linkbox { background: var(--warn-soft); border: 1px solid #f0d9a8; border-radius: 10px; padding: 12px 14px; margin: 0 0 16px; }
 .linkbox form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
 .manualpo select, .manualpo input:not([type=checkbox]) { width: 100%; }
+
+/* product form: AI scan */
+.aiscan{border:1px dashed #9db9ad;background:#f3f8f5;border-radius:10px;padding:12px 14px;margin:10px 0 16px}
+.aiscan-head{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+.aiscan-actions{display:flex;gap:8px;align-items:center}
+.aiscan-msg{margin-top:8px;font-size:13px;color:#2f5d4a}.aiscan-msg.err{color:#b3261e}
+.aiscan-review{margin-top:10px;background:#fff;border:1px solid #dfe5e2;border-radius:8px;padding:10px 12px}
+.aiscan-review td,.aiscan-review th{vertical-align:top}
+.aiwarn{margin:8px 0 0;padding-left:0;list-style:none;color:#8a5a00}
+input.aifilled,textarea.aifilled,select.aifilled{background:#fff8dc;box-shadow:0 0 0 2px #f0d98a}

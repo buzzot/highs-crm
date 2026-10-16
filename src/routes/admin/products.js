@@ -3,7 +3,7 @@ import { admin } from '../../lib/supabase.js';
 import multer from 'multer';
 import { clean, notFound, getSettings, fxRate } from '../../lib/util.js';
 import { productMetrics } from '../../lib/product-metrics.js';
-import { compareProducts } from '../../lib/ai.js';
+import { compareProducts, extractProductCard, aiEnabled } from '../../lib/ai.js';
 import { uploadDocument, deleteDocument } from '../../lib/storage.js';
 
 // product photos: up to 12 images per save, 10 MB each, stored in Supabase Storage (bucket "documents")
@@ -32,6 +32,7 @@ async function productPhotos(id) {
 }
 
 const r = Router();
+r.use((req, res, next) => { res.locals.aiOn = aiEnabled(); next(); }); // shows the AI scan box on the product form
 const FIELDS = ['sku', 'supplier_sku', 'name', 'category', 'description', 'supplier_id', 'unit_cost', 'cost_currency', 'moq', 'hs_code', 'unit_weight_kg',
   'unit_length_cm', 'unit_width_cm', 'unit_height_cm', 'carton_qty', 'carton_cbm', 'carton_weight_kg', 'carton_length_cm', 'carton_width_cm', 'carton_height_cm'];
 const like = q => String(q || '').replace(/[,()%]/g, ' ').trim();
@@ -144,7 +145,22 @@ r.get('/compare', async (req, res) => {
 });
 
 r.get('/new', async (req, res) => res.render('admin/products/form', {
-  title: 'New product', p: { cost_currency: 'CNY', supplier_id: req.query.supplier_id }, specText: '', suppliers: await formData(), photos: [], error: null,
+  title: 'New product', p: { cost_currency: 'CNY', supplier_id: req.query.supplier_id }, specText: '', suppliers: await formData(), photos: [], error: null, aiOn: aiEnabled(),
+}));
+
+// AI scan: read photos / a PDF and SUGGEST field values. Nothing is saved here — the form shows the suggestions and staff approve each one.
+const scanUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 6 } }).array('files', 6);
+r.post('/ai-scan', (req, res) => scanUpload(req, res, async err => {
+  if (err) return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'A file is larger than 10 MB.' : err.message });
+  if (!aiEnabled()) return res.status(503).json({ error: 'AI is not switched on (no API key).' });
+  const IMG = /^image\/(png|jpe?g|gif|webp)$/i;
+  const files = (req.files || []).flatMap(f => (f.mimetype === 'application/pdf' || /\.pdf$/i.test(f.originalname) ? [{ pdf: f.buffer }] : IMG.test(f.mimetype) ? [{ data: f.buffer, mediaType: f.mimetype.replace('jpg', 'jpeg') }] : []));
+  if (!files.length) return res.status(400).json({ error: 'Add a photo or a PDF of the product first.' });
+  try {
+    const out = await extractProductCard({ files, name: String(req.body.name || '').slice(0, 300), description: String(req.body.description || '').slice(0, 3000) });
+    const { usage, ...card } = out;
+    res.json({ card, tokens: usage?.total ?? null });
+  } catch (e) { console.error('[product ai-scan]', e.message); res.status(502).json({ error: `AI could not read the files: ${e.message}` }); }
 }));
 r.post('/', withPhotos, async (req, res) => {
   const again = async error => res.status(400).render('admin/products/form', { title: 'New product', p: req.body, specText: req.body.spec, suppliers: await formData(), photos: [],

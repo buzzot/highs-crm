@@ -30,6 +30,22 @@
       <span class="muted small">JPG, PNG, WebP or GIF · up to 12 photos, 10 MB each<%= photos.length ? '' : ' · the first photo becomes the main one' %></span>
     </div>
     <div class="pgrid" id="photoPreview"></div>
+    <% if (typeof aiOn !== 'undefined' && aiOn) { %>
+    <div class="aiscan" id="aiScan">
+      <div class="aiscan-head">
+        <div><strong>✨ AI scan</strong> <span class="muted small">reads the new photos above (or a PDF) and suggests name, model no., specs, size, weight, price…</span></div>
+        <div class="aiscan-actions"><label class="btn small" title="Add a catalogue page or datasheet"><input type="file" id="aiPdf" accept="application/pdf" hidden multiple>+ PDF</label><button type="button" class="btn small primary" id="aiRun">Scan with AI</button></div>
+      </div>
+      <div class="muted small" id="aiPdfNames"></div>
+      <div class="aiscan-msg" id="aiMsg" hidden></div>
+      <div class="aiscan-review" id="aiReview" hidden>
+        <p class="small"><strong>Review the suggestions.</strong> Tick what you want to use, then press “Use selected”. <span class="muted">Nothing is saved until you press Save below.</span></p>
+        <table class="tbl compact"><thead><tr><th></th><th>Field</th><th>Now in the form</th><th>AI suggests</th></tr></thead><tbody id="aiRows"></tbody></table>
+        <ul class="aiwarn small" id="aiWarn"></ul>
+        <div class="actions"><button type="button" class="btn small primary" id="aiApply">Use selected</button><button type="button" class="btn small" id="aiCancel">Discard</button><span class="muted small" id="aiTok"></span></div>
+      </div>
+    </div>
+    <% } %>
 
     <label>Specifications <span class="muted small">— one per line, "Key: value"</span>
       <textarea name="spec" rows="4" placeholder="Material: 304 stainless steel&#10;Capacity: 500 ml&#10;Colour: matte black"><%= specText || '' %></textarea></label>
@@ -84,6 +100,7 @@
       });
       drop.classList.toggle('has', files.length > 0);
     };
+    window.__photoFiles = () => files;
     const add = list => { for (const f of list) if (OK.includes(f.type) && files.length < 12) files.push(f); sync(); };
     input.addEventListener('change', () => { const picked = [...input.files]; files = files.filter(f => !picked.includes(f)); add(picked); });
     ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
@@ -91,6 +108,60 @@
     drop.addEventListener('drop', e => add(e.dataTransfer.files));
     document.addEventListener('paste', e => { const imgs = [...(e.clipboardData?.files || [])].filter(f => OK.includes(f.type)); if (imgs.length) { e.preventDefault(); add(imgs); } });
     drop.closest('form').addEventListener('submit', e => { if (files.some(f => f.size > 10 * 1048576)) { e.preventDefault(); alert('Remove photos larger than 10 MB first.'); } });
+  })();
+</script>
+
+<script>
+  // AI scan: ask for suggestions, show them next to the current values, fill the form only for the ticked ones (nothing is saved here)
+  (function () {
+    const box = document.getElementById('aiScan'); if (!box) return;
+    const $ = id => document.getElementById(id), form = box.closest('form');
+    const LABELS = [['name', 'Name'], ['supplier_sku', 'Supplier SKU'], ['category', 'Category'], ['description', 'Description'], ['spec', 'Specifications'], ['hs_code', 'HS code (suggestion — verify)'],
+      ['unit_cost', 'Unit cost'], ['cost_currency', 'Currency'], ['moq', 'MOQ'], ['unit_weight_kg', 'Unit weight kg'], ['unit_length_cm', 'Unit length cm'], ['unit_width_cm', 'Unit width cm'], ['unit_height_cm', 'Unit height cm'],
+      ['carton_qty', 'Pcs / carton'], ['carton_weight_kg', 'Carton weight kg'], ['carton_length_cm', 'Carton length cm'], ['carton_width_cm', 'Carton width cm'], ['carton_height_cm', 'Carton height cm']];
+    const field = k => form.elements[k];
+    let pdfs = [], card = null;
+    $('aiPdf').addEventListener('change', e => { pdfs = [...pdfs, ...e.target.files].slice(0, 3); e.target.value = ''; $('aiPdfNames').textContent = pdfs.map(f => '📄 ' + f.name).join('  '); });
+    const msg = (t, err) => { const m = $('aiMsg'); m.hidden = !t; m.textContent = t || ''; m.className = 'aiscan-msg' + (err ? ' err' : ''); };
+    $('aiRun').addEventListener('click', async () => {
+      const imgs = (window.__photoFiles ? window.__photoFiles() : []).filter(f => f.size <= 10 * 1048576).slice(0, 6 - pdfs.length);
+      const all = [...imgs, ...pdfs];
+      if (!all.length) return msg('Add a photo above (or a PDF) first.', true);
+      const fd = new FormData(); all.forEach(f => fd.append('files', f)); fd.append('name', field('name').value); fd.append('description', field('description').value);
+      const btn = $('aiRun'); btn.disabled = true; btn.textContent = 'Reading…'; msg('Reading the files — about 10–20 seconds…'); $('aiReview').hidden = true;
+      try {
+        const res = await fetch('/admin/products/ai-scan', { method: 'POST', body: fd, headers: { Accept: 'application/json' } });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(j.error || 'Scan failed.');
+        card = j.card; show(j);
+      } catch (e) { msg(e.message, true); } finally { btn.disabled = false; btn.textContent = 'Scan with AI'; }
+    });
+    function show(j) {
+      const rows = $('aiRows'); rows.innerHTML = ''; let n = 0;
+      LABELS.forEach(([k, label]) => {
+        const v = card[k]; if (v == null || v === '') return;
+        const el = field(k), cur = el ? String(el.value || '').trim() : '', same = cur === String(v);
+        if (same) return;
+        n++;
+        const tr = document.createElement('tr'), c0 = document.createElement('td'), cb = document.createElement('input');
+        cb.type = 'checkbox'; cb.dataset.k = k; cb.checked = !cur; c0.appendChild(cb);   // fill empty fields by default; overwriting needs a tick
+        const c1 = document.createElement('td'); c1.textContent = label;
+        const c2 = document.createElement('td'); c2.className = 'muted'; c2.textContent = cur || '—'; c2.style.whiteSpace = 'pre-line';
+        const c3 = document.createElement('td'); c3.textContent = String(v); c3.style.whiteSpace = 'pre-line';
+        tr.append(c0, c1, c2, c3); rows.appendChild(tr);
+      });
+      const w = $('aiWarn'); w.innerHTML = ''; (card.warnings || []).forEach(t => { const li = document.createElement('li'); li.textContent = '⚠ ' + t; w.appendChild(li); });
+      $('aiTok').textContent = j.tokens ? j.tokens.toLocaleString('en-US') + ' tokens' : '';
+      if (!n) { msg('The AI found nothing new to add — the form already has these values.'); $('aiReview').hidden = !(card.warnings || []).length; return; }
+      msg(''); $('aiReview').hidden = false;
+    }
+    $('aiApply').addEventListener('click', () => {
+      let done = 0;
+      $('aiRows').querySelectorAll('input[type=checkbox]:checked').forEach(cb => { const el = field(cb.dataset.k); if (el) { el.value = card[cb.dataset.k]; el.classList.add('aifilled'); done++; } });
+      $('aiReview').hidden = true; msg(done ? done + ' field' + (done === 1 ? '' : 's') + ' filled in (highlighted). Check them, then press Save.' : 'Nothing selected.');
+    });
+    $('aiCancel').addEventListener('click', () => { $('aiReview').hidden = true; msg(''); });
+    form.addEventListener('input', e => e.target.classList.remove('aifilled'));
   })();
 </script>
 <%- include('../../partials/foot') %>

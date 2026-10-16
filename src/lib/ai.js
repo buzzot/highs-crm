@@ -1,3 +1,4 @@
+import { cleanCard } from './product-card.js';
 import Anthropic from '@anthropic-ai/sdk';
 import { usageFrom, recordUsage } from './ai-usage.js';
 
@@ -279,6 +280,46 @@ If the client already typed a name or details, keep their meaning and only impro
   const { input, usage } = await forcedTool({ tool: PRODUCT_INFO_TOOL, content, system, maxTokens: 2000, feature: 'request_product_fill', entity });
   const s = v => (typeof v === 'string' && v.trim() ? v.trim() : null);
   return { name: s(input.name), sku: s(input.sku), description: s(input.description), usage };
+}
+
+const PRODUCT_CARD_TOOL = {
+  name: 'record_product_card',
+  description: 'Record the product data that is visible in the attached photos / documents. Use null for anything not visible.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      name: { ...strOrNull, description: 'Short product name in English (type + key attribute)' },
+      supplier_sku: { ...strOrNull, description: 'Model / article / part number exactly as printed, or null' },
+      category: { ...strOrNull, description: 'Short generic category in English, e.g. "Kitchenware", "Connectors"' },
+      description: { ...strOrNull, description: 'One or two short factual lines about the product. No marketing text, no guesses.' },
+      spec: { type: 'array', description: 'Key specs that are printed or clearly visible', items: { type: 'object', properties: { key: { type: 'string' }, value: { type: 'string' } }, required: ['key', 'value'] } },
+      hs_code: { ...strOrNull, description: 'Suggested customs HS code (6-8 digits) ONLY if you are reasonably sure; otherwise null' },
+      unit_cost: { type: ['number', 'null'], description: 'Factory unit price if a price is printed' },
+      cost_currency: { type: ['string', 'null'], enum: ['CNY', 'USD', 'EUR', null] },
+      moq: { type: ['integer', 'null'], description: 'Minimum order quantity if printed' },
+      unit_weight_kg: { type: ['number', 'null'] }, unit_length_cm: { type: ['number', 'null'] }, unit_width_cm: { type: ['number', 'null'] }, unit_height_cm: { type: ['number', 'null'] },
+      carton_qty: { type: ['integer', 'null'] }, carton_weight_kg: { type: ['number', 'null'] },
+      carton_length_cm: { type: ['number', 'null'] }, carton_width_cm: { type: ['number', 'null'] }, carton_height_cm: { type: ['number', 'null'] },
+      warnings: { type: 'array', items: { type: 'string' }, description: 'Short notes for the reviewer: unreadable parts, ambiguous values, things to double-check' },
+    },
+    required: ['name'],
+  },
+};
+
+/** Staff: read photos / a PDF / a label of ONE product and suggest the product-card fields. Nothing is saved; the staff member approves first. */
+export async function extractProductCard({ files = [], name = '', description = '' }, entity = null) {
+  const system = `You fill in the product card of a China-sourcing trading company from photos, catalogue pages, labels, packaging and screenshots of ONE product.
+Rules: only data that is visible or printed. Never invent. Use null when unknown. Convert to kg and cm. Translate Chinese to English.
+Do not guess weights or sizes from the look of the product. An HS code is only a suggestion — give it only when you are fairly sure.
+If staff already typed a name or description, keep their meaning and complete it. Put anything doubtful into warnings.`;
+  const content = [];
+  for (const f of files.slice(0, 6)) {
+    if (f.pdf) content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: f.pdf.toString('base64') } });
+    else content.push({ type: 'image', source: { type: 'base64', media_type: f.mediaType, data: f.data.toString('base64') } });
+  }
+  content.push({ type: 'text', text: `Typed so far — name: ${name || '(empty)'}; description: ${description || '(empty)'}.\nCall record_product_card.` });
+  const { input, usage } = await forcedTool({ tool: PRODUCT_CARD_TOOL, content, system, maxTokens: 2500, feature: 'product_scan', entity });
+  return { ...cleanCard(input), usage };
 }
 
 const REVIEW_TOOL = {
