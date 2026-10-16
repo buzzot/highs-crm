@@ -112,16 +112,17 @@ export function changeSubmittedEmail({ request, orgName, who, url }) {
 }
 
 // ---- offer sent to the client ----
-export function quoteSentEmail({ request, validUntil, leadTimeDays, url }) {
+export function quoteSentEmail({ request, validUntil, leadTimeDays, url, count, total, currency, attached }) {
   const facts = [validUntil ? `valid until ${validUntil}` : null, leadTimeDays ? `lead time ${leadTimeDays} days` : null].filter(Boolean).join(' · ');
+  const sum = count > 1 && total != null ? `${count} products, total ${currency || ''} ${Number(total).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`.replace('  ', ' ') : '';
   return {
     subject: `Your offer for ${request.ref} is ready`,
     html: layout({
       preheader: `We prepared an offer for ${request.ref}.`, eyebrow: 'New offer', title: 'Your offer is ready',
-      introHtml: `We prepared an offer for <strong>${esc(request.ref)} · ${esc(request.title)}</strong>${facts ? ` (${esc(facts)})` : ''}. Open it in your portal to review the price and accept it.`,
+      introHtml: `We prepared an offer for <strong>${esc(request.ref)} · ${esc(request.title)}</strong>${facts ? ` (${esc(facts)})` : ''}.${sum ? ` It covers ${esc(sum)}.` : ''} ${attached ? 'The quotation is attached. ' : ''}Open it in your portal to review the price and accept it.`,
       buttonText: 'View the offer', buttonUrl: url, fineHtml: 'Questions? Just reply to this email.',
     }),
-    text: `Your offer for ${request.ref} is ready${facts ? ` (${facts})` : ''}. View it: ${url}`,
+    text: `Your offer for ${request.ref} is ready${facts ? ` (${facts})` : ''}${sum ? `. ${sum}` : ''}. View it: ${url}`,
   };
 }
 

@@ -5,6 +5,7 @@ import { admin } from '../lib/supabase.js';
 import { log } from '../lib/activity.js';
 import { aiEnabled, extractProductInfo } from '../lib/ai.js';
 import { companyAiOn } from '../lib/ai-access.js';
+import { combineQuotes, poLinesFromCombined, quotationPdf } from '../lib/combined-quote.js';
 import { getCompany, poFromQuote, poPdf, totalOf, text as txt } from '../lib/purchase.js';
 import { staffEmails } from '../lib/request-changes.js';
 import { sendEmail } from '../lib/mailer.js';
@@ -152,6 +153,13 @@ r.post('/requests', upload.any(), async (req, res) => {
   res.redirect(`/portal/requests/${data.id}`);
 });
 
+// two or more quotes in the same state are shown to the client as one quotation with a grand total
+function bundlesFor(quotes, items) {
+  const nameOf = q => items.find(i => i.id === q.request_item_id)?.name || 'Item', skuOf = q => items.find(i => i.id === q.request_item_id)?.sku || '';
+  const group = st => { const qs = quotes.filter(q => q.status === st); if (qs.length < 2) return null; const c = combineQuotes(qs, { nameOf, skuOf }); return c.mixed ? null : { ...c, ids: qs.map(q => q.id) }; };
+  return { sent: group('sent'), accepted: group('accepted') };
+}
+
 r.get('/requests/:id', async (req, res) => {
   const { data: request } = await req.db.from('requests').select(REQ).eq('id', req.params.id).single();
   if (!request) return res.status(404).render('error', { title: 'Not found', message: 'Request not found.' });
@@ -163,11 +171,12 @@ r.get('/requests/:id', async (req, res) => {
     req.db.from('request_revisions').select('*').eq('request_id', request.id).order('created_at', { ascending: false }).limit(1),
   ]);
   const { data: pos } = await admin.from('purchase_orders').select('id, po_no, quote_id, status').eq('request_id', request.id).eq('org_id', req.user.org_id).in('status', ['draft', 'submitted', 'approved']);
+  const bundles = bundlesFor(quotes || [], items || []);
   const last = revs?.[0] || null;
   const pending = last?.status === 'pending' ? last : null;
   const pendingDiff = pending ? diff(snapshot(request, items || []), pending.data) : null;
   res.render('portal/request_detail', {
-    title: request.ref, request, pos: pos || [], quotes: quotes || [], docs: (docs || []).filter(d => !d.revision_id), events: events || [], items: items || [],
+    title: request.ref, request, pos: pos || [], bundles, quotes: quotes || [], docs: (docs || []).filter(d => !d.revision_id), events: events || [], items: items || [],
     pending, pendingDiff, lastDecision: last && ['approved', 'rejected'].includes(last.status) ? last : null, canEdit: EDITABLE.includes(request.status),
   });
 });
@@ -290,6 +299,51 @@ r.post('/quotes/:id/:decision(accept|reject)', async (req, res) => {
   await admin.from('requests').update({ status: accept ? 'accepted' : 'quoted' }).eq('id', quote.request_id);
   await log({ entityType: 'request', entityId: quote.request_id, action: accept ? 'quote_accepted' : 'quote_rejected', actorId: req.user.id, clientVisible: true, detail: { quote_id: quote.id } });
   res.redirect(`/portal/requests/${quote.request_id}`);
+});
+
+// the client accepts or rejects all sent lines of a request in one click
+r.post('/requests/:rid/quotes/:decision(accept|reject)', async (req, res) => {
+  const { data: request } = await req.db.from('requests').select('id').eq('id', req.params.rid).maybeSingle();
+  const { data: sent } = request ? await req.db.from('quotes').select('id').eq('request_id', request.id).eq('status', 'sent') : { data: [] };
+  if (!sent?.length) return res.status(400).render('error', { title: 'Not allowed', message: 'There is no quotation waiting for your answer.' });
+  const accept = req.params.decision === 'accept';
+  await admin.from('quotes').update({ status: accept ? 'accepted' : 'rejected' }).in('id', sent.map(q => q.id));
+  await admin.from('requests').update({ status: accept ? 'accepted' : 'quoted' }).eq('id', request.id);
+  await log({ entityType: 'request', entityId: request.id, action: accept ? 'quote_accepted' : 'quote_rejected', actorId: req.user.id, clientVisible: true, detail: { note: `${sent.length} lines` } });
+  res.redirect(`/portal/requests/${request.id}`);
+});
+
+async function clientQuotation(req, statuses) {
+  const { data: request } = await req.db.from('requests').select(REQ).eq('id', req.params.rid).maybeSingle();
+  if (!request) return null;
+  const [{ data: quotes }, { data: items }, { data: org }] = await Promise.all([
+    req.db.from('quotes').select(QUOTE).eq('request_id', request.id).in('status', statuses).order('created_at'),
+    req.db.from('request_items').select('id, name, sku').eq('request_id', request.id),
+    admin.from('organizations').select('*').eq('id', req.user.org_id).single(),
+  ]);
+  const it = q => (items || []).find(i => i.id === q.request_item_id);
+  const combined = combineQuotes(quotes || [], { nameOf: q => it(q)?.name || 'Item', skuOf: q => it(q)?.sku || '' });
+  return { request, org, quotes: quotes || [], combined };
+}
+r.get('/requests/:rid/quote.pdf', async (req, res) => {
+  const x = await clientQuotation(req, ['sent', 'accepted']);
+  if (!x || !x.quotes.length) return res.status(404).render('error', { title: 'Not found', message: 'Quotation not found.' });
+  res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${x.request.ref}-quotation.pdf"` });
+  res.send(Buffer.from(quotationPdf({ request: x.request, combined: x.combined, org: x.org, company: await getCompany(admin) })));
+});
+
+// one purchase order for all accepted lines
+r.get('/requests/:rid/po', async (req, res) => {
+  const x = await clientQuotation(req, ['accepted']);
+  if (!x || x.quotes.length < 2 || x.combined.mixed) return res.status(400).render('error', { title: 'Not allowed', message: 'Accept the quotation first, then you can send your purchase order.' });
+  const { data: live } = await admin.from('purchase_orders').select('id').eq('request_id', x.request.id).eq('org_id', req.user.org_id).is('quote_id', null).in('status', ['draft', 'submitted', 'approved']).limit(1);
+  if (live?.length) return res.redirect(`/portal/po/${live[0].id}`);
+  const c = x.combined;
+  const base = poFromQuote({ quote: { quantity: 1, unit_price: 0, sell_currency: c.currency, incoterm: c.incoterm, lead_time_days: c.lead_time_days }, request: x.request, org: x.org, profile: req.user });
+  const { data: po, error } = await admin.from('purchase_orders').insert({ ...base, lines: poLinesFromCombined(c), quote_id: null, request_id: x.request.id, org_id: req.user.org_id, created_by: req.user.id }).select('id').single();
+  if (error) return res.status(500).render('error', { title: 'Could not create the PO', message: error.message });
+  await log({ entityType: 'request', entityId: x.request.id, action: 'po_created', actorId: req.user.id, clientVisible: true });
+  res.redirect(`/portal/po/${po.id}`);
 });
 
 // ---- purchase orders: after accepting a quote the client sends a PO ----

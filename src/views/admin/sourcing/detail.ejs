@@ -63,7 +63,7 @@
     </div>
 
     <div class="card">
-      <h2>Quotes <a class="more" href="/admin/pricing/quotes/new?request_id=<%= request.id %>">+ new quote</a></h2>
+      <h2>Quotes <a class="more" href="/admin/pricing/quotes/new?request_id=<%= request.id %>">+ new quote</a><% if (quotes.some(x => ['draft', 'sent', 'accepted'].includes(x.status))) { %> <a class="more" href="/admin/pricing/requests/<%= request.id %>/quote">Quotation total &amp; PDF</a><% } %></h2>
       <% const drafts = quotes.filter(x => x.status === 'draft'); %>
       <% if (drafts.length > 1) { %>
         <form method="post" action="/admin/pricing/requests/<%= request.id %>/send-all" class="sendall">

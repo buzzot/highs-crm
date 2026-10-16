@@ -5,6 +5,7 @@ import { verifyQuote } from '../../lib/ai.js';
 import { log } from '../../lib/activity.js';
 import { sendEmail } from '../../lib/mailer.js';
 import { getCompany } from '../../lib/purchase.js';
+import { combineQuotes, quotationPdf, LIVE } from '../../lib/combined-quote.js';
 import { quoteSentEmail } from '../../lib/email-templates.js';
 import { requireAdmin } from '../../middleware/auth.js';
 import { cargoLine, cargoTotals, AIR_KG_PER_CBM } from '../../lib/cargo.js';
@@ -143,13 +144,45 @@ r.post('/quotes/multi', async (req, res) => {
     await admin.from('quotes').insert({ ...x.row, request_id: requestId, request_item_id: item?.id || null, quantity: x.calc.quantity, margin_pct: x.calc.marginPct,
       unit_price: x.calc.unitPrice, landed_unit_price: x.calc.landedUnitPrice, created_by: req.user.id, status: 'draft' });
   }
-  res.redirect(`/admin/sourcing/${requestId}?msg=` + encodeURIComponent(`${lines.length} quote line${lines.length > 1 ? 's' : ''} created as drafts. Check them, then send them all to the client.`));
+  res.redirect(`/admin/pricing/requests/${requestId}/quote?msg=` + encodeURIComponent(`${lines.length} quote line${lines.length > 1 ? 's' : ''} created as drafts. Check the total, then send the quote to the client.`));
+});
+
+
+// ---- one combined quotation for a whole request: preview with totals, PDF, send together ----
+async function loadCombined(rid, statuses = LIVE) {
+  const { data: request } = await admin.from('requests').select('*, organizations(*)').eq('id', rid).maybeSingle();
+  if (!request) return null;
+  const [{ data: quotes }, { data: items }] = await Promise.all([
+    admin.from('quotes').select('*, products(id, name, sku), suppliers(id, name)').eq('request_id', rid).in('status', statuses).order('created_at'),
+    admin.from('request_items').select('id, name, sku').eq('request_id', rid),
+  ]);
+  const item = id => (items || []).find(i => i.id === id);
+  const nameOf = q => item(q.request_item_id)?.name || q.products?.name || 'Item';
+  const skuOf = q => item(q.request_item_id)?.sku || q.products?.sku || '';
+  const list = quotes || [];
+  return { request, org: request.organizations, quotes: list, combined: combineQuotes(list, { nameOf, skuOf }) };
+}
+
+r.get('/requests/:rid/quote', async (req, res) => {
+  const settings = await getSettings(admin);
+  const x = await loadCombined(req.params.rid);
+  if (!x) return notFound(res, 'Request');
+  const lines = x.quotes.map(q => ({ q, c: compute(q, settings) }));
+  res.render('admin/pricing/quote_combined', { title: `Quote ${x.request.ref}`, ...x, lines, min: settings.pricing.min_margin_pct, msg: req.query.msg, err: req.query.err,
+    drafts: x.quotes.filter(q => q.status === 'draft'), noAi: x.quotes.filter(q => q.status === 'draft' && !q.ai_check).length, low: lines.filter(l => l.q.status === 'draft' && !l.c.meetsMinimum).length });
+});
+
+r.get('/requests/:rid/quote.pdf', async (req, res) => {
+  const x = await loadCombined(req.params.rid);
+  if (!x || !x.quotes.length) return notFound(res, 'Quote');
+  res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${x.request.ref}-quotation.pdf"` });
+  res.send(Buffer.from(quotationPdf({ request: x.request, combined: x.combined, org: x.org, company: await getCompany(admin) })));
 });
 
 // send every draft quote of a request in one go (one email to the client)
 r.post('/requests/:rid/send-all', async (req, res) => {
   const settings = await getSettings(admin);
-  const rid = req.params.rid, to = `/admin/sourcing/${rid}`;
+  const rid = req.params.rid, to = `/admin/pricing/requests/${rid}/quote`;
   const { data: drafts } = await admin.from('quotes').select('*').eq('request_id', rid).eq('status', 'draft');
   if (!drafts?.length) return back(res, to, { err: 'No draft quotes to send.' });
   const override = bool(req.body.override) && req.user.role === 'admin';
@@ -167,8 +200,12 @@ r.post('/requests/:rid/send-all', async (req, res) => {
     people = (people || []).filter(p => p.role === 'client'); // staff-initiated: the creator is us, so write to the company's users
     if (!people.length) ({ data: people } = await admin.from('profiles').select('email').eq('org_id', rq.org_id).eq('role', 'client').eq('active', true));
     sentTo = [...new Set((people || []).map(p => p.email).filter(Boolean))];
-    const first = drafts[0];
-    if (sentTo.length) await sendEmail({ to: sentTo, ...quoteSentEmail({ request: rq, validUntil: first.valid_until, leadTimeDays: first.lead_time_days, url: `${(process.env.APP_URL || '').replace(/\/+$/, '')}/portal/requests/${rq.id}` }) });
+    if (sentTo.length) {
+      const x = await loadCombined(rid, ['sent', 'accepted']), c = x.combined;
+      let attachments;
+      try { attachments = [{ filename: `${rq.ref}-quotation.pdf`, content: Buffer.from(quotationPdf({ request: x.request, combined: c, org: x.org, company: await getCompany(admin) })) }]; } catch (e) { console.error(`[quote] pdf failed: ${e.message}`); }
+      await sendEmail({ to: sentTo, attachments, ...quoteSentEmail({ request: rq, validUntil: c.valid_until, leadTimeDays: c.lead_time_days, count: c.count, total: c.mixed ? null : c.grandTotal, currency: c.currency, attached: !!attachments, url: `${(process.env.APP_URL || '').replace(/\/+$/, '')}/portal/requests/${rq.id}` }) });
+    }
   } catch (e) { console.error(`[quote] email to client failed: ${e.message}`); return back(res, to, { msg: `${drafts.length} quotes sent — the client can see them in the portal, but the email notification failed.` }); }
   back(res, to, { msg: `${drafts.length} quotes sent${sentTo.length ? ` and the client was notified (${sentTo.join(', ')}).` : ' — the client can see them in the portal (no active client user to email).'}` });
 });

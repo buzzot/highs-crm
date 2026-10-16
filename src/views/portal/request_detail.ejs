@@ -34,7 +34,34 @@
     <div class="card">
       <h2>Quotes</h2>
       <% if (!quotes.length) { %><p class="muted">We're working on it — quotes will appear here.</p><% } %>
-      <% quotes.forEach(q => { %>
+      <% const bd = typeof bundles !== 'undefined' ? bundles : {}, inBundle = new Set([...(bd.sent?.ids || []), ...(bd.accepted?.ids || [])]); %>
+      <% ['sent', 'accepted'].forEach(st => { const c = bd[st]; if (!c) return; const money = (v, d) => fmt.money(v, c.currency, d); %>
+        <div class="quote <%= st %>">
+          <div class="qhead"><strong>Quotation · <%= c.count %> products</strong> <span class="pill <%= st %>"><%= fmt.status(st) %></span> <span class="muted">valid until <%= fmt.date(c.valid_until) %></span> <a class="more" href="/portal/requests/<%= request.id %>/quote.pdf" target="_blank">PDF</a></div>
+          <table class="tbl compact quotesum">
+            <thead><tr><th>Product</th><th class="right">Qty</th><th class="right">Unit price</th><th class="right">Goods</th></tr></thead>
+            <tbody><% c.lines.forEach(l => { %><tr><td><strong><%= l.name %></strong></td><td class="right"><%= l.quantity.toLocaleString('en-US') %></td><td class="right"><%= money(l.unit_price, 4) %></td><td class="right"><%= money(l.goods) %></td></tr><% }) %></tbody>
+            <tfoot>
+              <tr><td colspan="3" class="right muted">Goods</td><td class="right"><%= money(c.goodsTotal) %></td></tr>
+              <tr><td colspan="3" class="right muted">Freight &amp; logistics (estimate)</td><td class="right"><%= money(c.logisticsTotal) %></td></tr>
+              <tr class="grand"><td colspan="3" class="right"><strong>Total<%= c.incoterm ? ' (' + c.incoterm + ')' : '' %></strong></td><td class="right"><strong><%= money(c.grandTotal) %></strong></td></tr>
+            </tfoot>
+          </table>
+          <p class="muted small">Lead time <%= c.lead_time_days ? c.lead_time_days + ' days' : '—' %>. Freight is an estimate until the shipment is booked.</p>
+          <% if (st === 'sent') { %>
+            <div class="actions">
+              <form method="post" action="/portal/requests/<%= request.id %>/quotes/accept"><button class="btn primary">Accept quotation</button></form>
+              <form method="post" action="/portal/requests/<%= request.id %>/quotes/reject" onsubmit="return confirm('Reject this quotation?')"><button class="btn">Reject</button></form>
+            </div>
+          <% } else { const po = (typeof pos !== 'undefined' ? pos : []).find(p => !p.quote_id); %>
+            <div class="actions">
+              <% if (!po) { %><a class="btn primary" href="/portal/requests/<%= request.id %>/po">Send PO</a><span class="muted small">Quotation accepted — send one purchase order for all products.</span>
+              <% } else { %><a class="btn" href="/portal/po/<%= po.id %>"><%= po.po_no %></a> <span class="pill <%= po.status %>"><%= ({ draft: 'Draft — not sent', submitted: 'Sent — awaiting approval', approved: 'Approved' })[po.status] %></span><% } %>
+            </div>
+          <% } %>
+        </div>
+      <% }) %>
+      <% quotes.forEach(q => { if (inBundle.has(q.id)) return; %>
         <div class="quote <%= q.status %>">
           <% const qi = items.find(i => i.id === q.request_item_id); %>
           <div class="qhead"><strong><%= qi ? qi.name : 'Quote' %></strong> <span class="pill <%= q.status %>"><%= q.status === 'superseded' ? 'Replaced — updated offer coming' : fmt.status(q.status) %></span> <span class="muted">valid until <%= fmt.date(q.valid_until) %></span></div>
