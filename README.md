@@ -137,3 +137,5 @@ After the proforma invoice is sent, the order carries the amount due and a payme
 ## Quoting several products at once
 
 Tick products on the Products list → **Create quote**. One request (new internal `IRQ-…` for a chosen client, or an existing request) gets one quote line per product, suppliers can differ. Lines are drafts; **Send all to client** on the request page sends them together with a single email (margin minimum and AI check rules apply to every line). Freight is entered per line.
+
+The multi-product quote page shows a live **cargo estimate** (cartons, gross weight, volume, air chargeable weight, share of a 40HQ) from each product's packing data and the quantities entered (`src/lib/cargo.js`).

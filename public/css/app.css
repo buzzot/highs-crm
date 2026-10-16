@@ -1085,3 +1085,6 @@ fieldset.plain { border: 0; padding: 0; margin: 0; min-width: 0; }
 .multiq th.right { text-align: right; }
 .sendall { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 10px 12px; margin-bottom: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--ok-soft); }
 .sendall .short { max-width: 190px; }
+.cargocard .pay-kpis { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.cargotbl td.m { color: var(--warn); }
+.cargotbl th.right { text-align: right; }

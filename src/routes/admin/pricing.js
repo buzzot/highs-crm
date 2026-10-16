@@ -7,6 +7,8 @@ import { sendEmail } from '../../lib/mailer.js';
 import { getCompany } from '../../lib/purchase.js';
 import { quoteSentEmail } from '../../lib/email-templates.js';
 import { requireAdmin } from '../../middleware/auth.js';
+import { cargoLine, cargoTotals, AIR_KG_PER_CBM } from '../../lib/cargo.js';
+import { CONTAINER_DEFAULTS } from '../../lib/product-metrics.js';
 import { clean, bool, back, notFound, getSettings, fxRate, INCOTERMS, CURRENCIES } from '../../lib/util.js';
 
 const r = Router();
@@ -79,13 +81,16 @@ r.get('/quotes/multi', async (req, res) => {
   if (!ids.length) return back(res, '/admin/products', { err: 'Tick at least one product to quote.' });
   const settings = await getSettings(admin);
   const [{ data: prods }, { data: orgs }, { data: reqs }] = await Promise.all([
-    admin.from('products').select('id, name, sku, supplier_id, unit_cost, cost_currency, moq, suppliers(name, lead_time_days)').in('id', ids),
+    admin.from('products').select('id, name, sku, supplier_id, unit_cost, cost_currency, moq, unit_weight_kg, carton_qty, carton_weight_kg, carton_cbm, carton_length_cm, carton_width_cm, carton_height_cm, suppliers(name, lead_time_days)').in('id', ids),
     admin.from('organizations').select('id, name').eq('active', true).order('name'),
     admin.from('requests').select('id, ref, title, organizations(name)').in('status', ['new', 'reviewing', 'quoted']).order('created_at', { ascending: false }),
   ]);
   const order = new Map(ids.map((id, i) => [id, i]));
   const products = (prods || []).sort((a, b) => order.get(a.id) - order.get(b.id));
+  const container = { ...CONTAINER_DEFAULTS, ...(settings.container || {}) };
+  const cargo = products.map(pr => cargoLine(pr, pr.moq || 1));
   res.render('admin/pricing/quote_multi', {
+    cargo, cargoTotal: cargoTotals(cargo, container), container, airKgPerCbm: AIR_KG_PER_CBM,
     title: 'Quote several products', products, orgs: orgs || [], requests: reqs || [], settings, incoterms: INCOTERMS, currencies: CURRENCIES,
     valid_until: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10), error: req.query.err || null,
   });

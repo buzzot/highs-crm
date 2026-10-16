@@ -19,6 +19,20 @@
       <label>Valid until <input type="date" name="valid_until" value="<%= valid_until %>"></label>
     </div>
   </div>
+  <div class="card cargocard">
+    <h2>Cargo estimate <span class="muted small">from the products' packing data and the quantities below</span></h2>
+    <div class="pay-kpis">
+      <div><span class="muted small">Cartons</span><strong id="t_cartons"><%= cargoTotal.cartons %></strong></div>
+      <div><span class="muted small">Gross weight</span><strong id="t_kg"><%= cargoTotal.kg %> kg</strong></div>
+      <div><span class="muted small">Volume</span><strong id="t_cbm"><%= cargoTotal.cbm %> m³</strong></div>
+      <div><span class="muted small">Air chargeable weight</span><strong id="t_air"><%= cargoTotal.airChargeableKg %> kg</strong><span class="muted small" id="t_air_basis"><%= cargoTotal.airBasis === 'volume' ? 'charged by volume' : 'charged by weight' %></span></div>
+      <div><span class="muted small">Share of a 40HQ container</span><strong id="t_pct"><%= cargoTotal.containerPct %>%</strong></div>
+    </div>
+    <table class="tbl compact cargotbl"><thead><tr><th>Product</th><th class="right">Cartons</th><th class="right">Gross kg</th><th class="right">Volume m³</th><th></th></tr></thead><tbody>
+      <% products.forEach((p, i) => { const c = cargo[i]; %><tr id="cg<%= i %>"><td><%= p.name %></td><td class="right c"><%= c.cartons ?? '—' %></td><td class="right k"><%= c.kg ?? '—' %><%= c.kgNote ? ' *' : '' %></td><td class="right v"><%= c.cbm ?? '—' %></td><td class="muted small m"><%= c.missing.length ? 'missing: ' + c.missing.join(', ') : '' %></td></tr><% }) %>
+    </tbody></table>
+    <p class="muted small">Cartons are rounded up. Volumetric weight = volume × <%= airKgPerCbm %> kg per m³ (L×W×H cm ÷ 6000); air freight is charged on the greater of gross and volumetric weight, sea freight on volume (or weight if very dense). Total volumetric weight: <strong id="t_vol"><%= cargoTotal.volumetricKg %> kg</strong>. <span id="t_warn" <%= cargoTotal.incomplete ? '' : 'hidden' %>>Some products have no packing data, so the totals are incomplete. * = net weight without packing.</span></p>
+  </div>
   <div class="card">
     <h2>Products</h2>
     <table class="tbl compact multiq">
@@ -40,4 +54,42 @@
     <div class="actions"><button class="btn primary">Create quote lines</button><a class="btn" href="/admin/products">Cancel</a></div>
   </div>
 </form>
+<script type="application/json" id="cargoData"><%- JSON.stringify({ container_cbm: container.container_cbm, kgPerCbm: airKgPerCbm, products: products.map(p => ({ id: p.id, name: p.name, carton_qty: p.carton_qty, carton_weight_kg: p.carton_weight_kg, unit_weight_kg: p.unit_weight_kg, ctn_cbm: (() => { const g = Number(p.carton_cbm); if (g > 0) return g; const l = Number(p.carton_length_cm), w = Number(p.carton_width_cm), h = Number(p.carton_height_cm); return l > 0 && w > 0 && h > 0 ? l * w * h / 1e6 : null; })() })) }).replace(/</g, '\\u003c') %></script>
+<script>
+(function () {
+  const data = JSON.parse(document.getElementById('cargoData').textContent);
+  const rows = [...document.querySelectorAll('.multiq tbody tr')];
+  const fmt = (n, d) => (n == null ? '—' : Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
+  function line(p, qty) {
+    qty = Math.max(0, Math.floor(Number(qty) || 0));
+    const per = Number(p.carton_qty) > 0 ? Number(p.carton_qty) : null, ckg = Number(p.carton_weight_kg) > 0 ? Number(p.carton_weight_kg) : null, ukg = Number(p.unit_weight_kg) > 0 ? Number(p.unit_weight_kg) : null;
+    const cartons = per ? Math.ceil(qty / per) : null, miss = [];
+    if (!per) miss.push('pcs per carton');
+    let kg = null, note = '';
+    if (cartons != null && ckg) kg = cartons * ckg; else if (ukg) { kg = qty * ukg; note = 'net'; if (cartons != null) miss.push('carton weight'); } else miss.push('weight');
+    let cbm = null;
+    if (cartons != null && p.ctn_cbm) cbm = cartons * p.ctn_cbm; else miss.push('carton size');
+    return { cartons, kg, cbm, miss, note };
+  }
+  function render() {
+    let tc = 0, tk = 0, tv = 0, incomplete = false;
+    data.products.forEach((p, i) => {
+      const qty = rows[i].querySelector('input[name$="[quantity]"]').value, l = line(p, qty), row = document.getElementById('cg' + i);
+      row.querySelector('.c').textContent = fmt(l.cartons, 0);
+      row.querySelector('.k').textContent = fmt(l.kg, 1) + (l.note ? ' *' : '');
+      row.querySelector('.v').textContent = fmt(l.cbm, 3);
+      row.querySelector('.m').textContent = l.miss.length ? 'missing: ' + l.miss.join(', ') : '';
+      tc += l.cartons || 0; tk += l.kg || 0; tv += l.cbm || 0; if (l.miss.length) incomplete = true;
+    });
+    const vol = tv * data.kgPerCbm;
+    const set = (id, t) => { document.getElementById(id).textContent = t; };
+    set('t_cartons', fmt(tc, 0)); set('t_kg', fmt(tk, 1) + ' kg'); set('t_cbm', fmt(tv, 3) + ' m³');
+    set('t_vol', fmt(vol, 1) + ' kg'); set('t_air', fmt(Math.max(tk, vol), 1) + ' kg'); set('t_air_basis', vol > tk ? 'charged by volume' : 'charged by weight');
+    set('t_pct', fmt(tv / data.container_cbm * 100, 1) + '%');
+    document.getElementById('t_warn').hidden = !incomplete;
+  }
+  document.querySelector('.multiq').addEventListener('input', render);
+  render();
+})();
+</script>
 <%- include('../../partials/foot') %>
