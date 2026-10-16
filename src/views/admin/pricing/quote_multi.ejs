@@ -18,6 +18,11 @@
       <label>Lead time (days) <input type="number" name="lead_time_days" min="0"></label>
       <label>Valid until <input type="date" name="valid_until" value="<%= valid_until %>"></label>
     </div>
+    <div class="row" id="m_dest">
+      <label class="grow2">Destination country <span class="muted small">for freight; new request only</span><input name="dest_country" placeholder="e.g. Germany"></label>
+      <label class="grow2">Destination city / port <input name="dest_city" placeholder="e.g. Hamburg"></label>
+      <label>Needed by <input type="date" name="needed_by"></label>
+    </div>
   </div>
   <div class="card cargocard">
     <h2>Cargo estimate <span class="muted small">from the products' packing data and the quantities below</span></h2>

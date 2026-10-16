@@ -15,6 +15,11 @@
           <label class="grow2">Client <select name="irq_org"><option value="">— choose —</option><% (typeof orgs !== 'undefined' ? orgs : []).forEach(o => { %><option value="<%= o.id %>" <%= q.irq_org === o.id ? 'selected' : '' %>><%= o.name %></option><% }) %></select></label>
           <label class="grow2">Request title <span class="muted small">optional — defaults to the product</span><input name="irq_title" value="<%= q.irq_title || '' %>"></label>
         </div>
+        <div class="row">
+          <label class="grow2">Destination country <input name="irq_country" value="<%= q.irq_country || '' %>" placeholder="e.g. Germany"></label>
+          <label class="grow2">Destination city / port <input name="irq_city" value="<%= q.irq_city || '' %>" placeholder="e.g. Hamburg"></label>
+          <label>Needed by <input type="date" name="irq_needed" value="<%= q.irq_needed || '' %>"></label>
+        </div>
       </div>
       <% const selReq = requests.find(r => r.id === q.request_id); const selItems = (selReq?.request_items || []).slice().sort((a, b) => a.position - b.position); %>
       <label id="f_item_wrap" <%= selItems.length ? '' : 'hidden' %>>Product in this request

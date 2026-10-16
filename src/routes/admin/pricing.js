@@ -96,6 +96,13 @@ r.get('/quotes/multi', async (req, res) => {
   });
 });
 
+// destination details typed on a staff-initiated request (needed for freight)
+const destFields = (country, city, needed) => ({
+  destination_country: String(country || '').trim().slice(0, 80) || null,
+  destination_city: String(city || '').trim().slice(0, 80) || null,
+  needed_by: /^\d{4}-\d{2}-\d{2}$/.test(needed || '') ? needed : null,
+});
+
 r.post('/quotes/multi', async (req, res) => {
   const settings = await getSettings(admin);
   const b = req.body;
@@ -122,7 +129,7 @@ r.post('/quotes/multi', async (req, res) => {
     for (let n = 0; n < 6 && !made; n++) {
       ref = refIRQ();
       const title = String(b.title || '').trim().slice(0, 200) || (lines.length === 1 ? lines[0].p.name : `${lines[0].p.name} + ${lines.length - 1} more`);
-      const { data, error } = await admin.from('requests').insert({ ref, org_id: b.org_id, created_by: req.user.id, assigned_to: req.user.id, title, description: 'Initiated by staff — no client request.', quantity: null, target_currency: sell, status: 'reviewing' }).select('id').single();
+      const { data, error } = await admin.from('requests').insert({ ref, org_id: b.org_id, created_by: req.user.id, assigned_to: req.user.id, title, description: 'Initiated by staff — no client request.', quantity: null, target_currency: sell, ...destFields(b.dest_country, b.dest_city, b.needed_by), status: 'reviewing' }).select('id').single();
       if (!error) made = data; else lastErr = error;
     }
     if (!made) return bad(lastErr?.message || 'Could not create the request.');
@@ -201,7 +208,7 @@ async function saveQuote(req, res, id) {
   if (b.request_id === '__irq__') { // quote started by staff, no client request: make an IRQ request for traceability
     if (id) return formError('Pick a client request.');
     if (!/^[0-9a-f-]{36}$/i.test(req.body.irq_org || '')) return formError('Choose the client this quote is for.');
-    irq = { org_id: req.body.irq_org, title: String(req.body.irq_title || '').trim().slice(0, 200) };
+    irq = { org_id: req.body.irq_org, title: String(req.body.irq_title || '').trim().slice(0, 200), ...destFields(req.body.irq_country, req.body.irq_city, req.body.irq_needed) };
     b.request_id = null;
   }
   if (!b.request_id && !irq) return formError('Pick the client request this quote answers, or start a new internal request.');
@@ -221,7 +228,7 @@ async function saveQuote(req, res, id) {
     let made = null, lastErr = null;
     for (let n = 0; n < 6 && !made; n++) {
       const ref = `IRQ-${new Date().toISOString().slice(2, 7).replace('-', '')}-${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`;
-      const { data, error } = await admin.from('requests').insert({ ref, org_id: irq.org_id, created_by: req.user.id, assigned_to: req.user.id, title, description: 'Initiated by staff — no client request.', quantity: calc.quantity, target_currency: b.sell_currency || 'USD', status: 'reviewing' }).select('id, ref').single();
+      const { data, error } = await admin.from('requests').insert({ ref, org_id: irq.org_id, created_by: req.user.id, assigned_to: req.user.id, title, description: 'Initiated by staff — no client request.', quantity: calc.quantity, target_currency: b.sell_currency || 'USD', destination_country: irq.destination_country, destination_city: irq.destination_city, needed_by: irq.needed_by, status: 'reviewing' }).select('id, ref').single();
       if (!error) made = data; else lastErr = error;
     }
     if (!made) return formError(lastErr?.message || 'Could not create the request.');
