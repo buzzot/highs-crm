@@ -25,9 +25,13 @@ export const totalOf = lines_ => Math.round((lines_ || []).reduce((t, l) => t + 
 /** Initial PO content from an accepted quote (sell prices, ex-logistics). */
 export function poFromQuote({ quote, item, product, request, org, profile }) {
   const address = [org?.address, [org?.postal_code, org?.city].filter(Boolean).join(' '), org?.country].filter(Boolean).join('\n');
+  const lines = [{ description: item?.name || product?.name || request?.title || 'Goods', sku: item?.sku || product?.sku || '', quantity: Number(quote.quantity), unit: item?.unit || 'pcs', unit_price: Number(quote.unit_price) }];
+  // freight, duties and other costs quoted for this line go in as one estimated line, so the PO total matches the quotation total
+  const logistics = Math.round((Number(quote.freight_estimate || 0) + Number(quote.duties_estimate || 0) + Number(quote.other_costs || 0)) * 100) / 100;
+  if (logistics > 0) lines.push({ description: 'Freight & logistics (estimate)', sku: '', quantity: 1, unit: 'lot', unit_price: logistics });
   return {
     client: { company: org?.name || '', contact: profile?.full_name || '', email: profile?.email || '', phone: org?.phone || '', address, delivery_address: org?.delivery_address || '', ref: '' },
-    lines: [{ description: item?.name || product?.name || request?.title || 'Goods', sku: item?.sku || product?.sku || '', quantity: Number(quote.quantity), unit: item?.unit || 'pcs', unit_price: Number(quote.unit_price) }],
+    lines,
     currency: quote.sell_currency || 'USD', incoterm: quote.incoterm || null, lead_time_days: quote.lead_time_days || null,
   };
 }

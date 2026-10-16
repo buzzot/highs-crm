@@ -34,3 +34,9 @@ test('staff-initiated requests use the IRQ prefix format', () => {
   const ref = `IRQ-${new Date('2026-10-15').toISOString().slice(2, 7).replace('-', '')}-${String(7).padStart(4, '0')}`;
   assert.equal(ref, 'IRQ-2610-0007');
 });
+
+test('PO from a quote with freight adds an estimated logistics line equal to the quotation total', () => {
+  const po = poFromQuote({ quote: { quantity: 200, unit_price: 148.2, sell_currency: 'CNY', freight_estimate: 500, duties_estimate: 0, other_costs: 0 }, item: { name: 'Housing' }, request: { title: 'x' }, org: {}, profile: {} });
+  assert.equal(po.lines.length, 2); assert.equal(po.lines[1].description, 'Freight & logistics (estimate)');
+  assert.equal(totalOf(po.lines), 30140);
+});
