@@ -4,6 +4,8 @@ import { sendEmail, emailDiagnostics } from '../../lib/mailer.js';
 import { codeEmail } from '../../lib/email-templates.js';
 import { requireStaff } from '../../middleware/auth.js';
 import { admin } from '../../lib/supabase.js';
+import { defaultCurrency, sumIn } from '../../lib/currency.js';
+import { getSettings } from '../../lib/util.js';
 import clients from './clients.js';
 import suppliers from './suppliers.js';
 import products from './products.js';
@@ -19,9 +21,11 @@ import { FEATURES, costOf, clearPriceCache, getPrices } from '../../lib/ai-usage
 
 const r = Router();
 r.use(requireStaff);
+r.use(async (req, res, next) => { res.locals.defCur = await defaultCurrency(admin); next(); }); // the company's default currency, for forms and totals
 
 r.get('/', async (req, res) => {
   const since30 = new Date(Date.now() - 30 * 864e5).toISOString();
+  const [settings, defCur] = await Promise.all([getSettings(admin), defaultCurrency(admin)]);
   const [reqs, orders, shipments, activity, clientsCount, exportGaps, draftQuotes] = await Promise.all([
     admin.from('requests').select('id, ref, title, status, created_at, organizations(name)').order('created_at', { ascending: false }).limit(8),
     admin.from('order_overview').select('*').order('created_at', { ascending: false }),
@@ -42,8 +46,8 @@ r.get('/', async (req, res) => {
     clients: clientsCount.count || 0,
     openRequests: (reqs.data || []).filter(q => ['new', 'reviewing'].includes(q.status)).length,
     openOrders: open.length,
-    revenue30: recent.reduce((s, o) => s + Number(o.subtotal || 0), 0),
-    profit30: recent.reduce((s, o) => s + Number(o.gross_profit || 0), 0),
+    revenue30: sumIn(settings, defCur, recent.map(o => [o.subtotal, o.currency])),
+    profit30: sumIn(settings, defCur, recent.map(o => [o.gross_profit, o.currency])),
     lowMargin: all.filter(o => o.margin_pct != null && o.margin_pct < 20 && !['closed', 'cancelled'].includes(o.status)).length,
     draftQuotes: draftQuotes.count || 0,
   };
@@ -55,7 +59,7 @@ r.get('/', async (req, res) => {
   }
   all.filter(o => o.status !== 'cancelled').forEach(o => {
     const m = months.find(x => x.key === String(o.created_at).slice(0, 7));
-    if (m) { m.revenue += Number(o.subtotal || 0); m.profit += Number(o.gross_profit || 0); }
+    if (m) { m.revenue += sumIn(settings, defCur, [[o.subtotal, o.currency]]); m.profit += sumIn(settings, defCur, [[o.gross_profit, o.currency]]); }
   });
   res.render('admin/dashboard', { title: 'Dashboard', kpi, byStatus, requests: reqs.data || [], shipments: shipments.data || [], activity: activity.data || [], orders: open.slice(0, 8), months, exportGaps: exportGaps.data || [] });
 });

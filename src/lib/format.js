@@ -4,7 +4,8 @@ export const fmt = {
     const x = Number(v);
     // unit prices (asked for with 4 digits) are shown with 2; only tiny prices (< 0.10) keep up to 4 so they do not read as 0.01
     const digits = d >= 4 && !(x !== 0 && Math.abs(x) < 0.1) ? 2 : d;
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur, maximumFractionDigits: digits }).format(x);
+    const out = new Intl.NumberFormat('en-US', { style: 'currency', currency: cur, maximumFractionDigits: digits }).format(x);
+    return cur === 'CNY' ? out.replace('CN¥', '¥') : out; // the yuan reads as plain ¥
   },
   num(v, d = 2) { return v == null || v === '' ? '—' : Number(v).toFixed(d); },
   // date-only values ("2026-11-02") are calendar days: format them in UTC so they never shift a day

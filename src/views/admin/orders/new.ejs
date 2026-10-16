@@ -6,7 +6,7 @@
   <form method="post" action="/admin/orders">
     <div class="row">
       <label class="grow2">Client <select name="org_id" required><option value="">—</option><% clients.forEach(c => { %><option value="<%= c.id %>" <%= org === c.id ? 'selected' : '' %>><%= c.name %></option><% }) %><option value="__new">+ Add new client…</option></select></label>
-      <label>Currency <select name="currency"><% currencies.forEach(c => { %><option><%= c %></option><% }) %></select></label>
+      <label>Currency <select name="currency"><% currencies.forEach(c => { %><option <%= c === defCur ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
     </div>
     <div class="newsup" id="newClient" hidden>
       <strong>New client</strong> <span class="muted small">— just the basics; complete the rest on the client page, where you can also invite their users</span>
@@ -18,7 +18,7 @@
       <div class="row">
         <label>Email <input type="email" id="nc_email"></label>
         <label>Phone <input id="nc_phone"></label>
-        <label>Currency <select id="nc_cur"><% currencies.forEach(c => { %><option><%= c %></option><% }) %></select></label>
+        <label>Currency <select id="nc_cur"><% currencies.forEach(c => { %><option <%= c === defCur ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
       </div>
       <div class="aiscan-msg err" id="nc_err" hidden></div>
       <div class="actions"><button type="button" class="btn small primary" id="nc_save">Add client</button><button type="button" class="btn small" id="nc_cancel">Cancel</button></div>

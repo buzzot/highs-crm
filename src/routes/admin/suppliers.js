@@ -1,6 +1,7 @@
 import { Router } from '../../lib/router.js';
 import { admin } from '../../lib/supabase.js';
-import { clean, bool, notFound } from '../../lib/util.js';
+import { clean, bool, notFound, getSettings } from '../../lib/util.js';
+import { defaultCurrency, sumIn } from '../../lib/currency.js';
 import { requireAdmin } from '../../middleware/auth.js';
 import { ACTIVITY_TYPES as BASE_TYPES, readActivity, withLastLogin } from '../../lib/crm.js';
 import { inviteUser, memberRows } from '../../lib/invites.js';
@@ -108,7 +109,7 @@ r.get('/:id', async (req, res) => {
     : { data: [] };
   const photoOf = {};
   (photos || []).forEach(d => { photoOf[d.entity_id] ||= d.id; });
-  const spend = (orders || []).filter(o => o.status !== 'cancelled').reduce((t, o) => t + Number(o.cost_total || 0), 0);
+  const spend = sumIn(await getSettings(admin), await defaultCurrency(admin), (orders || []).filter(o => o.status !== 'cancelled').map(o => [o.cost_total, o.currency]));
   const members = memberRows(users || [], invites || []);
   const aiUse = await usageSummary('supplier', id);
   res.render('admin/suppliers/detail', {

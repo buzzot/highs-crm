@@ -9,8 +9,8 @@
   <a class="kpi" href="/admin/sourcing"><span class="n"><%= kpi.openRequests %></span><span class="l">New requests</span></a>
   <a class="kpi" href="/admin/pricing?status=draft"><span class="n"><%= kpi.draftQuotes %></span><span class="l">Draft quotes</span></a>
   <a class="kpi" href="/admin/orders"><span class="n"><%= kpi.openOrders %></span><span class="l">Open orders</span></a>
-  <div class="kpi"><span class="n"><%= fmt.money(kpi.revenue30, 'USD', 0) %></span><span class="l">Revenue · 30 days</span></div>
-  <div class="kpi"><span class="n"><%= fmt.money(kpi.profit30, 'USD', 0) %></span><span class="l">Gross profit · 30 days</span></div>
+  <div class="kpi"><span class="n"><%= fmt.money(kpi.revenue30, defCur, 0) %></span><span class="l">Revenue · 30 days</span></div>
+  <div class="kpi"><span class="n"><%= fmt.money(kpi.profit30, defCur, 0) %></span><span class="l">Gross profit · 30 days</span></div>
 </div>
 
 <% if (kpi.lowMargin || exportGaps.length) { %>
@@ -39,7 +39,7 @@
     <% const maxR = Math.max(1, ...months.map(m => m.revenue)); %>
     <div class="cols">
       <% months.forEach(m => { %>
-        <div class="col" title="<%= m.label %>: revenue <%= fmt.money(m.revenue,'USD',0) %>, profit <%= fmt.money(m.profit,'USD',0) %>">
+        <div class="col" title="<%= m.label %>: revenue <%= fmt.money(m.revenue, defCur, 0) %>, profit <%= fmt.money(m.profit, defCur, 0) %>">
           <div class="stack">
             <span class="rev" style="height: <%= (m.revenue / maxR * 100).toFixed(1) %>%"></span>
             <span class="pro" style="height: <%= (Math.max(0, m.profit) / maxR * 100).toFixed(1) %>%"></span>

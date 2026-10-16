@@ -13,7 +13,7 @@
       <label class="grow2">Request title <span class="muted small">optional</span><input name="title" placeholder="defaults to the first product"></label>
     </div>
     <div class="row">
-      <label>Selling currency <select name="sell_currency"><% currencies.forEach(c => { %><option <%= c === 'USD' ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+      <label>Selling currency <select name="sell_currency"><% currencies.forEach(c => { %><option <%= c === defCur ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
       <label>Incoterm <select name="incoterm"><% incoterms.forEach(i => { %><option <%= i === 'FOB' ? 'selected' : '' %>><%= i %></option><% }) %></select></label>
       <label>Lead time (days) <input type="number" name="lead_time_days" min="0"></label>
       <label>Valid until <input type="date" name="valid_until" value="<%= valid_until %>"></label>

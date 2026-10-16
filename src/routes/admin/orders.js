@@ -1,8 +1,9 @@
 import { Router } from '../../lib/router.js';
 import { admin } from '../../lib/supabase.js';
 import { log } from '../../lib/activity.js';
-import { clean, bool, back, notFound, ORDER_STATUSES, CURRENCIES } from '../../lib/util.js';
+import { clean, bool, back, notFound, getSettings, ORDER_STATUSES, CURRENCIES } from '../../lib/util.js';
 import { landed } from '../../lib/landed.js';
+import { defaultCurrency, sumIn } from '../../lib/currency.js';
 import multer from 'multer';
 import { readXlsx, workbookToText } from '../../lib/xlsx-read.js';
 import { readCsv } from './imports.js';
@@ -46,7 +47,10 @@ r.get('/', async (req, res) => {
   ]);
   const byStatus = {};
   (all || []).forEach(o => { byStatus[o.status] = (byStatus[o.status] || 0) + 1; });
-  res.render('admin/orders/index', { title: 'Orders', orders: data || [], byStatus, statuses: ORDER_STATUSES, status, clients: clients || [] });
+  // totals are shown in the company's default currency (orders may be in different currencies)
+  const defCur = await defaultCurrency(admin), settings = await getSettings(admin), list = data || [];
+  const totals = { goods: sumIn(settings, defCur, list.map(o => [o.subtotal, o.currency])), profit: sumIn(settings, defCur, list.map(o => [o.gross_profit, o.currency])), mixed: list.some(o => o.currency !== defCur) };
+  res.render('admin/orders/index', { title: 'Orders', totals, orders: list, byStatus, statuses: ORDER_STATUSES, status, clients: clients || [] });
 });
 
 r.get('/new', async (req, res) => {
@@ -64,7 +68,7 @@ r.post('/quick-client', async (req, res) => {
   const { data: same } = await admin.from('organizations').select('id, name, default_currency').ilike('name', name.replace(/[%_,()]/g, ' ')).limit(5);
   const dup = (same || []).find(x => x.name.trim().toLowerCase() === name.toLowerCase());
   if (dup) return res.json({ id: dup.id, name: dup.name, default_currency: dup.default_currency, existing: true });
-  const cur = CURRENCIES.includes(req.body.default_currency) ? req.body.default_currency : undefined;
+  const cur = CURRENCIES.includes(req.body.default_currency) ? req.body.default_currency : await defaultCurrency(admin);
   const { data, error } = await admin.from('organizations').insert({ name, email: t('email'), phone: t('phone'), country: t('country'), city: t('city'), ...(cur ? { default_currency: cur } : {}) }).select('id, name, default_currency').single();
   if (error) return res.status(400).json({ error: error.message });
   res.json({ ...data, existing: false });

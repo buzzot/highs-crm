@@ -7,6 +7,7 @@ import { sendEmail } from '../../lib/mailer.js';
 import { getCompany } from '../../lib/purchase.js';
 import { combineQuotes, dropReplaced, quotationPdf, LIVE } from '../../lib/combined-quote.js';
 import { modeOf } from '../../lib/freight-mode.js';
+import { okCurrency } from '../../lib/currency.js';
 import { quoteSentEmail } from '../../lib/email-templates.js';
 import { requireAdmin } from '../../middleware/auth.js';
 import { cargoLine, cargoTotals, AIR_KG_PER_CBM } from '../../lib/cargo.js';
@@ -111,7 +112,7 @@ r.post('/quotes/multi', async (req, res) => {
   const rows = (Array.isArray(b.line) ? b.line : Object.values(b.line || {})).filter(l => l && /^[0-9a-f-]{36}$/i.test(l.product_id || ''));
   const bad = msg => back(res, `/admin/pricing/quotes/multi?ids=${rows.map(l => l.product_id).join(',')}`, { err: msg });
   if (!rows.length) return back(res, '/admin/products', { err: 'No products to quote.' });
-  const sell = CURRENCIES.includes(b.sell_currency) ? b.sell_currency : 'USD';
+  const sell = CURRENCIES.includes(b.sell_currency) ? b.sell_currency : (res.locals.defCur || 'CNY');
   let requestId = null, ref = null;
   if (/^[0-9a-f-]{36}$/i.test(b.request_id || '')) requestId = b.request_id;
   else if (!/^[0-9a-f-]{36}$/i.test(b.org_id || '')) return bad('Choose the client, or an existing request.');
@@ -255,12 +256,12 @@ r.post('/requests/:rid/send-all', async (req, res) => {
 r.get('/quotes/new', async (req, res) => {
   const settings = await getSettings(admin);
   const lists = await formLists();
-  const q = { quantity: '', margin_pct: settings.pricing.default_margin_pct, cost_currency: 'CNY', sell_currency: 'USD', incoterm: 'FOB',
+  const q = { quantity: '', margin_pct: settings.pricing.default_margin_pct, cost_currency: 'CNY', sell_currency: res.locals.defCur || 'CNY', incoterm: 'FOB',
     freight_estimate: 0, duties_estimate: 0, other_costs: 0, request_id: req.query.request_id || '', request_item_id: req.query.item_id || '', product_id: req.query.product_id || '',
     valid_until: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10) };
   const req0 = lists.requests.find(x => x.id === q.request_id);
   if (req0) {
-    q.quantity = req0.quantity || ''; q.sell_currency = req0.target_currency || 'USD';
+    q.quantity = req0.quantity || ''; q.sell_currency = req0.target_currency || res.locals.defCur || 'CNY';
     const it = (req0.request_items || []).find(i => i.id === q.request_item_id) || (req0.request_items?.length === 1 ? req0.request_items[0] : null);
     if (it) { q.request_item_id = it.id; if (it.quantity) q.quantity = it.quantity; }
   }
@@ -463,7 +464,7 @@ r.post('/settings', requireAdmin, async (req, res) => {
     { key: 'fx_rates', value: fx, updated_at: new Date().toISOString() },
     { key: 'pricing', value: pricing, updated_at: new Date().toISOString() },
     { key: 'company', value: { name: String(req.body.co_name || '').trim() || 'Lumi Trade', email: String(req.body.co_email || '').trim(), phone: String(req.body.co_phone || '').trim(), website: String(req.body.co_website || '').trim(),
-      address: String(req.body.co_address || '').trim(), bank: String(req.body.co_bank || '').trim(), payment_terms: String(req.body.co_payment_terms || '').trim() }, updated_at: new Date().toISOString() },
+      address: String(req.body.co_address || '').trim(), bank: String(req.body.co_bank || '').trim(), payment_terms: String(req.body.co_payment_terms || '').trim(), default_currency: okCurrency(req.body.co_default_currency) }, updated_at: new Date().toISOString() },
   ]);
   back(res, '/admin/pricing/settings', { msg: 'Settings saved.' });
 });

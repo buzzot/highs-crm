@@ -6,7 +6,7 @@
 <div class="kpis">
   <div class="kpi"><span class="n"><%= kpi.active %></span><span class="l">Active shipments</span></div>
   <div class="kpi <%= kpi.late ? 'bad' : '' %>"><span class="n"><%= kpi.late %></span><span class="l">Past ETA</span></div>
-  <div class="kpi"><span class="n"><%= fmt.money(kpi.unpaid, 'USD', 0) %></span><span class="l">Unpaid freight</span></div>
+  <div class="kpi"><span class="n"><%= fmt.money(kpi.unpaid, defCur, 0) %></span><span class="l">Unpaid freight</span></div>
   <div class="kpi <%= kpi.exportMissing ? 'bad' : '' %>"><span class="n"><%= kpi.exportMissing %></span><span class="l">Missing export declaration</span></div>
 </div>
 <div class="card">

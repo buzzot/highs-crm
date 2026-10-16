@@ -80,7 +80,7 @@ r.post('/:id/activity', async (req, res) => {
 r.post('/:id/details', async (req, res) => {
   const patch = Object.fromEntries(ORG_FIELDS.filter(k => k in req.body).map(k => [k, String(req.body[k] ?? '').trim() || null]));
   if (!patch.name) return res.redirect(`/admin/clients/${req.params.id}?err=` + encodeURIComponent('Company name is required.'));
-  patch.default_currency ||= 'USD';
+  patch.default_currency ||= res.locals.defCur || 'CNY';
   patch.active = req.body.active === 'on';
   const { error } = await admin.from('organizations').update(patch).eq('id', req.params.id);
   res.redirect(`/admin/clients/${req.params.id}?` + (error ? 'err=' + encodeURIComponent(error.message) : 'msg=' + encodeURIComponent('Details saved.')));

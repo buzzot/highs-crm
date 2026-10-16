@@ -33,6 +33,10 @@ export function fxRate(settings, from, to) {
   const fx = settings?.fx || {};
   if (fx[`${from}_${to}`]) return Number(fx[`${from}_${to}`]);
   if (fx[`${to}_${from}`]) return 1 / Number(fx[`${to}_${from}`]);
+  // no direct rate: go through USD (e.g. EUR -> CNY = EUR -> USD -> CNY)
+  const toUsd = c => (c === 'USD' ? 1 : fx[`${c}_USD`] ? Number(fx[`${c}_USD`]) : fx[`USD_${c}`] ? 1 / Number(fx[`USD_${c}`]) : null);
+  const a = toUsd(from), b = toUsd(to);
+  if (a && b) return a / b;
   return 1;
 }
 

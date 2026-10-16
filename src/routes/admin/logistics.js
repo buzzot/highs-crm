@@ -4,6 +4,7 @@ import { log } from '../../lib/activity.js';
 import { fmt } from '../../lib/format.js';
 import { clean, bool, back, notFound, getSettings, fxRate, SHIPMENT_STATUSES, SHIPMENT_MODES, FREIGHT_TYPES, INCOTERMS, CURRENCIES } from '../../lib/util.js';
 import { landed } from '../../lib/landed.js';
+import { defaultCurrency, sumIn } from '../../lib/currency.js';
 import { saveResponse } from '../../lib/freight-store.js';
 import multer from 'multer';
 import { rfqWorkbook } from '../../lib/quote-form.js';
@@ -34,6 +35,7 @@ r.get('/', async (req, res) => {
     admin.from('freight_requests').select('*, orders(id, order_no, organizations(name)), freight_rfqs!freight_rfqs_request_id_fkey(id, status, quote_amount, quote_currency, sent_at, forwarders(name)), freight_responses!freight_responses_request_id_fkey(id, received_at)')
       .order('created_at', { ascending: false }).limit(20),
   ]);
+  const [settingsC, defCur] = [await getSettings(admin), await defaultCurrency(admin)];
   const list = (shipments || []).map(s => {
     const costs = s.freight_costs || [];
     return {
@@ -47,7 +49,7 @@ r.get('/', async (req, res) => {
   const kpi = {
     active: list.filter(s => s.status !== 'delivered').length,
     late: list.filter(s => s.eta && s.eta < today && s.status !== 'delivered').length,
-    unpaid: list.reduce((t, s) => t + s.unpaid, 0),
+    unpaid: sumIn(settingsC, defCur, list.map(s => [s.unpaid, s.orders?.currency])),
     exportMissing: list.filter(s => s.exportMissing).length,
   };
   res.render('admin/logistics/index', { title: 'Logistics', shipments: list, forwarders: forwarders || [], kpi, showAll, today, quoteRequests: rfqReqs || [] });

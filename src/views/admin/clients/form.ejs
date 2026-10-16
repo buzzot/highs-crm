@@ -8,7 +8,7 @@
     <div class="row">
       <label>Country <input name="country" value="<%= org.country || '' %>"></label>
       <label>Tax / VAT ID <input name="tax_id" value="<%= org.tax_id || '' %>"></label>
-      <label>Default currency <select name="default_currency"><% ['USD','EUR','GBP','CNY'].forEach(c => { %><option <%= (org.default_currency || 'USD') === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+      <label>Default currency <select name="default_currency"><% ['USD','EUR','GBP','CNY'].forEach(c => { %><option <%= (org.default_currency || defCur) === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
     </div>
     <div class="row">
       <label>Registration no. <input name="registration_no" value="<%= org.registration_no || '' %>"></label>

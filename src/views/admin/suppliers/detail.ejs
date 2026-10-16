@@ -44,7 +44,7 @@
 <div class="kpis kpis4">
   <div class="kpi"><span class="n"><%= products.length %></span><span class="l">Products</span></div>
   <div class="kpi"><span class="n"><%= orders.length %></span><span class="l">Orders</span></div>
-  <div class="kpi"><span class="n"><%= fmt.money(spend, 'USD', 0) %></span><span class="l">Purchases (cost)</span></div>
+  <div class="kpi"><span class="n"><%= fmt.money(spend, defCur, 0) %></span><span class="l">Purchases (cost)</span></div>
   <div class="kpi <%= overdue ? 'bad' : '' %>"><span class="n"><%= s.next_follow_up ? fmt.date(s.next_follow_up) : '—' %></span><span class="l"><%= overdue ? 'Follow-up overdue' : 'Next follow-up' %></span></div>
 </div>
 

@@ -33,7 +33,7 @@
         <td class="small"><%= o.latest_eta ? 'ETA ' + fmt.date(o.latest_eta) : (o.expected_ship_date ? 'ship ' + fmt.date(o.expected_ship_date) : '—') %></td>
       </tr>
     <% }) %>
-    <% if (orders.length) { %><tr class="total"><td colspan="4"><%= orders.length %> orders</td><td class="right"><%= fmt.money(tg, 'USD', 0) %></td><td colspan="3"></td><td class="right"><%= fmt.money(tp, 'USD', 0) %></td><td></td></tr><% } %>
+    <% if (orders.length) { %><tr class="total"><td colspan="4"><%= orders.length %> orders<% if (totals.mixed) { %> <span class="muted small">· totals converted to <%= defCur %></span><% } %></td><td class="right"><%= fmt.money(totals.goods, defCur, 0) %></td><td colspan="3"></td><td class="right"><%= fmt.money(totals.profit, defCur, 0) %></td><td></td></tr><% } %>
     </tbody>
   </table>
 </div>

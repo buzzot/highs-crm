@@ -3,7 +3,7 @@ import { renderDocument } from './doc-pdf.js';
 import { withAmounts } from './payments.js';
 import { shownOf } from './freight-mode.js';
 
-export const COMPANY_DEFAULTS = { name: 'Lumi Trade', address: '', email: '', phone: '', website: '', bank: '', payment_terms: '30% deposit with the order, 70% balance before shipment' };
+export const COMPANY_DEFAULTS = { name: 'Lumi Trade', address: '', email: '', phone: '', website: '', bank: '', payment_terms: '30% deposit with the order, 70% balance before shipment', default_currency: 'CNY' };
 
 export async function getCompany(db) {
   const { data } = await db.from('settings').select('value').eq('key', 'company').maybeSingle();
