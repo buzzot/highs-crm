@@ -7,8 +7,23 @@
     <h2>Supplier</h2>
     <div class="row">
       <label class="grow2">Supplier
-        <select name="supplier_id" id="m_sup" required><option value="">— choose —</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= s.id === supplier_id ? 'selected' : '' %>><%= s.name %></option><% }) %></select></label>
+        <select name="supplier_id" id="m_sup" required><option value="">— choose —</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= s.id === supplier_id ? 'selected' : '' %>><%= s.name %></option><% }) %><option value="__new">+ Add new supplier…</option></select></label>
       <label class="grow2">Label <span class="muted small">optional, for us — e.g. “Stock for November”</span><input name="title" maxlength="200"></label>
+    </div>
+    <div class="newsup" id="newSup" hidden>
+      <strong>New supplier</strong> <span class="muted small">— just the basics; complete the rest later on the supplier page</span>
+      <div class="row">
+        <label class="grow2">Company name <input id="ns_name" maxlength="200"></label>
+        <label>Contact person <input id="ns_contact"></label>
+        <label>City <input id="ns_city"></label>
+      </div>
+      <div class="row">
+        <label>Email <input type="email" id="ns_email"></label>
+        <label>Phone <input id="ns_phone"></label>
+        <label>WeChat <input id="ns_wechat"></label>
+      </div>
+      <div class="aiscan-msg err" id="ns_err" hidden></div>
+      <div class="actions"><button type="button" class="btn small primary" id="ns_save">Add supplier</button><button type="button" class="btn small" id="ns_cancel">Cancel</button></div>
     </div>
     <div class="row">
       <label>Currency <select name="currency" id="m_cur"><% currencies.forEach(c => { %><option <%= c === 'CNY' ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
@@ -54,5 +69,30 @@
   document.getElementById('m_add').addEventListener('click', addRow);
   for (let k = 0; k < 3; k++) addRow();
 })();
+</script>
+<script>
+  // "+ Add new supplier…": create the supplier in place and select it (the PO itself is created with the normal button)
+  (function () {
+    const sel = document.getElementById('m_sup'), box = document.getElementById('newSup'); if (!sel || !box) return;
+    const $ = id => document.getElementById(id); let prev = sel.value;
+    const err = t => { const e = $('ns_err'); e.hidden = !t; e.textContent = t || ''; };
+    const close = () => { box.hidden = true; err(''); if (sel.value === '__new') { sel.value = prev; sel.dispatchEvent(new Event('change')); } };
+    sel.addEventListener('change', () => { if (sel.value === '__new') { box.hidden = false; $('ns_name').focus(); } else { prev = sel.value; box.hidden = true; } });
+    $('ns_cancel').addEventListener('click', close);
+    $('ns_save').addEventListener('click', async () => {
+      const name = $('ns_name').value.trim(); if (!name) return err('Enter the supplier name.');
+      const btn = $('ns_save'); btn.disabled = true; err('');
+      try {
+        const res = await fetch('/admin/products/quick-supplier', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ name, contact_name: $('ns_contact').value, city: $('ns_city').value, email: $('ns_email').value, phone: $('ns_phone').value, wechat: $('ns_wechat').value }) });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(j.error || 'Could not add the supplier.');
+        if (![...sel.options].some(o => o.value === j.id)) sel.insertBefore(new Option(j.name, j.id), sel.querySelector('option[value=__new]'));
+        sel.value = j.id; prev = j.id; box.hidden = true; sel.dispatchEvent(new Event('change'));
+        ['ns_name', 'ns_contact', 'ns_city', 'ns_email', 'ns_phone', 'ns_wechat'].forEach(i => { $(i).value = ''; });
+      } catch (e) { err(e.message); } finally { btn.disabled = false; }
+    });
+    sel.form.addEventListener('submit', () => { if (sel.value === '__new') sel.value = prev; });
+  })();
 </script>
 <%- include('../../partials/foot') %>
