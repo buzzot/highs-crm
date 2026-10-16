@@ -1152,3 +1152,4 @@ fieldset.plain { border: 0; padding: 0; margin: 0; min-width: 0; }
 .aiwarn{margin:8px 0 0;padding-left:0;list-style:none;color:#8a5a00}
 input.aifilled,textarea.aifilled,select.aifilled{background:#fff8dc;box-shadow:0 0 0 2px #f0d98a}
 .pdfthumb{display:flex;align-items:center;justify-content:center;height:100%;min-height:90px;font-size:38px;background:#f1f3f5}
+.newsup{border:1px solid #dfe5e2;background:#f8faf9;border-radius:10px;padding:12px 14px;margin:8px 0 14px}

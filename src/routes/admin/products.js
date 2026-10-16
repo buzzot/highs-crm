@@ -172,6 +172,19 @@ r.post('/', withPhotos, async (req, res) => {
   res.redirect(`/admin/products/${data.id}` + (n ? `?msg=${encodeURIComponent(`Product created with ${n} photo${n === 1 ? '' : 's'}.`)}` : ''));
 });
 
+// quick-add a supplier from the product form (JSON): name is enough; an existing supplier with the same name is reused
+r.post('/quick-supplier', async (req, res) => {
+  const t = k => String(req.body[k] || '').trim().slice(0, 200) || null;
+  const name = t('name');
+  if (!name) return res.status(400).json({ error: 'Enter the supplier name.' });
+  const { data: same } = await admin.from('suppliers').select('id, name').ilike('name', name.replace(/[%_,()]/g, ' ')).limit(5);
+  const dup = (same || []).find(x => x.name.trim().toLowerCase() === name.toLowerCase());
+  if (dup) return res.json({ id: dup.id, name: dup.name, existing: true });
+  const { data, error } = await admin.from('suppliers').insert({ name, contact_name: t('contact_name'), email: t('email'), phone: t('phone'), wechat: t('wechat'), city: t('city'), country: t('country') || 'China' }).select('id, name').single();
+  if (error) return res.status(400).json({ error: error.message });
+  res.json({ id: data.id, name: data.name, existing: false });
+});
+
 // quick-add from the quote form (JSON): name is enough
 r.post('/quick', async (req, res) => {
   const name = String(req.body.name || '').trim();
