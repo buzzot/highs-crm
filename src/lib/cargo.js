@@ -36,3 +36,28 @@ export function cargoTotals(lines, cfg = {}) {
     incomplete: lines.some(l => l.missing.length),
   };
 }
+
+/**
+ * Spread one total freight amount over quote lines.
+ * lines: [{ cbm, kg, value }] (cbm/kg from cargoLine, value = goods value for the fallback)
+ * mode 'sea' → by volume, 'air' → by chargeable weight (greater of gross and volumetric kg).
+ * locked: { [index]: amount } lines the user set by hand; the rest share what is left.
+ * If any free line has no packing data for the chosen basis, everything is spread by goods value (estimated).
+ */
+export function allocateFreight(lines, total, mode = 'sea', locked = {}) {
+  const T = Math.max(0, Number(total) || 0);
+  const free = lines.map((_, i) => i).filter(i => locked[i] == null);
+  const left = Math.max(0, T - Object.values(locked).reduce((t, v) => t + (Number(v) || 0), 0));
+  const w = l => (mode === 'air' ? Math.max(l.kg || 0, (l.cbm || 0) * AIR_KG_PER_CBM) : l.cbm || 0);
+  let basis = mode === 'air' ? 'chargeable weight' : 'volume', weights = free.map(i => w(lines[i]));
+  if (weights.some(x => !(x > 0))) { basis = 'goods value'; weights = free.map(i => Math.max(0, lines[i].value || 0)); }
+  if (!(weights.reduce((a, b) => a + b, 0) > 0)) weights = free.map(() => 1); // nothing to go by: equal split
+  const sumW = weights.reduce((a, b) => a + b, 0);
+  const out = lines.map((_, i) => (locked[i] != null ? Number(locked[i]) || 0 : 0));
+  let given = 0;
+  free.forEach((i, k) => {
+    out[i] = k === free.length - 1 ? r(left - given, 2) : r(left * weights[k] / sumW, 2);
+    given += out[i];
+  });
+  return { freight: out, basis, estimated: basis === 'goods value' };
+}

@@ -32,3 +32,26 @@ test('cargo totals: air chargeable weight is the greater of weight and volumetri
   assert.equal(t.containerPct, 3.7);
   assert.equal(t.incomplete, false);
 });
+
+import { allocateFreight } from '../src/lib/cargo.js';
+test('freight is spread by volume for sea and sums to the total', () => {
+  const lines = [{ cbm: 1, kg: 100, value: 10 }, { cbm: 3, kg: 50, value: 10 }];
+  const a = allocateFreight(lines, 100.01, 'sea');
+  assert.equal(a.basis, 'volume');
+  assert.deepEqual(a.freight, [25, 75.01]);
+});
+test('air freight uses the greater of gross and volumetric weight per line', () => {
+  const lines = [{ cbm: 0.1, kg: 100, value: 1 }, { cbm: 1, kg: 10, value: 1 }]; // 100 vs 16.7 → 100; 10 vs 167 → 167
+  const a = allocateFreight(lines, 267, 'air');
+  assert.equal(a.basis, 'chargeable weight');
+  assert.deepEqual(a.freight, [100, 167]);
+});
+test('missing packing data falls back to goods value; locked lines keep their amount', () => {
+  const lines = [{ cbm: null, kg: null, value: 300 }, { cbm: 1, kg: 5, value: 100 }, { cbm: 1, kg: 5, value: 100 }];
+  const a = allocateFreight(lines, 100, 'sea');
+  assert.ok(a.estimated);
+  assert.equal(a.freight.reduce((t, x) => t + x, 0), 100);
+  const b = allocateFreight(lines.slice(1), 100, 'sea', { 0: 40 });
+  assert.deepEqual(b.freight, [40, 60]);
+  assert.equal(b.basis, 'volume');
+});

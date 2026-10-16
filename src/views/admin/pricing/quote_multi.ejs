@@ -35,9 +35,19 @@
   </div>
   <div class="card">
     <h2>Products</h2>
+    <div class="freightbar">
+      <div class="fb-title"><strong>Total freight</strong> <span class="muted small">one amount for the whole shipment, spread over the lines below</span></div>
+      <div class="row">
+        <label>Shipping by <select id="f_mode"><option value="sea">Sea — spread by volume</option><option value="air">Air — spread by chargeable weight</option></select></label>
+        <label>Rate <span class="muted small" id="f_unit">per m³</span> <input type="number" step="0.01" min="0" id="f_rate" placeholder="optional"></label>
+        <label>Total freight <span class="muted small" id="f_cur">USD</span> <input type="number" step="0.01" min="0" id="f_total" placeholder="0"></label>
+        <label class="fb-btn"><span class="muted small">&nbsp;</span><button type="button" class="btn" id="f_reset" hidden>Spread again</button></label>
+      </div>
+      <p class="muted small" id="f_note">Type the forwarder's total, or a rate and it is calculated from the cargo above. You can still overwrite any line's freight; the other lines then share what is left.</p>
+    </div>
     <table class="tbl compact multiq">
       <colgroup><col><col style="width:130px"><col style="width:140px"><col style="width:100px"><col style="width:110px"><col style="width:170px"></colgroup>
-      <thead><tr><th>Product</th><th class="right">Quantity</th><th class="right">Factory price</th><th>Currency</th><th class="right">Margin %</th><th class="right">Freight (total)</th></tr></thead>
+      <thead><tr><th>Product</th><th class="right">Quantity</th><th class="right">Factory price</th><th>Currency</th><th class="right">Margin %</th><th class="right">Freight (line)</th></tr></thead>
       <tbody>
       <% products.forEach((p, i) => { %><tr>
         <td><strong><%= p.name %></strong><input type="hidden" name="line[<%= i %>][product_id]" value="<%= p.id %>">
@@ -50,7 +60,7 @@
       </tr><% }) %>
       </tbody>
     </table>
-    <p class="muted small">Margin is on the product cost only (minimum <%= settings.pricing.min_margin_pct %>%). Freight (in the selling currency) is the amount for that line's whole quantity — estimate it by volume for sea and by chargeable weight for air. Open any line afterwards to add duties, notes or run the AI check.</p>
+    <p class="muted small">Margin is on the product cost only (minimum <%= settings.pricing.min_margin_pct %>%). Line freight (in the selling currency) is filled from the total above, or enter it yourself for that line's whole quantity. Open any line afterwards to add duties, notes or run the AI check.</p>
     <div class="actions"><button class="btn primary">Create quote lines</button><a class="btn" href="/admin/products">Cancel</a></div>
   </div>
 </form>
@@ -90,6 +100,50 @@
   }
   document.querySelector('.multiq').addEventListener('input', render);
   render();
+  // ---- total freight → per-line freight
+  const AIR = data.kgPerCbm, $ = id => document.getElementById(id);
+  const locked = {};
+  const fIn = i => rows[i].querySelector('input[name$="[freight]"]');
+  function allocate() {
+    const mode = $('f_mode').value, ls = data.products.map((p, i) => {
+      const qty = rows[i].querySelector('input[name$="[quantity]"]').value, l = line(p, qty), cost = Number(rows[i].querySelector('input[name$="[unit_cost]"]').value) || 0;
+      return { cbm: l.cbm, kg: l.kg, value: (Math.floor(Number(qty)) || 0) * cost };
+    });
+    return { ls, mode };
+  }
+  function weights(ls, mode) { return ls.map(l => (mode === 'air' ? Math.max(l.kg || 0, (l.cbm || 0) * AIR) : l.cbm || 0)); }
+  function spread(fromRate) {
+    const { ls, mode } = allocate(), w = weights(ls, mode);
+    if (fromRate) {
+      const rate = Number($('f_rate').value) || 0, basis = w.reduce((a, b) => a + b, 0);
+      $('f_total').value = rate && basis ? (rate * basis).toFixed(2) : '';
+    }
+    const T = Math.max(0, Number($('f_total').value) || 0);
+    if (!T && !$('f_total').value) return;
+    const free = ls.map((_, i) => i).filter(i => locked[i] == null);
+    const left = Math.max(0, T - Object.values(locked).reduce((t, v) => t + v, 0));
+    let basis = mode === 'air' ? 'chargeable weight' : 'volume', ws = free.map(i => w[i]);
+    if (ws.some(x => !(x > 0))) { basis = 'goods value (some products have no packing data — estimate)'; ws = free.map(i => Math.max(0, ls[i].value)); }
+    if (!(ws.reduce((a, b) => a + b, 0) > 0)) ws = free.map(() => 1);
+    const sw = ws.reduce((a, b) => a + b, 0); let given = 0;
+    free.forEach((i, k) => { const v = k === free.length - 1 ? Math.round((left - given) * 100) / 100 : Math.round(left * ws[k] / sw * 100) / 100; given += v; fIn(i).value = v; });
+    $('f_note').textContent = 'Spread by ' + basis + (Object.keys(locked).length ? '; ' + Object.keys(locked).length + ' line(s) set by hand.' : '.');
+  }
+  function labels() {
+    $('f_unit').textContent = $('f_mode').value === 'air' ? 'per chargeable kg' : 'per m³';
+    $('f_cur').textContent = document.querySelector('select[name="sell_currency"]').value;
+    $('f_reset').hidden = !Object.keys(locked).length;
+  }
+  $('f_mode').addEventListener('change', () => { labels(); spread($('f_rate').value !== ''); });
+  $('f_rate').addEventListener('input', () => spread(true));
+  $('f_total').addEventListener('input', () => { $('f_rate').value = ''; spread(false); });
+  document.querySelector('select[name="sell_currency"]').addEventListener('change', labels);
+  $('f_reset').addEventListener('click', () => { Object.keys(locked).forEach(k => delete locked[k]); labels(); spread($('f_rate').value !== ''); });
+  rows.forEach((tr, i) => {
+    fIn(i).addEventListener('input', () => { locked[i] = Number(fIn(i).value) || 0; labels(); spread(false); });
+    tr.querySelectorAll('input[name$="[quantity]"],input[name$="[unit_cost]"]').forEach(el => el.addEventListener('input', () => { if ($('f_total').value !== '') spread($('f_rate').value !== ''); }));
+  });
+  labels();
 })();
 </script>
 <%- include('../../partials/foot') %>
