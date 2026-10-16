@@ -14,7 +14,7 @@
       <td class="right num"><%= fmt.money(x.lines.reduce((t, l) => t + Number(l.quantity || 0) * Number(l.unit_price || 0), 0), x.currency) %></td>
       <td><span class="pill <%= x.status %>"><%= ({ draft: 'Client draft', submitted: 'To approve', approved: 'Approved', rejected: 'Sent back' })[x.status] %></span></td>
       <td class="muted small"><%= x.submitted_at ? 'sent ' + fmt.datetime(x.submitted_at) : '' %></td>
-      <td class="right"><a class="btn small <%= x.status === 'submitted' ? 'primary' : '' %>" href="/admin/po/<%= x.id %>"><%= x.status === 'submitted' ? 'Review &amp; approve' : 'Open' %></a></td>
+      <td class="right"><a class="btn small <%= x.status === 'submitted' ? 'primary' : '' %>" href="/admin/po/<%= x.id %>"><%= x.status === 'submitted' ? 'Review & approve' : 'Open' %></a></td>
     </tr><% }) %>
     </tbody></table>
   </div>
