@@ -35,39 +35,82 @@
   <div class="card">
     <h2>Products</h2>
     <div class="tablewrap"><table class="tbl compact newspo" id="m_lines">
-      <thead><tr><th>Catalogue product</th><th>Description</th><th>SKU</th><th class="right">Qty</th><th class="right">Unit price</th><th></th></tr></thead>
+      <thead><tr><th>Product</th><th>Description on the PO</th><th>SKU</th><th class="right">Qty</th><th class="right">Unit price</th><th></th></tr></thead>
       <tbody></tbody>
     </table></div>
-    <div class="actions"><button type="button" class="btn small" id="m_add">+ Add line</button></div>
-    <p class="muted small">Pick a product from the catalogue to fill in its name, SKU and factory price, or type a free line. Prices are what we pay the supplier, in the currency above.</p>
+    <div class="actions"><button type="button" class="btn small primary" id="m_add">+ Add product</button><button type="button" class="btn small" id="m_free">+ Free line</button></div>
+    <p class="muted small">“Add product” opens the catalogue: pick a product and it fills in the name, SKU and factory price — then enter the quantity. Use “Free line” for something that is not in the catalogue. Prices are what we pay the supplier, in the currency above.</p>
     <div class="actions"><button class="btn primary">Create purchase order</button><a class="btn" href="/admin/purchasing">Cancel</a></div>
   </div>
 </form>
-<script type="application/json" id="mData"><%- JSON.stringify({ products: products.map(p => ({ id: p.id, name: p.name, sku: p.sku, supplier_id: p.supplier_id, unit_cost: p.unit_cost, cost_currency: p.cost_currency })) }).replace(/</g, '\\u003c') %></script>
+<dialog class="pickdlg" id="pickDlg">
+  <div class="pickhead"><h2>Choose a product</h2><button type="button" class="link" id="pk_close" title="Close">×</button></div>
+  <div class="pickbar"><input type="search" id="pk_q" placeholder="Search name, SKU, description…" autocomplete="off">
+    <label class="small"><input type="checkbox" id="pk_only"> only this supplier's products</label></div>
+  <div class="pickscroll"><table class="tbl picktbl"><thead><tr><th></th><th>Product</th><th>Description</th><th>Supplier</th><th class="right">Price</th><th></th></tr></thead><tbody id="pk_rows"></tbody></table>
+    <p class="muted" id="pk_empty" hidden>No products match.</p></div>
+</dialog>
+<script type="application/json" id="mData"><%- JSON.stringify({ products: products.map(p => ({ id: p.id, name: p.name, sku: p.sku, supplier_id: p.supplier_id, unit_cost: p.unit_cost, cost_currency: p.cost_currency, description: p.description, moq: p.moq, photo: p.photo })), suppliers: suppliers.map(x => ({ id: x.id, name: x.name })) }).replace(/</g, '\\u003c') %></script>
 <script>
 (function () {
   const data = JSON.parse(document.getElementById('mData').textContent), body = document.querySelector('#m_lines tbody'), sup = document.getElementById('m_sup'), cur = document.getElementById('m_cur');
-  let n = 0;
-  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const options = () => '<option value="">— free line —</option>' + data.products.filter(p => !sup.value || p.supplier_id === sup.value).map(p => `<option value="${p.id}">${esc(p.name)}${p.sku ? ' · ' + esc(p.sku) : ''}</option>`).join('');
-  function addRow() {
+  const dlg = document.getElementById('pickDlg'), $ = id => document.getElementById(id);
+  const supName = id => (data.suppliers.find(x => x.id === id) || {}).name || '';
+  let n = 0, target = null;
+  const fmt = (v, c) => v == null || v === '' ? '—' : (c ? c + ' ' : '') + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  function addRow(free) {
     const i = n++, tr = document.createElement('tr');
-    tr.innerHTML = `<td><select class="pick">${options()}</select><input type="hidden" name="line[${i}][product_id]"></td>
+    tr.innerHTML = `<td class="prodcell"><input type="hidden" name="line[${i}][product_id]"><div class="prodpick"></div></td>
       <td><input name="line[${i}][description]" placeholder="Product name"></td><td><input name="line[${i}][sku]"></td>
       <td class="right"><input type="number" min="1" name="line[${i}][quantity]"></td><td class="right"><input type="number" step="0.0001" min="0" name="line[${i}][unit_price]"></td>
       <td><button type="button" class="link small danger" title="Remove line">×</button></td>`;
     const q = s => tr.querySelector(s);
-    q('.pick').addEventListener('change', e => {
-      const p = data.products.find(x => x.id === e.target.value);
-      q('input[type=hidden]').value = p ? p.id : '';
-      if (p) { q('[name$="[description]"]').value = p.name; q('[name$="[sku]"]').value = p.sku || ''; q('[name$="[unit_price]"]').value = p.unit_cost ?? ''; if (p.cost_currency && ![...body.querySelectorAll('[name$="[description]"]')].some((el, k) => el !== q('[name$="[description]"]') && el.value)) cur.value = p.cost_currency; }
-    });
-    q('button').addEventListener('click', () => { tr.remove(); });
+    const box = q('.prodpick');
+    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'btn small'; btn.textContent = 'Choose product'; box.appendChild(btn);
+    btn.addEventListener('click', () => openPicker(tr));
+    q('button.danger').addEventListener('click', () => tr.remove());
+    tr._set = p => {
+      q('input[type=hidden]').value = p.id;
+      q('[name$="[description]"]').value = p.name; q('[name$="[sku]"]').value = p.sku || ''; q('[name$="[unit_price]"]').value = p.unit_cost ?? '';
+      box.innerHTML = '';
+      if (p.photo) { const im = document.createElement('img'); im.src = '/admin/documents/' + p.photo + '/download'; im.alt = ''; box.appendChild(im); }
+      const t = document.createElement('button'); t.type = 'button'; t.className = 'link small'; t.textContent = 'change'; t.addEventListener('click', () => openPicker(tr)); box.appendChild(t);
+    };
     body.appendChild(tr);
+    return tr;
   }
-  sup.addEventListener('change', () => body.querySelectorAll('.pick').forEach(s => { const keep = s.value; s.innerHTML = options(); s.value = [...s.options].some(o => o.value === keep) ? keep : ''; }));
-  document.getElementById('m_add').addEventListener('click', addRow);
-  for (let k = 0; k < 3; k++) addRow();
+  function openPicker(tr) {
+    target = tr; $('pk_q').value = ''; $('pk_only').checked = !!sup.value && sup.value !== '__new'; render(); dlg.showModal(); $('pk_q').focus();
+  }
+  function render() {
+    const term = $('pk_q').value.trim().toLowerCase(), only = $('pk_only').checked && sup.value && sup.value !== '__new';
+    const rows = data.products.filter(p => (!only || p.supplier_id === sup.value) && (!term || [p.name, p.sku, p.description, supName(p.supplier_id)].some(x => String(x || '').toLowerCase().includes(term))));
+    const tb = $('pk_rows'); tb.innerHTML = '';
+    rows.forEach(p => {
+      const tr = document.createElement('tr'); tr.className = 'pickrow';
+      const c0 = document.createElement('td'); c0.className = 'pthumbcell';
+      if (p.photo) { const im = document.createElement('img'); im.src = '/admin/documents/' + p.photo + '/download'; im.loading = 'lazy'; im.alt = ''; c0.appendChild(im); } else { c0.textContent = '▫'; }
+      const c1 = document.createElement('td'); const b = document.createElement('strong'); b.textContent = p.name; c1.appendChild(b);
+      if (p.sku) { const sk = document.createElement('div'); sk.className = 'muted small'; sk.textContent = p.sku; c1.appendChild(sk); }
+      const c2 = document.createElement('td'); c2.className = 'muted small'; c2.textContent = (p.description || '').slice(0, 140);
+      const c3 = document.createElement('td'); c3.className = 'small'; c3.textContent = supName(p.supplier_id) || '—';
+      const c4 = document.createElement('td'); c4.className = 'right'; c4.textContent = fmt(p.unit_cost, p.cost_currency) + (p.moq ? '' : '');
+      const c5 = document.createElement('td'); const sb = document.createElement('button'); sb.type = 'button'; sb.className = 'btn small primary'; sb.textContent = 'Select'; c5.appendChild(sb);
+      tr.append(c0, c1, c2, c3, c4, c5); tb.appendChild(tr);
+      const pick = () => {
+        if (target) { target._set(p); const firstEmpty = !target.querySelector('[name$="[quantity]"]').value; if (p.cost_currency && ![...body.querySelectorAll('[name$="[product_id]"]')].some(h => h.value && h !== target.querySelector('[name$="[product_id]"]'))) cur.value = p.cost_currency; if (!sup.value && p.supplier_id) { sup.value = p.supplier_id; sup.dispatchEvent(new Event('change')); } dlg.close(); if (firstEmpty) target.querySelector('[name$="[quantity]"]').focus(); }
+      };
+      tr.addEventListener('dblclick', pick); sb.addEventListener('click', pick);
+    });
+    $('pk_empty').hidden = rows.length > 0;
+  }
+  $('pk_q').addEventListener('input', render); $('pk_only').addEventListener('change', render);
+  $('pk_close').addEventListener('click', () => dlg.close());
+  dlg.addEventListener('close', () => { if (target && !target.querySelector('[name$="[product_id]"]').value && !target.querySelector('[name$="[description]"]').value) target.remove(); }); // closed without choosing: drop the empty line
+  const blankRow = () => [...body.querySelectorAll('tr')].find(t => !t.querySelector('[name$="[product_id]"]').value && !t.querySelector('[name$="[description]"]').value);
+  $('m_add').addEventListener('click', () => openPicker(blankRow() || addRow())); // reuse an empty line instead of stacking blanks
+  $('m_free').addEventListener('click', () => { const tr = blankRow() || addRow(); tr.querySelector('[name$="[description]"]').focus(); });
+  addRow();
 })();
 </script>
 <script>

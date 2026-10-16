@@ -61,10 +61,12 @@ r.get('/new', async (req, res, next) => {
   if (isId(req.query.order)) return next();
   const [{ data: suppliers }, { data: products }, { data: orders }] = await Promise.all([
     admin.from('suppliers').select('id, name, email, payment_terms').order('name'),
-    admin.from('products').select('id, name, sku, supplier_id, unit_cost, cost_currency').order('name'),
+    admin.from('products').select('id, name, sku, supplier_id, unit_cost, cost_currency, description, moq').order('name'),
     admin.from('orders').select('id, order_no, status, organizations(name)').not('status', 'in', '("closed","cancelled","delivered")').order('created_at', { ascending: false }).limit(100),
   ]);
-  res.render('admin/purchasing/new_manual', { title: 'New purchase order', suppliers: suppliers || [], products: products || [], orders: orders || [], currencies: CURRENCIES, error: req.query.err || null, supplier_id: isId(req.query.supplier) ? req.query.supplier : '' });
+  const { data: ph } = await admin.from('documents').select('id, entity_id').eq('entity_type', 'product').eq('kind', 'product_photo').order('created_at'); // first photo per product, for the picker
+  const photo = {}; (ph || []).forEach(d => { photo[d.entity_id] ||= d.id; });
+  res.render('admin/purchasing/new_manual', { title: 'New purchase order', suppliers: suppliers || [], products: (products || []).map(x => ({ ...x, photo: photo[x.id] || null })), orders: orders || [], currencies: CURRENCIES, error: req.query.err || null, supplier_id: isId(req.query.supplier) ? req.query.supplier : '' });
 });
 
 r.get('/new', async (req, res) => {
