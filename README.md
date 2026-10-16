@@ -133,3 +133,7 @@ After a client accepts a quote they press **Send PO** on the request: a PO is ge
 ## Payments (migration 0020)
 
 After the proforma invoice is sent, the order carries the amount due and a payment schedule (instalments with % and due dates, edited on the PI). Orders start as status `new`. In the client portal the order page shows what to pay and when; the client enters the amount, date and reference and uploads the proof of payment. The order's payment status becomes `partially paid` or `paid` straight away (counting reported payments), and admins get an email and a red ball on the Orders menu. On the admin order page each reported payment is confirmed (client emailed; a `new` order moves to `deposit paid`) or rejected with a note (not counted again). Admins can also record a payment received directly.
+
+## Quoting several products at once
+
+Tick products on the Products list → **Create quote**. One request (new internal `IRQ-…` for a chosen client, or an existing request) gets one quote line per product, suppliers can differ. Lines are drafts; **Send all to client** on the request page sends them together with a single email (margin minimum and AI check rules apply to every line). Freight is entered per line.

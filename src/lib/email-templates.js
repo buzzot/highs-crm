@@ -50,12 +50,12 @@ const text = (...lines) => lines.filter(l => l != null).join('\n');
 
 export function inviteEmail({ url, code, orgName, inviterName, days, kind = 'client' }) {
   const supplier = kind === 'supplier';
-  const where = supplier ? 'the Lumi Trade supplier portal' : orgName ? `the ${orgName} portal at Lumi Trade` : 'the Lumi Trade team';
+  const where = supplier ? 'the Lumi Trade portal as a supplier' : orgName ? `the Lumi Trade portal as a client of ${orgName}` : 'the Lumi Trade team';
   const what = supplier
     ? 'Register your company: confirm this email, fill in your company and contact details and create a password. After that you can keep your details and product information up to date.'
     : 'Send sourcing requests, approve quotes and follow every order and shipment in one place.';
   return {
-    subject: supplier ? 'Lumi Trade invites you to register as a supplier' : orgName ? `You're invited to the ${orgName} portal` : "You're invited to Lumi Trade",
+    subject: supplier ? 'Lumi Trade invites you to register as a supplier' : "You're invited to the Lumi Trade portal",
     html: layout({
       preheader: `Your invitation code is ${code}.`,
       eyebrow: supplier ? 'Supplier invitation' : 'Invitation', title: supplier ? 'Register as a Lumi Trade supplier' : 'You’re invited to Lumi Trade',

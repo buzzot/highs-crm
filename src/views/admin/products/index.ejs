@@ -29,7 +29,8 @@
     <span><strong id="selCount">0</strong> selected</span>
     <button class="btn small" name="go" value="1" id="btnCompare" disabled>Compare</button>
     <button class="btn small ai" name="ai" value="1" id="btnAi" disabled>✦ AI compare</button>
-    <span class="muted small" id="selHint">Tick 2–6 products to compare them side by side, or let AI rank them.</span>
+    <button class="btn small primary" id="btnQuote" formaction="/admin/pricing/quotes/multi" disabled>Create quote</button>
+    <span class="muted small" id="selHint">Tick products to quote them together (any suppliers), or 2–6 to compare them side by side.</span>
   </div>
   <table class="tbl plist">
     <thead><tr>
@@ -67,8 +68,9 @@
     const n = boxes.filter(b => b.checked).length;
     document.getElementById('selCount').textContent = n;
     const ok = n >= 2 && n <= 6;
+    document.getElementById('btnQuote').disabled = n < 1;
     document.getElementById('btnCompare').disabled = !ok; document.getElementById('btnAi').disabled = !ok;
-    document.getElementById('selHint').textContent = n > 6 ? 'Compare up to six products at a time.' : n === 1 ? 'Tick at least one more product.' : 'Tick 2–6 products to compare them side by side, or let AI rank them.';
+    document.getElementById('selHint').textContent = n > 6 ? 'Compare up to six products at a time.' : n === 1 ? 'Tick at least one more product.' : 'Tick products to quote them together (any suppliers), or 2–6 to compare them side by side.';
     boxes.forEach(b => b.closest('tr').classList.toggle('picked', b.checked));
   };
   boxes.forEach(b => b.addEventListener('change', sync));

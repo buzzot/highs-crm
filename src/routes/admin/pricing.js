@@ -70,6 +70,97 @@ r.post('/check', async (req, res) => {
   }
 });
 
+// ---- one quote for several products (picked on the Products list), possibly from different suppliers ----
+const refIRQ = () => `IRQ-${new Date().toISOString().slice(2, 7).replace('-', '')}-${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`;
+const productIds = v => [...new Set([].concat(v || []).join(',').split(',').map(x => x.trim()).filter(x => /^[0-9a-f-]{36}$/i.test(x)))].slice(0, 30);
+
+r.get('/quotes/multi', async (req, res) => {
+  const ids = productIds(req.query.ids);
+  if (!ids.length) return back(res, '/admin/products', { err: 'Tick at least one product to quote.' });
+  const settings = await getSettings(admin);
+  const [{ data: prods }, { data: orgs }, { data: reqs }] = await Promise.all([
+    admin.from('products').select('id, name, sku, supplier_id, unit_cost, cost_currency, moq, suppliers(name, lead_time_days)').in('id', ids),
+    admin.from('organizations').select('id, name').eq('active', true).order('name'),
+    admin.from('requests').select('id, ref, title, organizations(name)').in('status', ['new', 'reviewing', 'quoted']).order('created_at', { ascending: false }),
+  ]);
+  const order = new Map(ids.map((id, i) => [id, i]));
+  const products = (prods || []).sort((a, b) => order.get(a.id) - order.get(b.id));
+  res.render('admin/pricing/quote_multi', {
+    title: 'Quote several products', products, orgs: orgs || [], requests: reqs || [], settings, incoterms: INCOTERMS, currencies: CURRENCIES,
+    valid_until: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10), error: req.query.err || null,
+  });
+});
+
+r.post('/quotes/multi', async (req, res) => {
+  const settings = await getSettings(admin);
+  const b = req.body;
+  const rows = (Array.isArray(b.line) ? b.line : Object.values(b.line || {})).filter(l => l && /^[0-9a-f-]{36}$/i.test(l.product_id || ''));
+  const bad = msg => back(res, `/admin/pricing/quotes/multi?ids=${rows.map(l => l.product_id).join(',')}`, { err: msg });
+  if (!rows.length) return back(res, '/admin/products', { err: 'No products to quote.' });
+  const sell = CURRENCIES.includes(b.sell_currency) ? b.sell_currency : 'USD';
+  let requestId = null, ref = null;
+  if (/^[0-9a-f-]{36}$/i.test(b.request_id || '')) requestId = b.request_id;
+  else if (!/^[0-9a-f-]{36}$/i.test(b.org_id || '')) return bad('Choose the client, or an existing request.');
+  const { data: prods } = await admin.from('products').select('id, name, sku, supplier_id, hs_code').in('id', rows.map(l => l.product_id));
+  const byId = new Map((prods || []).map(p => [p.id, p]));
+  const lines = rows.filter(l => byId.has(l.product_id)).map(l => {
+    const p = byId.get(l.product_id), cur = CURRENCIES.includes(l.cost_currency) ? l.cost_currency : 'CNY', fx = fxRate(settings, cur, sell);
+    const row = { product_id: p.id, supplier_id: p.supplier_id, quantity: Math.max(1, Math.round(Number(l.quantity) || 0)), unit_cost: Number(String(l.unit_cost).replace(',', '.')) || 0, cost_currency: cur, fx_rate: fx,
+      margin_pct: Number(l.margin_pct) || settings.pricing.default_margin_pct, sell_currency: sell, freight_estimate: Number(l.freight) || 0, duties_estimate: 0, other_costs: 0,
+      incoterm: b.incoterm || 'FOB', lead_time_days: Number(b.lead_time_days) > 0 ? Math.round(Number(b.lead_time_days)) : null, valid_until: /^\d{4}-\d{2}-\d{2}$/.test(b.valid_until || '') ? b.valid_until : null };
+    return { p, row, calc: compute(row, settings) };
+  });
+  if (!lines.length) return bad('No valid products.');
+  if (lines.some(x => !(x.row.unit_cost > 0))) return bad('Every product needs a factory price — enter it in the Cost column.');
+  if (!requestId) {
+    let made = null, lastErr = null;
+    for (let n = 0; n < 6 && !made; n++) {
+      ref = refIRQ();
+      const title = String(b.title || '').trim().slice(0, 200) || (lines.length === 1 ? lines[0].p.name : `${lines[0].p.name} + ${lines.length - 1} more`);
+      const { data, error } = await admin.from('requests').insert({ ref, org_id: b.org_id, created_by: req.user.id, assigned_to: req.user.id, title, description: 'Initiated by staff — no client request.', quantity: null, target_currency: sell, status: 'reviewing' }).select('id').single();
+      if (!error) made = data; else lastErr = error;
+    }
+    if (!made) return bad(lastErr?.message || 'Could not create the request.');
+    requestId = made.id;
+    await log({ entityType: 'request', entityId: requestId, action: 'request_initiated_by_staff', actorId: req.user.id, detail: { note: ref } });
+  }
+  const { data: have } = await admin.from('request_items').select('position').eq('request_id', requestId).order('position', { ascending: false }).limit(1);
+  let pos = (have?.[0]?.position ?? -1) + 1;
+  for (const x of lines) {
+    const { data: item } = await admin.from('request_items').insert({ request_id: requestId, position: pos++, name: x.p.name, description: x.p.sku ? `SKU ${x.p.sku}` : null, quantity: x.calc.quantity, unit: 'pcs' }).select('id').single();
+    await admin.from('quotes').insert({ ...x.row, request_id: requestId, request_item_id: item?.id || null, quantity: x.calc.quantity, margin_pct: x.calc.marginPct,
+      unit_price: x.calc.unitPrice, landed_unit_price: x.calc.landedUnitPrice, created_by: req.user.id, status: 'draft' });
+  }
+  res.redirect(`/admin/sourcing/${requestId}?msg=` + encodeURIComponent(`${lines.length} quote line${lines.length > 1 ? 's' : ''} created as drafts. Check them, then send them all to the client.`));
+});
+
+// send every draft quote of a request in one go (one email to the client)
+r.post('/requests/:rid/send-all', async (req, res) => {
+  const settings = await getSettings(admin);
+  const rid = req.params.rid, to = `/admin/sourcing/${rid}`;
+  const { data: drafts } = await admin.from('quotes').select('*').eq('request_id', rid).eq('status', 'draft');
+  if (!drafts?.length) return back(res, to, { err: 'No draft quotes to send.' });
+  const override = bool(req.body.override) && req.user.role === 'admin';
+  const low = drafts.filter(q => !compute(q, settings).meetsMinimum);
+  if (low.length && !override) return back(res, to, { err: `${low.length} line${low.length > 1 ? 's are' : ' is'} below the ${settings.pricing.min_margin_pct}% minimum margin. Raise the margin, or an admin can tick the override.` });
+  if (drafts.some(q => !q.ai_check) && !bool(req.body.skip_ai)) return back(res, to, { err: 'Some lines have no AI check yet. Run it on each line, or tick "send without AI check".' });
+  await admin.from('quotes').update({ status: 'sent' }).in('id', drafts.map(q => q.id));
+  await admin.from('requests').update({ status: 'quoted' }).eq('id', rid);
+  await log({ entityType: 'request', entityId: rid, action: 'quote_sent', actorId: req.user.id, clientVisible: true, detail: { note: `${drafts.length} lines` } });
+  if (low.length) await log({ entityType: 'request', entityId: rid, action: 'margin_override', actorId: req.user.id, detail: { lines: low.length, reason: req.body.reason } });
+  let sentTo = [];
+  try {
+    const { data: rq } = await admin.from('requests').select('id, ref, title, org_id, created_by').eq('id', rid).single();
+    let { data: people } = rq.created_by ? await admin.from('profiles').select('email, role').eq('id', rq.created_by).eq('active', true) : { data: [] };
+    people = (people || []).filter(p => p.role === 'client'); // staff-initiated: the creator is us, so write to the company's users
+    if (!people.length) ({ data: people } = await admin.from('profiles').select('email').eq('org_id', rq.org_id).eq('role', 'client').eq('active', true));
+    sentTo = [...new Set((people || []).map(p => p.email).filter(Boolean))];
+    const first = drafts[0];
+    if (sentTo.length) await sendEmail({ to: sentTo, ...quoteSentEmail({ request: rq, validUntil: first.valid_until, leadTimeDays: first.lead_time_days, url: `${(process.env.APP_URL || '').replace(/\/+$/, '')}/portal/requests/${rq.id}` }) });
+  } catch (e) { console.error(`[quote] email to client failed: ${e.message}`); return back(res, to, { msg: `${drafts.length} quotes sent — the client can see them in the portal, but the email notification failed.` }); }
+  back(res, to, { msg: `${drafts.length} quotes sent${sentTo.length ? ` and the client was notified (${sentTo.join(', ')}).` : ' — the client can see them in the portal (no active client user to email).'}` });
+});
+
 // ---- quotes ----
 r.get('/quotes/new', async (req, res) => {
   const settings = await getSettings(admin);
@@ -220,7 +311,8 @@ r.post('/quotes/:id/send', async (req, res) => {
   let sentTo = [];
   try {
     const { data: rq } = await admin.from('requests').select('id, ref, title, org_id, created_by').eq('id', q.request_id).single();
-    let { data: people } = rq.created_by ? await admin.from('profiles').select('email').eq('id', rq.created_by).eq('active', true) : { data: [] };
+    let { data: people } = rq.created_by ? await admin.from('profiles').select('email, role').eq('id', rq.created_by).eq('active', true) : { data: [] };
+    people = (people || []).filter(x => x.role === 'client'); // a staff-initiated request (IRQ) is written to the company's users
     if (!people?.length) ({ data: people } = await admin.from('profiles').select('email').eq('org_id', rq.org_id).eq('role', 'client').eq('active', true));
     sentTo = [...new Set((people || []).map(p => p.email).filter(Boolean))];
     if (sentTo.length) await sendEmail({ to: sentTo, ...quoteSentEmail({ request: rq, validUntil: q.valid_until, leadTimeDays: q.lead_time_days, url: `${(process.env.APP_URL || '').replace(/\/+$/, '')}/portal/requests/${rq.id}` }) });

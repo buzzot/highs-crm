@@ -1,0 +1,42 @@
+<%- include('../../partials/head') %>
+<div class="pagehead"><div><a class="back" href="/admin/products">← Products</a><h1>Quote <%= products.length %> product<%= products.length > 1 ? 's' : '' %></h1>
+  <p class="muted">One request, one quote line per product. Suppliers can differ. Lines are saved as drafts — you review them, then send them together.</p></div></div>
+<% if (error) { %><div class="alert err"><%= error %></div><% } %>
+<form method="post" action="/admin/pricing/quotes/multi" class="poform">
+  <div class="card">
+    <h2>For whom</h2>
+    <div class="row">
+      <label class="grow2">Client <span class="muted small">a new internal request (IRQ-…) is created</span>
+        <select name="org_id" id="m_org"><option value="">— choose a client —</option><% orgs.forEach(o => { %><option value="<%= o.id %>"><%= o.name %></option><% }) %></select></label>
+      <label class="grow2">…or add to an existing request
+        <select name="request_id" id="m_req"><option value="">— new internal request —</option><% requests.forEach(r => { %><option value="<%= r.id %>"><%= r.ref %> · <%= r.title %> · <%= r.organizations?.name || '' %></option><% }) %></select></label>
+      <label class="grow2">Request title <span class="muted small">optional</span><input name="title" placeholder="defaults to the first product"></label>
+    </div>
+    <div class="row">
+      <label>Selling currency <select name="sell_currency"><% currencies.forEach(c => { %><option <%= c === 'USD' ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+      <label>Incoterm <select name="incoterm"><% incoterms.forEach(i => { %><option <%= i === 'FOB' ? 'selected' : '' %>><%= i %></option><% }) %></select></label>
+      <label>Lead time (days) <input type="number" name="lead_time_days" min="0"></label>
+      <label>Valid until <input type="date" name="valid_until" value="<%= valid_until %>"></label>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Products</h2>
+    <table class="tbl compact multiq">
+      <thead><tr><th>Product</th><th class="right">Quantity</th><th class="right">Factory price</th><th>Cur.</th><th class="right">Margin %</th><th class="right">Freight (total, selling cur.)</th></tr></thead>
+      <tbody>
+      <% products.forEach((p, i) => { %><tr>
+        <td><strong><%= p.name %></strong><input type="hidden" name="line[<%= i %>][product_id]" value="<%= p.id %>">
+          <div class="muted small"><%= p.suppliers?.name || 'no supplier' %><%= p.sku ? ' · ' + p.sku : '' %></div></td>
+        <td class="right"><input type="number" min="1" name="line[<%= i %>][quantity]" value="<%= p.moq || 1 %>" required></td>
+        <td class="right"><input type="number" step="0.0001" min="0" name="line[<%= i %>][unit_cost]" value="<%= p.unit_cost ?? '' %>" required></td>
+        <td><select name="line[<%= i %>][cost_currency]"><% currencies.forEach(c => { %><option <%= c === (p.cost_currency || 'CNY') ? 'selected' : '' %>><%= c %></option><% }) %></select></td>
+        <td class="right"><input type="number" step="0.1" min="0" name="line[<%= i %>][margin_pct]" value="<%= settings.pricing.default_margin_pct %>"></td>
+        <td class="right"><input type="number" step="0.01" min="0" name="line[<%= i %>][freight]" value="0"></td>
+      </tr><% }) %>
+      </tbody>
+    </table>
+    <p class="muted small">Margin is on the product cost only (minimum <%= settings.pricing.min_margin_pct %>%). Freight is the amount for that line's whole quantity — estimate it by volume for sea and by chargeable weight for air. Open any line afterwards to add duties, notes or run the AI check.</p>
+    <div class="actions"><button class="btn primary">Create quote lines</button><a class="btn" href="/admin/products">Cancel</a></div>
+  </div>
+</form>
+<%- include('../../partials/foot') %>

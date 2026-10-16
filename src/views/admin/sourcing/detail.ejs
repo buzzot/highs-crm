@@ -64,6 +64,15 @@
 
     <div class="card">
       <h2>Quotes <a class="more" href="/admin/pricing/quotes/new?request_id=<%= request.id %>">+ new quote</a></h2>
+      <% const drafts = quotes.filter(x => x.status === 'draft'); %>
+      <% if (drafts.length > 1) { %>
+        <form method="post" action="/admin/pricing/requests/<%= request.id %>/send-all" class="sendall">
+          <span><strong><%= drafts.length %></strong> draft lines ready to go out together.</span>
+          <label class="check"><input type="checkbox" name="skip_ai"> without AI check</label>
+          <% if (user.role === 'admin') { %><label class="check"><input type="checkbox" name="override"> margin override</label><input name="reason" placeholder="override reason" class="short"><% } %>
+          <button class="btn primary" onclick="return confirm('Send all <%= drafts.length %> quote lines to the client now?')">Send all to client</button>
+        </form>
+      <% } %>
       <% if (!quotes.length) { %><p class="muted">No quotes yet.</p><% } %>
       <table class="tbl">
         <% if (quotes.length) { %><thead><tr><th>Product / supplier</th><th>Qty</th><th class="right">Unit price</th><th class="right">Landed</th><th>Margin</th><th>AI</th><th>Status</th><th></th></tr></thead><% } %>

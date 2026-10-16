@@ -25,11 +25,13 @@ test('required fields and phone-or-wechat', () => {
 test('supplier invitation email is worded for suppliers', () => {
   const m = inviteEmail({ url: 'https://lumitrade.cc/invite/x', code: '123456', orgName: null, inviterName: 'Anna', days: 14, kind: 'supplier' });
   assert.match(m.subject, /register as a supplier/i);
-  assert.match(m.html, /supplier portal/);
+  assert.match(m.html, /portal as a supplier/);
   assert.match(m.html, /123456/);
   assert.doesNotMatch(m.html + m.text, /sourcing requests|supabase|Highs/i);
   const c = inviteEmail({ url: 'u', code: '1', orgName: 'Acme', days: 14 });
-  assert.match(c.subject, /Acme portal/);
+  assert.match(c.subject, /Lumi Trade portal/);
+  assert.doesNotMatch(c.subject, /Acme/);
+  assert.match(c.html, /Lumi Trade portal as a client of Acme/);
 });
 
 test('each role has its own home', () => {
