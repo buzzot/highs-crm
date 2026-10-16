@@ -22,7 +22,8 @@
   <div class="card">
     <h2>Products</h2>
     <table class="tbl compact multiq">
-      <thead><tr><th>Product</th><th class="right">Quantity</th><th class="right">Factory price</th><th>Cur.</th><th class="right">Margin %</th><th class="right">Freight (total, selling cur.)</th></tr></thead>
+      <colgroup><col><col style="width:130px"><col style="width:140px"><col style="width:100px"><col style="width:110px"><col style="width:170px"></colgroup>
+      <thead><tr><th>Product</th><th class="right">Quantity</th><th class="right">Factory price</th><th>Currency</th><th class="right">Margin %</th><th class="right">Freight (total)</th></tr></thead>
       <tbody>
       <% products.forEach((p, i) => { %><tr>
         <td><strong><%= p.name %></strong><input type="hidden" name="line[<%= i %>][product_id]" value="<%= p.id %>">
@@ -35,7 +36,7 @@
       </tr><% }) %>
       </tbody>
     </table>
-    <p class="muted small">Margin is on the product cost only (minimum <%= settings.pricing.min_margin_pct %>%). Freight is the amount for that line's whole quantity — estimate it by volume for sea and by chargeable weight for air. Open any line afterwards to add duties, notes or run the AI check.</p>
+    <p class="muted small">Margin is on the product cost only (minimum <%= settings.pricing.min_margin_pct %>%). Freight (in the selling currency) is the amount for that line's whole quantity — estimate it by volume for sea and by chargeable weight for air. Open any line afterwards to add duties, notes or run the AI check.</p>
     <div class="actions"><button class="btn primary">Create quote lines</button><a class="btn" href="/admin/products">Cancel</a></div>
   </div>
 </form>

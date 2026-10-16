@@ -1078,7 +1078,10 @@ fieldset.plain { border: 0; padding: 0; margin: 0; min-width: 0; }
 .nextstep .actions.secondary form { margin: 0; }
 .nextstep label.check, .nextstep form > label { display: block; margin-bottom: 10px; }
 .nextstep .btn.wide { margin-top: 4px; }
-.multiq input { width: 100%; max-width: 130px; text-align: right; }
-.multiq select { min-width: 72px; }
+.multiq { table-layout: fixed; width: 100%; }
+.multiq th, .multiq td { padding-left: 8px; padding-right: 8px; vertical-align: middle; }
+.multiq input, .multiq select { width: 100%; box-sizing: border-box; }
+.multiq input { text-align: right; }
+.multiq th.right { text-align: right; }
 .sendall { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 10px 12px; margin-bottom: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--ok-soft); }
 .sendall .short { max-width: 190px; }
