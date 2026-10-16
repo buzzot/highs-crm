@@ -26,7 +26,7 @@ r.get('/', async (req, res) => {
     admin.from('requests').select('id, ref, title, status, created_at, organizations(name)').order('created_at', { ascending: false }).limit(8),
     admin.from('order_overview').select('*').order('created_at', { ascending: false }),
     admin.from('shipments').select('id, status, eta, mode, tracking_no, orders(order_no, organizations(name))').not('status', 'in', '("delivered")').order('eta').limit(8),
-    admin.from('activity_log').select('*, profiles(full_name, email)').order('created_at', { ascending: false }).limit(15),
+    admin.from('activity_log').select('*, profiles(full_name, email)').order('created_at', { ascending: false }).limit(10),
     admin.from('organizations').select('id', { count: 'exact', head: true }).eq('active', true),
     // shipped without a government export declaration number on file
     admin.from('shipments').select('id, status, orders(order_no)').eq('export_official', true).is('export_declaration_no', null)
