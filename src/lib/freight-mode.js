@@ -12,3 +12,30 @@ export function shownOf(q) {
   return { included: false, unit_price: unit, goods, logistics, total };
 }
 
+
+export const PI_FREIGHT_MODES = ['none', 'separate', 'included'];
+
+/**
+ * Lines of a proforma invoice as the client sees them. data.freight = { amount, mode }:
+ *  - none / no amount: the lines as entered
+ *  - separate: one extra "Freight & logistics" line
+ *  - included: the freight is spread over the goods lines in proportion to their value (by quantity if they have no price yet),
+ *    so each unit price carries its share and no freight line shows.
+ */
+export function piLines(d = {}) {
+  const lines = (d.lines || []).map(l => ({ ...l }));
+  const f = d.freight || {}, amount = r2(num(f.amount));
+  if (!(amount > 0) || !lines.length || !PI_FREIGHT_MODES.includes(f.mode) || f.mode === 'none') return lines;
+  if (f.mode === 'separate') return [...lines, { description: 'Freight & logistics', sku: '', quantity: 1, unit: '', unit_price: amount }];
+  const value = l => num(l.quantity) * num(l.unit_price), weights = lines.map(value);
+  let sum = weights.reduce((a, b) => a + b, 0), w = weights;
+  if (!(sum > 0)) { w = lines.map(l => num(l.quantity)); sum = w.reduce((a, b) => a + b, 0); }
+  if (!(sum > 0)) return lines;
+  let left = amount;
+  return lines.map((l, i) => {
+    const last = i === lines.length - 1, share = last ? left : r2(amount * w[i] / sum);
+    left = r2(left - share);
+    const q = num(l.quantity);
+    return q > 0 ? { ...l, unit_price: Math.round((num(l.unit_price) + share / q) * 10000) / 10000 } : l;
+  });
+}

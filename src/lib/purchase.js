@@ -1,7 +1,7 @@
 // Purchase orders (client → Lumi Trade) and proforma invoices (Lumi Trade → client): data helpers and PDF documents.
 import { renderDocument } from './doc-pdf.js';
 import { withAmounts } from './payments.js';
-import { shownOf } from './freight-mode.js';
+import { shownOf, piLines, PI_FREIGHT_MODES } from './freight-mode.js';
 
 export const COMPANY_DEFAULTS = { name: 'Lumi Trade', address: '', email: '', phone: '', website: '', bank: '', payment_terms: '30% deposit with the order, 70% balance before shipment', default_currency: 'CNY' };
 
@@ -53,7 +53,7 @@ export function poDocument(po, company, { quoteRef } = {}) {
 }
 
 export function scheduleText(d, pi) {
-  const rows = withAmounts(d.schedule, totalOf(d.lines || []));
+  const rows = withAmounts(d.schedule, totalOf(piLines(d)));
   return rows.map(x => `${x.label} ${Number(x.percent)}% · ${d.currency} ${Number(x.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${x.due ? ' · due ' + day(x.due + 'T12:00:00') : ''}`).join('\n') || null;
 }
 
@@ -65,7 +65,7 @@ export function piDocument(pi, order, company) {
     seller: companyBlock(company),
     partyLabel: 'Bill to', party: { name: b.company || '—', lines: clientLines(b) },
     meta: [['Order', order?.order_no], ['Client PO ref', d.po_ref], ['Incoterm', d.incoterm], ['Lead time', d.lead_time_days ? `${d.lead_time_days} days` : null], ['Valid until', d.valid_until ? day(d.valid_until) : null], ['Currency', d.currency]],
-    currency: d.currency, lines: d.lines,
+    currency: d.currency, lines: piLines(d),
     sections: [{ heading: 'Payment terms', text: d.payment_terms }, { heading: 'Payment schedule', text: scheduleText(d, pi) }, { heading: 'Bank details', text: d.bank }, { heading: 'Notes', text: d.notes }],
     footer: `${pi.pi_no} · ${company.name}`,
   };

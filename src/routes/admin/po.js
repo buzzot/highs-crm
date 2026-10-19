@@ -8,6 +8,7 @@ import { sendEmail } from '../../lib/mailer.js';
 import { poRejectedEmail, piEmail } from '../../lib/email-templates.js';
 import { DEFAULT_SCHEDULE, parseSchedule, withAmounts } from '../../lib/payments.js';
 import { recalcOrder } from '../../lib/payments-db.js';
+import { piLines, PI_FREIGHT_MODES } from '../../lib/freight-mode.js';
 import { getCompany, poPdf, piPdf, totalOf, parseLines, text } from '../../lib/purchase.js';
 
 const appUrl = () => (process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
@@ -149,13 +150,14 @@ async function loadPi(id) {
 const piData = (b, old) => ({
   ...old, buyer: { ...old.buyer, company: s(b.company, 200), contact: s(b.contact, 120), email: s(b.email, 200), phone: s(b.phone, 60), address: s(b.address, 500), delivery_address: s(b.delivery_address, 500) },
   lines: parseLines(b), incoterm: s(b.incoterm, 20), lead_time_days: Number(b.lead_time_days) > 0 ? Math.round(Number(b.lead_time_days)) : null, po_ref: s(b.po_ref, 60),
+  freight: { amount: Math.max(0, r2(b.freight_amount)), mode: PI_FREIGHT_MODES.includes(b.freight_mode) ? b.freight_mode : 'none' },
   schedule: parseSchedule(b), payment_terms: s(b.payment_terms, 600), bank: s(b.bank, 1000), notes: s(b.notes, 2000), valid_until: dayOnly(b.valid_until) || old.valid_until,
 });
 
 pi.get('/:id', async (req, res) => {
   const p = await loadPi(req.params.id);
   if (!p) return notFound(res, 'Proforma invoice');
-  res.render('admin/pi', { title: p.pi_no, p, order: p.orders, total: totalOf(p.data.lines), msg: req.query.msg, err: req.query.err });
+  res.render('admin/pi', { title: p.pi_no, p, order: p.orders, total: totalOf(piLines(p.data)), shown: piLines(p.data), msg: req.query.msg, err: req.query.err });
 });
 pi.get('/:id/pdf', async (req, res) => {
   const p = await loadPi(req.params.id);
@@ -185,7 +187,7 @@ pi.post('/:id/send', async (req, res) => {
   const company = await getCompany(admin);
   const pdf = piPdf(row, p.orders, company);
   try {
-    await sendEmail({ to, ...piEmail({ pi: row, order: p.orders, company, total: totalOf(data.lines), currency: data.currency, schedule: withAmounts(data.schedule, totalOf(data.lines)), message: s(req.body.message, 1500), url: `${appUrl()}/portal/orders/${p.orders.id}` }),
+    await sendEmail({ to, ...piEmail({ pi: row, order: p.orders, company, total: totalOf(piLines(data)), currency: data.currency, schedule: withAmounts(data.schedule, totalOf(piLines(data))), message: s(req.body.message, 1500), url: `${appUrl()}/portal/orders/${p.orders.id}` }),
       attachments: [{ filename: `${p.pi_no}.pdf`, content: pdf.toString('base64') }] });
   } catch (e) { await admin.from('proforma_invoices').update({ data }).eq('id', p.id); return back(res, `/admin/pi/${p.id}`, { err: `Email failed: ${e.message}` }); }
   try {
@@ -193,7 +195,7 @@ pi.post('/:id/send', async (req, res) => {
   } catch (e) { console.error(`[pi] store pdf: ${e.message}`); }
   await admin.from('proforma_invoices').update({ data, status: 'sent', sent_at: sentAt, sent_by: req.user.id, updated_at: sentAt }).eq('id', p.id);
   // the order now carries what the client has to pay, and when
-  const total = totalOf(data.lines), schedule = withAmounts(data.schedule, total);
+  const total = totalOf(piLines(data)), schedule = withAmounts(data.schedule, total);
   await admin.from('orders').update({ amount_due: total, payment_schedule: schedule }).eq('id', p.orders.id);
   await recalcOrder(p.orders.id);
   await log({ entityType: 'order', entityId: p.orders.id, action: 'proforma_sent', actorId: req.user.id, clientVisible: true, detail: { note: `${p.pi_no} → ${to.join(', ')}` } });

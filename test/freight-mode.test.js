@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { shownOf, modeOf } from '../src/lib/freight-mode.js';
+import { shownOf, modeOf, piLines } from '../src/lib/freight-mode.js';
 import { combineQuotes, poLinesFromCombined, quotationDocument } from '../src/lib/combined-quote.js';
 import { poFromQuote, totalOf } from '../src/lib/purchase.js';
 
@@ -32,4 +32,17 @@ test('PO from a single quote follows the mode', () => {
   assert.equal(inc.lines.length, 1); assert.equal(inc.lines[0].unit_price, 150.7); assert.equal(totalOf(inc.lines), 30140);
   const sep = poFromQuote({ quote: q(), item: { name: 'Housing' }, request: { title: 'x' }, org: {}, profile: {} });
   assert.equal(sep.lines.length, 2); assert.equal(totalOf(sep.lines), 30140);
+});
+
+test('proforma invoice freight: none, separate line, or spread into the unit prices', () => {
+  const lines = [{ description: 'A', quantity: 100, unit_price: 10 }, { description: 'B', quantity: 50, unit_price: 20 }]; // goods 1000 + 1000
+  assert.equal(piLines({ lines }).length, 2);
+  assert.equal(piLines({ lines, freight: { amount: 500, mode: 'none' } }).length, 2);
+  const sep = piLines({ lines, freight: { amount: 500, mode: 'separate' } });
+  assert.equal(sep.length, 3); assert.equal(sep[2].unit_price, 500); assert.equal(totalOf(sep), 2500);
+  const inc = piLines({ lines, freight: { amount: 500, mode: 'included' } });
+  assert.equal(inc.length, 2); assert.equal(inc[0].unit_price, 12.5); assert.equal(inc[1].unit_price, 25); assert.equal(totalOf(inc), 2500);
+  // no prices yet: spread by quantity
+  const free = piLines({ lines: [{ quantity: 100, unit_price: 0 }, { quantity: 100, unit_price: 0 }], freight: { amount: 200, mode: 'included' } });
+  assert.deepEqual(free.map(l => l.unit_price), [1, 1]);
 });
