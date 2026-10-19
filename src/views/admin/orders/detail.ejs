@@ -53,8 +53,22 @@
         <summary class="btn small">+ Add item</summary>
         <form method="post" action="/admin/orders/<%= order.id %>/items" class="sub">
           <div class="row">
-            <label class="grow2">Product <select name="product_id"><option value="">— custom item —</option><% products.forEach(p => { %><option value="<%= p.id %>"><%= p.name %><%= p.sku ? ' · ' + p.sku : '' %></option><% }) %></select></label>
+            <label class="grow2">Product <select name="product_id"><option value="">— custom item —</option><% products.forEach(p => { %><option value="<%= p.id %>"><%= p.name %><%= p.sku ? ' · ' + p.sku : '' %></option><% }) %><option value="__new">+ Add new product…</option></select></label>
             <label class="grow2">Description <input name="description" placeholder="defaults to product name"></label>
+          </div>
+          <div class="newsup" id="newProd" hidden>
+            <strong>New product</strong> <span class="muted small">— saved to the product list; add photos and details later on the product page</span>
+            <div class="row">
+              <label class="grow2">Product name <input id="np_name" maxlength="200"></label>
+              <label>SKU <input id="np_sku" maxlength="80"></label>
+              <label>HS code <input id="np_hs" maxlength="40"></label>
+            </div>
+            <div class="row">
+              <label class="grow2">Supplier <select id="np_sup"><option value="">—</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= order.supplier_id === s.id ? 'selected' : '' %>><%= s.name %></option><% }) %></select></label>
+              <label>Unit cost (<%= cur %>) <input type="number" step="0.0001" min="0" id="np_cost"></label>
+            </div>
+            <div class="aiscan-msg err" id="np_err" hidden></div>
+            <div class="actions"><button type="button" class="btn small primary" id="np_save">Add product</button><button type="button" class="btn small" id="np_cancel">Cancel</button></div>
           </div>
           <div class="row">
             <label>Qty <input type="number" name="quantity" min="1" required></label>
@@ -233,4 +247,33 @@
     <%- include('../../partials/timeline', { events, created: { at: order.created_at, label: 'order created' } }) %>
   </div>
 </div>
+<script>
+  // "+ Add new product…": create the product in place, select it and prefill cost and HS code
+  (function () {
+    const form = document.querySelector('form[action$="/items"]'); if (!form) return;
+    const sel = form.querySelector('select[name=product_id]'), box = document.getElementById('newProd'); if (!sel || !box) return;
+    const $ = id => document.getElementById(id), f = n => form.querySelector('[name=' + n + ']'); let prev = sel.value;
+    const err = t => { const e = $('np_err'); e.hidden = !t; e.textContent = t || ''; };
+    const close = () => { box.hidden = true; err(''); if (sel.value === '__new') sel.value = prev; };
+    sel.addEventListener('change', () => { if (sel.value === '__new') { box.hidden = false; $('np_name').focus(); } else { prev = sel.value; box.hidden = true; } });
+    $('np_cancel').addEventListener('click', close);
+    $('np_save').addEventListener('click', async () => {
+      const name = $('np_name').value.trim(); if (!name) return err('Enter the product name.');
+      const btn = $('np_save'); btn.disabled = true; err('');
+      try {
+        const res = await fetch('/admin/products/quick', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ name, sku: $('np_sku').value, hs_code: $('np_hs').value, supplier_id: $('np_sup').value, unit_cost: $('np_cost').value, cost_currency: <%- JSON.stringify(cur) %> }) });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(j.error || 'Could not add the product.');
+        sel.insertBefore(new Option(j.name + (j.sku ? ' · ' + j.sku : ''), j.id), sel.querySelector('option[value=__new]'));
+        sel.value = j.id; prev = j.id; box.hidden = true;
+        if (j.unit_cost != null && !f('unit_cost').value) f('unit_cost').value = j.unit_cost;
+        if (j.hs_code && !f('hs_code').value) f('hs_code').value = j.hs_code;
+        ['np_name', 'np_sku', 'np_hs', 'np_cost'].forEach(i => { $(i).value = ''; });
+        f('quantity').focus();
+      } catch (e) { err(e.message); } finally { btn.disabled = false; }
+    });
+    form.addEventListener('submit', () => { if (sel.value === '__new') sel.value = prev; });
+  })();
+</script>
 <%- include('../../partials/foot') %>
