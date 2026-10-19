@@ -1,7 +1,7 @@
 import { Router } from '../../lib/router.js';
 import { admin } from '../../lib/supabase.js';
 import { log } from '../../lib/activity.js';
-import { clean, bool, back, notFound, getSettings, ORDER_STATUSES, CURRENCIES } from '../../lib/util.js';
+import { clean, bool, back, notFound, getSettings, ORDER_STATUSES, CURRENCIES, INTERNAL_KINDS } from '../../lib/util.js';
 import { landed } from '../../lib/landed.js';
 import { defaultCurrency, sumIn } from '../../lib/currency.js';
 import multer from 'multer';
@@ -293,8 +293,9 @@ r.get('/:id/packing-list', async (req, res) => {
     admin.from('forwarders').select('*').order('name'),
     admin.from('freight_rfqs').select('*, forwarders(name), freight_requests!freight_rfqs_request_id_fkey(id, ref)').eq('order_id', order.id).order('sent_at', { ascending: false }),
   ]);
+  const { data: cargoDocs } = await admin.from('documents').select('*').eq('entity_type', 'order').eq('entity_id', order.id).in('kind', INTERNAL_KINDS).order('created_at', { ascending: false });
   res.render('admin/orders/packing_list', {
-    title: `Packing list · ${order.order_no}`, order, rows, t, info, modes: MODES, forwarders: forwarders || [], rfqs: rfqs || [],
+    cargoDocs: cargoDocs || [], title: `Packing list · ${order.order_no}`, order, rows, t, info, modes: MODES, forwarders: forwarders || [], rfqs: rfqs || [],
     wechatText: packingText({ order, info, rows, t }), msg: req.query.msg, err: req.query.err,
   });
 });

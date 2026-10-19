@@ -58,6 +58,61 @@
   <% } %>
 </div>
 
+<%
+  const _cargo = typeof cargoDocs !== 'undefined' ? cargoDocs : [];
+  const _cp = _cargo.filter(d => d.kind === 'cargo_photo' || (d.mime_type || '').startsWith('image/')), _cf = _cargo.filter(d => !_cp.includes(d));
+  const _ext = t => ((String(t || '').match(/\.([a-z0-9]{2,4})$/i) || [])[1] || 'file').toUpperCase();
+  const _back = '/admin/orders/' + order.id + '/packing-list';
+%>
+<div class="card noprint" id="cargo">
+  <h2>Cargo photos &amp; document drafts <span class="count"><%= _cargo.length %></span> <span class="tag internal">internal only</span></h2>
+  <p class="muted small">Photos of the cargo and working drafts for your own records. They are never printed, never added to the Excel file or to emails, and clients cannot see them.</p>
+  <% if (_cp.length) { %>
+  <div class="gallery">
+    <% _cp.forEach(d => { %>
+      <figure>
+        <a href="/admin/documents/<%= d.id %>/download" target="_blank" title="<%= d.title %>"><img loading="lazy" src="/admin/documents/<%= d.id %>/download" alt="<%= d.title %>"></a>
+        <figcaption>
+          <form method="post" action="/admin/documents/<%= d.id %>/delete" class="inline" onsubmit="return confirm('Delete this photo?')"><input type="hidden" name="redirect" value="<%= _back %>"><button class="iconbtn danger" title="Delete photo">×</button></form>
+        </figcaption>
+      </figure>
+    <% }) %>
+  </div>
+  <% } %>
+  <% if (_cf.length) { %>
+  <ul class="doclist">
+    <% _cf.forEach(d => { %>
+      <li>
+        <span class="ficon"><%= _ext(d.title) %></span>
+        <div class="dmain"><a href="/admin/documents/<%= d.id %>/download" target="_blank" class="dtitle" title="<%= d.title %>"><%= d.title %></a><div class="dmeta"><%= fmt.date(d.created_at) %></div></div>
+        <div class="dact"><form method="post" action="/admin/documents/<%= d.id %>/delete" class="inline" onsubmit="return confirm('Delete this file?')"><input type="hidden" name="redirect" value="<%= _back %>"><button class="iconbtn danger" title="Delete">×</button></form></div>
+      </li>
+    <% }) %>
+  </ul>
+  <% } %>
+  <form method="post" action="/admin/documents/upload" enctype="multipart/form-data" class="upload">
+    <input type="hidden" name="entity_type" value="order">
+    <input type="hidden" name="entity_id" value="<%= order.id %>">
+    <input type="hidden" name="redirect" value="<%= _back %>">
+    <input type="hidden" name="kind" value="cargo_photo" id="cargoKind">
+    <div class="dropwrap">
+      <div class="filedrop compact" data-dropzone data-max="20" data-max-mb="20" tabindex="0">
+        <input type="file" name="files" multiple aria-label="Cargo photos and drafts">
+        <span class="dicon"><%- icon('upload') %></span>
+        <strong data-drop-count>Drop cargo photos or draft documents here, or <span class="dlink">browse</span></strong>
+        <span class="muted small dsub">Photos, PDF, Excel, Word — up to 20 files, 20 MB each. Paste a screenshot with ⌘/Ctrl V</span>
+      </div>
+      <div class="fgrid" data-drop-list></div>
+    </div>
+    <div class="actions"><button class="btn primary">Upload</button></div>
+  </form>
+</div>
+<script>
+  // photos are filed as cargo photos, everything else as drafts; both stay internal
+  (function () { const f = document.querySelector('#cargo form.upload'); if (!f) return;
+    f.addEventListener('submit', () => { const fs = [...f.querySelector('input[type=file]').files]; f.querySelector('#cargoKind').value = fs.some(x => x.type.startsWith('image/')) ? 'cargo_photo' : 'cargo_draft'; }); })();
+</script>
+
 <div class="grid2 even noprint">
   <div class="card">
     <h2>Shipment details</h2>

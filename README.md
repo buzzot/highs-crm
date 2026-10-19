@@ -157,3 +157,6 @@ Once the client order is confirmed, open the PO (or the order page) and **Link t
 ### Freight shown separately or included (migration 0023)
 Run `supabase/migrations/0023_freight_mode.sql` **before** deploying (the client portal selects the new `quotes.freight_mode` column).
 Each quotation has one switch — on the quote forms and on the Quotation page (drafts): **Shown as a separate line** (default) or **Included in the unit price**. With "included", freight + duties + other costs are spread into each line's unit price (`shownOf` in `src/lib/freight-mode.js`); the client portal, quotation PDF, email, the client's PO and so the order/PI show all-in prices and no freight line. Staff screens keep the real goods price, freight and margin.
+
+### Internal cargo photos & drafts
+The packing list page has an internal-only drop zone for cargo photos and draft documents (kinds `cargo_photo`, `cargo_draft`, migration 0024). They are always stored as not client-visible and never appear in the print view, the Excel file or freight-quote emails.
