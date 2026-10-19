@@ -109,7 +109,7 @@ r.get('/quotes/:id/rfq/:rid/form.xlsx', async (req, res) => {
 });
 
 // book an accepted quote: create the shipment (shipping order) and email the forwarder the booking confirmation
-const shipMode = m => (/fcl/i.test(m || '') ? 'sea_fcl' : /air/i.test(m || '') ? 'air' : /express/i.test(m || '') ? 'express' : /rail/i.test(m || '') ? 'rail' : 'sea_lcl');
+const shipMode = m => (/fcl/i.test(m || '') ? 'sea_fcl' : /air/i.test(m || '') ? 'air' : /express/i.test(m || '') ? 'express' : /rail/i.test(m || '') ? 'rail' : /truck|auto|road|lorry/i.test(m || '') ? 'truck' : 'sea_lcl');
 const dayOnly = v => (/^\d{4}-\d{2}-\d{2}$/.test(v || '') ? v : null);
 r.post('/quotes/:id/rfq/:rid/book', async (req, res) => {
   const to = `/admin/logistics/quotes/${req.params.id}`;

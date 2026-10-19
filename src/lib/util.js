@@ -44,7 +44,7 @@ export const ORDER_STEPS = ['new', 'confirmed', 'deposit_paid', 'in_production',
 export const ORDER_STATUSES = [...ORDER_STEPS, 'cancelled'];
 export const REQUEST_STATUSES = ['new', 'reviewing', 'quoted', 'accepted', 'declined', 'cancelled'];
 export const SHIPMENT_STATUSES = ['planned', 'booked', 'picked_up', 'departed', 'arrived', 'customs', 'delivered'];
-export const SHIPMENT_MODES = ['sea_fcl', 'sea_lcl', 'air', 'rail', 'express'];
+export const SHIPMENT_MODES = ['sea_fcl', 'sea_lcl', 'air', 'rail', 'truck', 'express'];
 export const FREIGHT_TYPES = ['origin_handling', 'export_declaration', 'main_freight', 'insurance', 'destination_handling', 'import_duty', 'import_vat', 'customs_brokerage', 'last_mile', 'other'];
 export const DOC_KINDS = ['product_photo', 'packing_photo', 'proforma_invoice', 'commercial_invoice', 'packing_list', 'bill_of_lading', 'airway_bill', 'export_declaration', 'certificate', 'qc_report', 'cargo_photo', 'cargo_draft', 'other'];
 // internal-only kinds: never client-visible, whatever the form says

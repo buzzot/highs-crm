@@ -78,7 +78,7 @@
             <form method="post" action="/admin/logistics/forwarders/<%= f.id %>" class="sub">
               <div class="row"><label>Name <input name="name" value="<%= f.name %>" required></label><label>Contact <input name="contact_name" value="<%= f.contact_name || '' %>"></label></div>
               <div class="row"><label>Email <input name="email" value="<%= f.email || '' %>"></label><label>Phone <input name="phone" value="<%= f.phone || '' %>"></label><label>WeChat <input name="wechat" value="<%= f.wechat || '' %>"></label></div>
-              <div class="row"><% ['sea_fcl','sea_lcl','air','rail','express'].forEach(m => { %><label class="check"><input type="checkbox" name="modes" value="<%= m %>" <%= (f.modes||[]).includes(m) ? 'checked' : '' %>> <%= fmt.status(m) %></label><% }) %></div>
+              <div class="row"><% ['sea_fcl','sea_lcl','air','rail','truck','express'].forEach(m => { %><label class="check"><input type="checkbox" name="modes" value="<%= m %>" <%= (f.modes||[]).includes(m) ? 'checked' : '' %>> <%= fmt.status(m) %></label><% }) %></div>
               <label>Notes <input name="notes" value="<%= f.notes || '' %>"></label>
               <button class="btn small primary">Save</button>
             </form>
@@ -93,7 +93,7 @@
     <form method="post" action="/admin/logistics/forwarders" class="sub">
       <div class="row"><label>Name <input name="name" required></label><label>Contact <input name="contact_name"></label></div>
       <div class="row"><label>Email <input name="email"></label><label>Phone <input name="phone"></label><label>WeChat <input name="wechat"></label></div>
-      <div class="row"><% ['sea_fcl','sea_lcl','air','rail','express'].forEach(m => { %><label class="check"><input type="checkbox" name="modes" value="<%= m %>"> <%= fmt.status(m) %></label><% }) %></div>
+      <div class="row"><% ['sea_fcl','sea_lcl','air','rail','truck','express'].forEach(m => { %><label class="check"><input type="checkbox" name="modes" value="<%= m %>"> <%= fmt.status(m) %></label><% }) %></div>
       <label>Notes <input name="notes"></label>
       <button class="btn primary">Add</button>
     </form>

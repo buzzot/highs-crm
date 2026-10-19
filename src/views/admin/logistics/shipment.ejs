@@ -27,7 +27,7 @@
   const late = s.eta && s.eta < today && s.status !== 'delivered';
   const daysTo = d => d ? Math.round((new Date(d) - new Date(today)) / 864e5) : null;
   const etaIn = daysTo(s.eta);
-  const icon = { air: '✈', express: '✈', sea_fcl: '⛴', sea_lcl: '⛴', rail: '🚆' }[s.mode] || '→';
+  const icon = { air: '✈', express: '✈', sea_fcl: '⛴', sea_lcl: '⛴', rail: '🚆', truck: '🚚' }[s.mode] || '→';
   // reference numbers relevant to this mode (container only for FCL unless filled in)
   const refs = [[air ? 'Air waybill' : 'Bill of lading', s.bl_no], ['Tracking', s.tracking_no]];
   if (s.container_no || s.mode === 'sea_fcl') refs.push(['Container', s.container_no]);
