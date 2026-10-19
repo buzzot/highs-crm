@@ -46,3 +46,10 @@ test('proforma invoice freight: none, separate line, or spread into the unit pri
   const free = piLines({ lines: [{ quantity: 100, unit_price: 0 }, { quantity: 100, unit_price: 0 }], freight: { amount: 200, mode: 'included' } });
   assert.deepEqual(free.map(l => l.unit_price), [1, 1]);
 });
+
+test('proforma invoice freight buffer percentage is added to the freight', () => {
+  const lines = [{ description: 'A', quantity: 100, unit_price: 10 }];
+  const sep = piLines({ lines, freight: { amount: 1000, buffer_pct: 10, mode: 'separate' } });
+  assert.equal(sep[1].unit_price, 1100);
+  assert.equal(totalOf(piLines({ lines, freight: { amount: 1000, buffer_pct: 10, mode: 'included' } })), 2100);
+});

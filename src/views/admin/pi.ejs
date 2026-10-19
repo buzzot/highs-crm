@@ -28,9 +28,10 @@
   <div class="card">
     <h2>Lines</h2>
     <%- include('../partials/po_lines', { lines: d.lines, currency: d.currency, edit: true }) %>
-    <% const fr = d.freight || { amount: '', mode: 'none' }; %>
+    <% const fr = d.freight || { amount: '', mode: 'none' }; const shipCost = Number(order.freight_total || 0); %>
     <div class="row freightrow">
-      <label>Freight (<%= d.currency %>) <input type="number" step="0.01" min="0" name="freight_amount" value="<%= fr.amount || '' %>" placeholder="0.00"></label>
+      <label>Freight (<%= d.currency %>) <input type="number" step="0.01" min="0" name="freight_amount" id="fr_amt" value="<%= fr.amount || '' %>" placeholder="0.00"></label>
+      <label>+ Buffer % <input type="number" step="0.1" min="0" max="100" name="freight_buffer" id="fr_buf" value="<%= fr.buffer_pct || '' %>" placeholder="0"></label>
       <label>How the client sees it
         <select name="freight_mode">
           <option value="none" <%= fr.mode === 'none' || !fr.mode ? 'selected' : '' %>>No freight on this invoice</option>
@@ -38,7 +39,19 @@
           <option value="included" <%= fr.mode === 'included' ? 'selected' : '' %>>Include in the unit prices (not shown)</option>
         </select></label>
     </div>
+    <p class="muted small" id="fr_note">
+      <% if (shipCost > 0) { %><button type="button" class="btn small" id="fr_use" data-cost="<%= shipCost %>">Use shipment cost <%= fmt.money(shipCost, order.currency || d.currency) %></button> from the order's shipments, then add a % buffer for surprises if you want. <% } else { %>No shipment cost on the order yet — type the freight, or add it on the shipment page. <% } %>
+      <span id="fr_calc"></span>
+    </p>
     <% if (fr.amount > 0 && fr.mode !== 'none') { %><p class="muted small">Client sees <%= shown.length %> line<%= shown.length === 1 ? '' : 's' %>, total <strong><%= fmt.money(total, d.currency) %></strong><%= fr.mode === 'included' ? ' — freight is spread over the unit prices in proportion to line value' : ' — with a “Freight & logistics” line' %>. Save to update the preview.</p><% } %>
+    <script>
+      (function () {
+        const amt = document.getElementById('fr_amt'), buf = document.getElementById('fr_buf'), out = document.getElementById('fr_calc'), use = document.getElementById('fr_use');
+        const show = () => { const a = Number(amt.value) || 0, b = Number(buf.value) || 0; out.textContent = a > 0 && b > 0 ? 'Freight charged: ' + (a * (1 + b / 100)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' <%= d.currency %>' : ''; };
+        if (use) use.addEventListener('click', () => { amt.value = use.dataset.cost; show(); });
+        amt.addEventListener('input', show); buf.addEventListener('input', show); show();
+      })();
+    </script>
     <div class="row">
       <label>Client PO number <input name="po_ref" value="<%= d.po_ref || '' %>"></label>
       <label>Incoterm <input name="incoterm" value="<%= d.incoterm || '' %>"></label>

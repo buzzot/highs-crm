@@ -144,13 +144,13 @@ pi.post('/order/:oid', async (req, res) => {
 });
 
 async function loadPi(id) {
-  const { data } = await admin.from('proforma_invoices').select('*, orders(id, order_no, org_id, request_id, organizations(name))').eq('id', id).maybeSingle();
+  const { data } = await admin.from('proforma_invoices').select('*, orders(id, order_no, org_id, request_id, freight_total, organizations(name))').eq('id', id).maybeSingle();
   return data;
 }
 const piData = (b, old) => ({
   ...old, buyer: { ...old.buyer, company: s(b.company, 200), contact: s(b.contact, 120), email: s(b.email, 200), phone: s(b.phone, 60), address: s(b.address, 500), delivery_address: s(b.delivery_address, 500) },
   lines: parseLines(b), incoterm: s(b.incoterm, 20), lead_time_days: Number(b.lead_time_days) > 0 ? Math.round(Number(b.lead_time_days)) : null, po_ref: s(b.po_ref, 60),
-  freight: { amount: Math.max(0, r2(b.freight_amount)), mode: PI_FREIGHT_MODES.includes(b.freight_mode) ? b.freight_mode : 'none' },
+  freight: { amount: Math.max(0, r2(b.freight_amount)), buffer_pct: Math.min(100, Math.max(0, r2(b.freight_buffer))), mode: PI_FREIGHT_MODES.includes(b.freight_mode) ? b.freight_mode : 'none' },
   schedule: parseSchedule(b), payment_terms: s(b.payment_terms, 600), bank: s(b.bank, 1000), notes: s(b.notes, 2000), valid_until: dayOnly(b.valid_until) || old.valid_until,
 });
 

@@ -24,7 +24,7 @@ export const PI_FREIGHT_MODES = ['none', 'separate', 'included'];
  */
 export function piLines(d = {}) {
   const lines = (d.lines || []).map(l => ({ ...l }));
-  const f = d.freight || {}, amount = r2(num(f.amount));
+  const f = d.freight || {}, amount = r2(num(f.amount) * (1 + Math.max(0, num(f.buffer_pct)) / 100));
   if (!(amount > 0) || !lines.length || !PI_FREIGHT_MODES.includes(f.mode) || f.mode === 'none') return lines;
   if (f.mode === 'separate') return [...lines, { description: 'Freight & logistics', sku: '', quantity: 1, unit: '', unit_price: amount }];
   const value = l => num(l.quantity) * num(l.unit_price), weights = lines.map(value);
