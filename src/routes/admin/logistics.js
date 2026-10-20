@@ -7,6 +7,9 @@ import { landed } from '../../lib/landed.js';
 import { defaultCurrency, sumIn } from '../../lib/currency.js';
 import { saveResponse } from '../../lib/freight-store.js';
 import multer from 'multer';
+import { uploadDocument, deleteDocument } from '../../lib/storage.js';
+import { getCompany, ciPdf, ciNo, packingListPdf } from '../../lib/purchase.js';
+import { packingData } from '../../lib/packing-store.js';
 import { rfqWorkbook } from '../../lib/quote-form.js';
 import { totals as packTotals } from '../../lib/packing.js';
 import { sendEmail } from '../../lib/mailer.js';
@@ -242,6 +245,47 @@ r.get('/shipments/:id', async (req, res) => {
     defaultFx: c => fxRate(settings, c, s.orders?.currency || 'USD'),
     fxTable: settings.fx, msg: req.query.msg, err: req.query.err,
   });
+});
+
+// ---- shipping documents generated from the order's data (commercial invoice, packing list) ----
+async function storeGenerated(req, shipmentId, { kind, title, filename, pdf, orderId }) {
+  // a newer copy replaces the one generated earlier (files uploaded by hand are left alone)
+  const { data: old } = await admin.from('documents').select('id').eq('entity_type', 'shipment').eq('entity_id', shipmentId).eq('kind', kind).like('title', `${title.split(' ')[0]} %`).like('title', '% (generated)');
+  await uploadDocument({ file: { originalname: filename, mimetype: 'application/pdf', buffer: pdf, size: pdf.length }, entityType: 'shipment', entityId: shipmentId, kind, title: `${title} (generated)`, clientVisible: true, uploadedBy: req.user.id });
+  for (const d of old || []) await deleteDocument(d.id);
+  await log({ entityType: 'order', entityId: orderId, action: 'documents_uploaded', actorId: req.user.id, clientVisible: false, detail: { kind, count: 1, note: `${title} generated` } });
+}
+
+r.post('/shipments/:id/docs/commercial-invoice', async (req, res) => {
+  const to = `/admin/logistics/shipments/${req.params.id}`;
+  const { data: s } = await admin.from('shipments').select('id, order_id, mode').eq('id', req.params.id).maybeSingle();
+  if (!s) return notFound(res, 'Shipment');
+  const [{ data: pis }, { data: order }, { info }] = await Promise.all([
+    admin.from('proforma_invoices').select('*').eq('order_id', s.order_id).order('created_at', { ascending: false }),
+    admin.from('orders').select('id, order_no').eq('id', s.order_id).single(),
+    packingData(s.order_id),
+  ]);
+  const pi = (pis || []).find(x => x.status === 'sent') || (pis || [])[0];
+  if (!pi) return back(res, to, { err: 'This order has no proforma invoice yet — create one first, the commercial invoice is built from it.' });
+  try {
+    const pdf = ciPdf(pi, order, await getCompany(admin), { shipment: s, info });
+    await storeGenerated(req, s.id, { kind: 'commercial_invoice', title: `Commercial invoice ${ciNo(pi)}`, filename: `${ciNo(pi)}.pdf`, pdf, orderId: s.order_id });
+  } catch (e) { return back(res, to, { err: `Could not create the commercial invoice: ${e.message}` }); }
+  back(res, to, { msg: `Commercial invoice ${ciNo(pi)} created from ${pi.pi_no}.` });
+});
+
+r.post('/shipments/:id/docs/packing-list', async (req, res) => {
+  const to = `/admin/logistics/shipments/${req.params.id}`;
+  const { data: s } = await admin.from('shipments').select('id, order_id').eq('id', req.params.id).maybeSingle();
+  if (!s) return notFound(res, 'Shipment');
+  const { order, rows, t, info } = await packingData(s.order_id);
+  if (!order) return notFound(res, 'Order');
+  if (!rows.length) return back(res, to, { err: 'The order has no packing lines yet — add them on the packing list page first.' });
+  try {
+    const pdf = packingListPdf({ company: await getCompany(admin), order, info, rows, t });
+    await storeGenerated(req, s.id, { kind: 'packing_list', title: `Packing list ${order.order_no}`, filename: `packing-list-${order.order_no}.pdf`, pdf, orderId: s.order_id });
+  } catch (e) { return back(res, to, { err: `Could not create the packing list: ${e.message}` }); }
+  back(res, to, { msg: 'Packing list PDF created from the current packing lines.' });
 });
 
 r.get('/shipments/:id/edit', async (req, res) => {

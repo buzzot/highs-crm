@@ -113,3 +113,88 @@ function finish(pdf, d, n) {
   return pdf.toBuffer({ title: `${d.title} ${d.no}` });
 }
 
+
+// ---------------------------------------------------------------------------
+// Packing list: A4 landscape, same look as the on-screen print view.
+const n0 = v => (v == null || v === '' ? '' : Number(v).toLocaleString('en-US'));
+const r2 = v => Math.round(Number(v) * 100) / 100;
+
+/** @param {{ seller: { name: string }, orderNo: string, date: string, info?: object, rows: object[], t: object }} d */
+export function renderPackingList(d) {
+  const pdf = new Pdf({ landscape: true });
+  const PM = 30, PW = pdf.w - 2 * PM, PBOTTOM = pdf.h - 46;
+  const info = d.info || {};
+  let y = PM;
+  const ensure = h => { if (y + h > PBOTTOM) { pdf.addPage(); y = PM; return true; } return false; };
+
+  pdf.text(d.seller?.name || 'Lumi Trade', PM, y, { size: 15, bold: true, color: BRAND });
+  pdf.text('PACKING LIST', PM, y + 26, { size: 20, bold: true });
+  const meta = [['Order', d.orderNo], ['Date', d.date], ['Mode', info.mode], ['Port of loading', info.pol], ['Destination', info.pod], ['Incoterm', info.incoterm], ['Cargo ready', info.ready_date]].filter(([, v]) => v);
+  let my = y;
+  for (const [k, v] of meta) { pdf.text(k, PM + PW - 190, my, { size: 9, color: MUTED }); pdf.text(String(v), PM + PW, my, { size: 9, align: 'right' }); my += 13; }
+  y = Math.max(y + 56, my) + 8;
+  pdf.line(PM, y, PM + PW, y, { width: 1.2, color: BRAND }); y += 14;
+
+  // columns: [label, width, align]
+  const spec = [['CTN NO.', 44, 'l'], ['CTNS', 32, 'r'], ['DESCRIPTION', 0, 'l'], ['ITEM / SKU', 64, 'l'], ['PCS/CTN', 42, 'r'], ['TOTAL PCS', 50, 'r'], ['L × W × H CM', 86, 'r'], ['CBM', 42, 'r'], ['GW/CTN', 44, 'r'], ['TOTAL GW', 52, 'r'], ['TOTAL NW', 52, 'r']];
+  const GAP = 8;
+  const fixed = spec.reduce((a, c) => a + c[1], 0) + GAP * (spec.length - 1);
+  spec[2][1] = PW - fixed;
+  let x0 = PM; const cols = spec.map(([label, w, al]) => { const c = { label, w, al, x: x0 }; x0 += w + GAP; return c; });
+  const put = (str, c, yy, o = {}) => pdf.text(str, c.al === 'r' ? c.x + c.w : c.x, yy, { size: o.size || 8.5, bold: o.bold, color: o.color, align: c.al === 'r' ? 'right' : 'left' });
+  const head = () => {
+    pdf.rect(PM - 4, y - 5, PW + 8, 20, { fill: SOFT });
+    cols.forEach(c => put(c.label, c, y, { size: 7.5, bold: true, color: MUTED }));
+    y += 22;
+  };
+  head();
+  const dims = x => (x.length_cm ? `${Number(x.length_cm)} × ${Number(x.width_cm)} × ${Number(x.height_cm)}` : '—');
+  for (const x of d.rows || []) {
+    const c = Number(x.cartons || 1);
+    const desc = [...wrap(x.description || '—', cols[2].w, 8.5), ...(x.hs_code ? [`HS ${x.hs_code}`] : [])];
+    const h = Math.max(desc.length, 1) * 11.5 + 7;
+    if (ensure(h + 2)) head();
+    put(String(x.carton_no ?? ''), cols[0], y);
+    put(String(c), cols[1], y);
+    desc.forEach((t, i) => pdf.text(t, cols[2].x, y + i * 11.5, { size: 8.5, color: x.hs_code && i === desc.length - 1 ? MUTED : INK }));
+    put(x.sku || '', cols[3], y);
+    put(n0(x.quantity), cols[4], y);
+    put(x.quantity != null ? n0(x.quantity * c) : '', cols[5], y);
+    put(dims(x), cols[6], y);
+    put(x.cbm ? (Number(x.cbm) * c).toFixed(3) : '', cols[7], y);
+    put(x.gross_weight_kg != null ? String(Number(x.gross_weight_kg)) : '', cols[8], y);
+    put(x.gross_weight_kg != null ? n0(r2(x.gross_weight_kg * c)) : '', cols[9], y);
+    put(x.net_weight_kg != null ? n0(r2(x.net_weight_kg * c)) : '', cols[10], y);
+    y += h;
+    pdf.line(PM, y - 3, PM + PW, y - 3, { color: LINE });
+  }
+  ensure(30);
+  const t = d.t || {};
+  pdf.rect(PM - 4, y - 1, PW + 8, 20, { fill: SOFT });
+  put('TOTAL', cols[0], y + 4, { bold: true });
+  put(String(t.cartons ?? ''), cols[1], y + 4, { bold: true });
+  put(n0(t.pieces), cols[5], y + 4, { bold: true });
+  put(t.cbm != null ? String(t.cbm) : '', cols[7], y + 4, { bold: true });
+  put(`${n0(t.gross)} kg`, cols[9], y + 4, { bold: true });
+  put(`${n0(t.net)} kg`, cols[10], y + 4, { bold: true });
+  y += 34;
+
+  const notes = [];
+  if (info.marks) notes.push(['Shipping marks', info.marks]);
+  if (info.remarks) notes.push(['Notes', info.remarks]);
+  for (const [k, v] of notes) {
+    for (const [i, l] of wrap(String(v), PW - 90, 9).entries()) { ensure(14); if (i === 0) pdf.text(k, PM, y, { size: 9, color: MUTED }); pdf.text(l, PM + 90, y, { size: 9 }); y += 12.5; }
+  }
+  ensure(14);
+  pdf.text(`For forwarders: air chargeable ~ ${n0(t.chargeableAir)} kg (volumetric ${n0(t.volumetricAir)} kg at 1:6000) · sea LCL W/M ${t.wm ?? ''}${t.missing?.length ? ' · missing on some lines: ' + t.missing.join(', ') : ''}`, PM, y + 4, { size: 8, color: MUTED });
+
+  const all = pdf.pages, n = all.length;
+  all.forEach((ops, i) => {
+    pdf.pages = [ops];
+    pdf.line(PM, pdf.h - 34, PM + PW, pdf.h - 34, { color: LINE });
+    pdf.text(`Packing list · ${d.orderNo}`, PM, pdf.h - 28, { size: 8, color: MUTED });
+    pdf.text(`Page ${i + 1} of ${n}`, PM + PW, pdf.h - 28, { size: 8, color: MUTED, align: 'right' });
+  });
+  pdf.pages = all;
+  return pdf.toBuffer({ title: `Packing list ${d.orderNo}` });
+}

@@ -49,3 +49,29 @@ test('quote email shows the note and, for one product, quantity x price = total'
   assert.match(m.text, /Note from us:\nPins included/);
   assert.doesNotMatch(m.html, /&amp;amp;/);
 });
+
+import { ciDocument, ciNo, ciPdf, packingListPdf } from '../src/lib/purchase.js';
+import { totals as packTotals } from '../src/lib/packing.js';
+
+const _pi = { pi_no: 'PI-2610-1259', created_at: '2026-10-20T10:00:00Z', data: { currency: 'CNY', incoterm: 'DDP Moscow', payment_terms: '100% before shipment', bank: 'Beneficiary: X', schedule: [{ label: 'Balance', percent: 100 }], buyer: { company: 'HTL', contact: 'Nicholas' }, lines: [{ description: 'LED light samples', quantity: 4, unit: 'pcs', unit_price: 0 }, { description: 'Freight & logistics', quantity: 1, unit_price: 6750 }] } };
+
+test('commercial invoice: built from the PI, totals only, no payment schedule', () => {
+  assert.equal(ciNo(_pi), 'CI-2610-1259');
+  const d = ciDocument(_pi, { order_no: 'HB-2610-2864' }, { name: 'Lumi Trade' }, { shipment: { mode: 'sea_lcl' }, info: { pol: 'Ningbo' } });
+  assert.equal(d.title, 'COMMERCIAL INVOICE');
+  assert.equal(d.no, 'CI-2610-1259');
+  assert.ok(!d.sections.some(s => /schedule/i.test(s.heading)));
+  assert.ok(d.meta.some(([k, v]) => k === 'Proforma invoice' && v === 'PI-2610-1259'));
+  const pdf = ciPdf(_pi, { order_no: 'HB-2610-2864' }, { name: 'Lumi Trade' }, {});
+  assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
+  assert.ok(pdf.toString('latin1').includes('COMMERCIAL INVOICE'));
+});
+
+test('packing list PDF: landscape A4 with the embedded font', () => {
+  const rows = [{ carton_no: '1', cartons: 1, description: 'Drey Spot T 2700 K', quantity: 1, length_cm: 20.5, width_cm: 20.5, height_cm: 25, cbm: 0.011, gross_weight_kg: 2.81, net_weight_kg: 2 }];
+  const pdf = packingListPdf({ company: { name: 'Lumi Trade' }, order: { order_no: 'HB-2610-2864' }, info: { mode: 'Air', marks: 'Z10' }, rows, t: packTotals(rows) });
+  const s = pdf.toString('latin1');
+  assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
+  assert.match(s, /MediaBox \[0 0 841\.89 595\.28\]/);
+  assert.ok(s.includes('PACKING LIST') && s.includes('FontFile2'));
+});

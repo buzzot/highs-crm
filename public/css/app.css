@@ -347,6 +347,12 @@ h2 .count { font-size: 12px; font-weight: 500; color: var(--muted); background: 
 .chk { font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
 .chk.yes { background: var(--ok-soft); color: var(--ok); border-color: #bfe3cf; }
 .chk.no { color: var(--muted); border-style: dashed; }
+.chk a { color: inherit; text-decoration: none; }
+button.chk, label.chk { font: inherit; font-size: 12px; background: #fff; cursor: pointer; display: inline-block; }
+.chk.act:hover { border-style: solid; border-color: var(--accent); color: var(--accent); background: #f4faf8; }
+.chk.yes { display: inline-flex; align-items: center; gap: 6px; }
+.chkre { border: 0; background: none; padding: 0 2px; margin: 0; color: inherit; opacity: .6; cursor: pointer; font-size: 13px; line-height: 1; }
+.chkre:hover { opacity: 1; }
 .doclist { list-style: none; padding: 0; margin: 0 0 4px; }
 .doclist li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line-2); }
 .doclist li:last-child { border-bottom: 0; }

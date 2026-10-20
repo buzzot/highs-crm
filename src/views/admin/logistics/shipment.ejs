@@ -76,7 +76,7 @@
     </div>
     <% if (s.notes) { %><p class="pre muted small"><%= s.notes %></p><% } %>
   </div>
-  <%- include('../../partials/docs', { docs, entityType: 'shipment', entityId: s.id, redirect: '/admin/logistics/shipments/' + s.id, kinds: ['bill_of_lading','airway_bill','export_declaration','commercial_invoice','packing_list','certificate','packing_photo','other'], heading: 'Shipping documents', defaultKind: docChecklist.find(c => !docs.some(d => d.kind === c.kind))?.kind || 'other', checklist: docChecklist }) %>
+  <%- include('../../partials/docs', { docs, entityType: 'shipment', entityId: s.id, redirect: '/admin/logistics/shipments/' + s.id, kinds: ['bill_of_lading','airway_bill','export_declaration','commercial_invoice','packing_list','certificate','packing_photo','other'], heading: 'Shipping documents', defaultKind: docChecklist.find(c => !docs.some(d => d.kind === c.kind))?.kind || 'other', checklist: docChecklist, chipActions: Object.fromEntries(docChecklist.map(c => [c.kind, c.kind === 'commercial_invoice' ? { post: '/admin/logistics/shipments/' + s.id + '/docs/commercial-invoice' } : c.kind === 'packing_list' ? { post: '/admin/logistics/shipments/' + s.id + '/docs/packing-list' } : { file: true }])) }) %>
 </div>
 
 <div class="card" id="costs">

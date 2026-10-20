@@ -2,6 +2,7 @@
   Documents & photos panel for admin detail pages.
   locals: docs, entityType, entityId, redirect, [kinds], [heading], [defaultKind], [defaultVisible],
           [checklist] = [{ kind, label }] — required document kinds, shown as ✓ / missing chips
+          [chipActions] = { kind: { post: '/url' } | { file: true } } — makes a missing chip a button: post = generate the document, file = pick a file to attach
 %>
 <% const _kinds = (typeof kinds !== 'undefined' && kinds) || ['product_photo','packing_photo','proforma_invoice','commercial_invoice','packing_list','bill_of_lading','airway_bill','export_declaration','certificate','qc_report','other']; %>
 <% const _photos = docs.filter(d => (d.mime_type || '').startsWith('image/')); const _files = docs.filter(d => !(d.mime_type || '').startsWith('image/')); %>
@@ -13,7 +14,16 @@
   <% if (_check.length) { const done = _check.filter(c => _have.has(c.kind)).length; %>
   <div class="checklist">
     <span class="small muted"><%= done %>/<%= _check.length %> required</span>
-    <% _check.forEach(c => { %><span class="chk <%= _have.has(c.kind) ? 'yes' : 'no' %>"><%= _have.has(c.kind) ? '✓' : '○' %> <%= c.label %></span><% }) %>
+    <% const _act = (typeof chipActions !== 'undefined' && chipActions) || {}; %>
+    <% _check.forEach(c => { const a = _act[c.kind]; const have = docs.find(d => d.kind === c.kind); %>
+      <% if (have) { %>
+        <span class="chk yes"><a href="/admin/documents/<%= have.id %>/download" target="_blank" title="Open <%= have.title %>">✓ <%= c.label %></a><% if (a && a.post) { %><form method="post" action="<%= a.post %>" class="inline"><button class="chkre" title="Create it again from the latest data" onclick="return confirm('Create <%= c.label.toLowerCase() %> again? The earlier generated file is replaced.')">↻</button></form><% } else if (a && a.file) { %><form method="post" action="/admin/documents/upload" enctype="multipart/form-data" class="inline"><input type="hidden" name="entity_type" value="<%= entityType %>"><input type="hidden" name="entity_id" value="<%= entityId %>"><input type="hidden" name="redirect" value="<%= redirect %>"><input type="hidden" name="kind" value="<%= c.kind %>"><input type="hidden" name="client_visible" value="on"><label class="chkre" title="Attach another file"><input type="file" name="files" style="display:none" onchange="this.form.submit()">+</label></form><% } %></span>
+      <% } else if (a && a.post) { %>
+        <form method="post" action="<%= a.post %>" class="inline"><button class="chk no act" title="Create it now"><%= '○ ' + c.label %></button></form>
+      <% } else if (a && a.file) { %>
+        <form method="post" action="/admin/documents/upload" enctype="multipart/form-data" class="inline"><input type="hidden" name="entity_type" value="<%= entityType %>"><input type="hidden" name="entity_id" value="<%= entityId %>"><input type="hidden" name="redirect" value="<%= redirect %>"><input type="hidden" name="kind" value="<%= c.kind %>"><input type="hidden" name="client_visible" value="on"><label class="chk no act" title="Choose the file to attach"><input type="file" name="files" style="display:none" onchange="this.form.submit()">○ <%= c.label %></label></form>
+      <% } else { %><span class="chk <%= have ? 'yes' : 'no' %>"><%= have ? '✓' : '○' %> <%= c.label %></span><% } %>
+    <% }) %>
   </div>
   <% } %>
 

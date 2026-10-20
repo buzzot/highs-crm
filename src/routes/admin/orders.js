@@ -8,6 +8,7 @@ import multer from 'multer';
 import { readXlsx, workbookToText } from '../../lib/xlsx-read.js';
 import { readCsv } from './imports.js';
 import { normalizeRows, rowsFromSheet, totals as packTotals, packingText, packingSheet } from '../../lib/packing.js';
+import { packingData } from '../../lib/packing-store.js';
 import { rfqWorkbook } from '../../lib/quote-form.js';
 import { extractPacking, aiEnabled } from '../../lib/ai.js';
 import { uploadDocument } from '../../lib/storage.js';
@@ -284,15 +285,6 @@ r.post('/:id/packing/confirm', async (req, res) => {
   res.redirect(`/admin/orders/${id}/packing-list?msg=` + encodeURIComponent(`Packing list saved: ${rows.length} lines, ${packTotals(rows).cartons} cartons.`));
 });
 
-async function packingData(id) {
-  // packing_info lives on orders (the order_overview view predates that column)
-  const [{ data: order }, { data: rows }, { data: o }] = await Promise.all([
-    admin.from('order_overview').select('*').eq('id', id).single(),
-    admin.from('packing_lists').select('*').eq('order_id', id).order('position').order('carton_no'),
-    admin.from('orders').select('packing_info').eq('id', id).maybeSingle(),
-  ]);
-  return { order, rows: rows || [], t: packTotals(rows || []), info: o?.packing_info || order?.packing_info || {} };
-}
 
 // standard packing list: print / PDF, Excel, send to forwarders
 r.get('/:id/packing-list', async (req, res) => {

@@ -1,6 +1,12 @@
-// Minimal dependency-free PDF writer: A4 pages, Helvetica / Helvetica-Bold, text, lines, rectangles.
+// Minimal dependency-free PDF writer: A4 pages, embedded TrueType (regular + bold, see scripts/make-pdf-font.py), text, lines, rectangles.
 // Coordinates are in points from the TOP-LEFT of the page (converted internally).
-import { WIDTHS } from './pdf-metrics.js';
+import { readFileSync } from 'node:fs';
+import { deflateSync } from 'node:zlib';
+import { WIDTHS, FONT_META } from './pdf-metrics.js';
+
+const FONT_FILES = { regular: new URL('./fonts/pdf-regular.ttf', import.meta.url), bold: new URL('./fonts/pdf-bold.ttf', import.meta.url) };
+let fontCache = null;
+const fontData = () => fontCache ||= { regular: readFileSync(FONT_FILES.regular), bold: readFileSync(FONT_FILES.bold) };
 
 export const A4 = { w: 595.28, h: 841.89 };
 
@@ -52,34 +58,40 @@ const rgb = c => (c || [0, 0, 0]).map(v => num(v / 255)).join(' ');
 const esc = bytes => Buffer.from(bytes).toString('latin1').replace(/([\\()])/g, '\\$1');
 
 export class Pdf {
-  constructor() { this.pages = []; this.addPage(); }
+  constructor({ landscape = false } = {}) { this.w = landscape ? A4.h : A4.w; this.h = landscape ? A4.w : A4.h; this.pages = []; this.addPage(); }
   addPage() { this.pages.push([]); return this.pages.length; }
   get cur() { return this.pages[this.pages.length - 1]; }
   /** One line of text; x is left (or right edge with align:'right', centre with 'center'). */
   text(str, x, y, { size = 10, bold = false, color = [30, 36, 45], align = 'left' } = {}) {
     const w = textWidth(str, size, bold);
     const left = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x;
-    this.cur.push(`BT /${bold ? 'F2' : 'F1'} ${num(size)} Tf ${rgb(color)} rg ${num(left)} ${num(A4.h - y - size * 0.8)} Td (${esc(toBytes(str))}) Tj ET`);
+    this.cur.push(`BT /${bold ? 'F2' : 'F1'} ${num(size)} Tf ${rgb(color)} rg ${num(left)} ${num(this.h - y - size * 0.8)} Td (${esc(toBytes(str))}) Tj ET`);
     return w;
   }
   line(x1, y1, x2, y2, { width = 0.6, color = [200, 205, 212] } = {}) {
-    this.cur.push(`${num(width)} w ${rgb(color)} RG ${num(x1)} ${num(A4.h - y1)} m ${num(x2)} ${num(A4.h - y2)} l S`);
+    this.cur.push(`${num(width)} w ${rgb(color)} RG ${num(x1)} ${num(this.h - y1)} m ${num(x2)} ${num(this.h - y2)} l S`);
   }
   rect(x, y, w, h, { fill = null, stroke = null, width = 0.6 } = {}) {
     const op = fill && stroke ? 'B' : fill ? 'f' : 'S';
-    this.cur.push(`${fill ? rgb(fill) + ' rg ' : ''}${stroke ? rgb(stroke) + ' RG ' : ''}${num(width)} w ${num(x)} ${num(A4.h - y - h)} ${num(w)} ${num(h)} re ${op}`);
+    this.cur.push(`${fill ? rgb(fill) + ' rg ' : ''}${stroke ? rgb(stroke) + ' RG ' : ''}${num(width)} w ${num(x)} ${num(this.h - y - h)} ${num(w)} ${num(h)} re ${op}`);
   }
   toBuffer(info = {}) {
     const objs = []; // index = object number - 1
     const add = body => { objs.push(body); return objs.length; };
     const catalog = add(null), pagesObj = add(null);
-    const f1 = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
-    const f2 = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
+    const fontObjs = {};
+    for (const [key, name] of [['regular', 'LumiSans'], ['bold', 'LumiSans-Bold']]) {
+      const data = fontData()[key], m = FONT_META[key];
+      const file = add({ stream: deflateSync(data), dict: `/Filter /FlateDecode /Length1 ${data.length}` });
+      const desc = add(`<< /Type /FontDescriptor /FontName /${name} /Flags 32 /FontBBox [${m.bbox.join(' ')}] /ItalicAngle 0 /Ascent ${m.ascent} /Descent ${m.descent} /CapHeight ${m.cap} /StemV ${key === 'bold' ? 140 : 80} /FontFile2 ${file} 0 R >>`);
+      fontObjs[key] = add(`<< /Type /Font /Subtype /TrueType /BaseFont /${name} /FirstChar 32 /LastChar 255 /Widths [${WIDTHS[key].join(' ')}] /Encoding /WinAnsiEncoding /FontDescriptor ${desc} 0 R >>`);
+    }
+    const f1 = fontObjs.regular, f2 = fontObjs.bold;
     const kids = [];
     for (const ops of this.pages) {
       const stream = Buffer.from(ops.join('\n'), 'latin1');
       const content = add({ stream });
-      const page = add(`<< /Type /Page /Parent ${pagesObj} 0 R /MediaBox [0 0 ${num(A4.w)} ${num(A4.h)}] /Resources << /Font << /F1 ${f1} 0 R /F2 ${f2} 0 R >> >> /Contents ${content} 0 R >>`);
+      const page = add(`<< /Type /Page /Parent ${pagesObj} 0 R /MediaBox [0 0 ${num(this.w)} ${num(this.h)}] /Resources << /Font << /F1 ${f1} 0 R /F2 ${f2} 0 R >> >> /Contents ${content} 0 R >>`);
       kids.push(`${page} 0 R`);
     }
     objs[catalog - 1] = `<< /Type /Catalog /Pages ${pagesObj} 0 R >>`;
@@ -92,7 +104,7 @@ export class Pdf {
       offsets.push(pos);
       const head = Buffer.from(`${i + 1} 0 obj\n`, 'latin1');
       const body = typeof o === 'string' ? Buffer.from(o + '\n', 'latin1')
-        : Buffer.concat([Buffer.from(`<< /Length ${o.stream.length} >>\nstream\n`, 'latin1'), o.stream, Buffer.from('\nendstream\n', 'latin1')]);
+        : Buffer.concat([Buffer.from(`<< /Length ${o.stream.length} ${o.dict || ''} >>\nstream\n`, 'latin1'), o.stream, Buffer.from('\nendstream\n', 'latin1')]);
       const tail = Buffer.from('endobj\n', 'latin1');
       const b = Buffer.concat([head, body, tail]);
       parts.push(b); pos += b.length;
