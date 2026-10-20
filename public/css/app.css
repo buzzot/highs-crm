@@ -971,6 +971,7 @@ h1 { letter-spacing: -.02em; }
 .plmeta dt { color: var(--muted); } .plmeta dd { margin: 0; color: var(--ink); }
 .pltable td, .pltable th { font-size: 13px; }
 .pltable td:nth-child(7), .pltable th:nth-child(7) { white-space: nowrap; } /* L × W × H on one line */
+.pltable { display: table; width: 100%; }
 .pltable tfoot td { font-weight: 600; border-top: 2px solid var(--line); background: #fafbfc; }
 .plfoot { margin-top: 14px; display: grid; gap: 6px; font-size: 13px; }
 .fwlist { display: grid; gap: 8px; margin-bottom: 12px; }
@@ -998,7 +999,7 @@ textarea.wechat { font-size: 12.5px; background: #fafbfc; font-variant-numeric: 
   .pltitle { color: #111827; }
   .plhead { border-bottom-color: #0f3a5c; }
   .plmeta { font-size: 12px; } .plmeta dt { color: #374151; } .plmeta dd { color: #111827; }
-  .pltable { width: 100%; }
+  .pltable { display: table !important; width: 100% !important; overflow: visible; }
   .pltable th { color: #1f2937 !important; font-weight: 600; font-size: 10.5px; border-bottom: 1.5px solid #374151 !important; }
   .pltable td { color: #111827; font-size: 12px; border-bottom: 1px solid #9ca3af !important; vertical-align: top; }
   .pltable td:nth-child(3) { min-width: 150px; }
