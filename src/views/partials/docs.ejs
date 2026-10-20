@@ -1,7 +1,7 @@
 <%#
   Documents & photos panel for admin detail pages.
   locals: docs, entityType, entityId, redirect, [kinds], [heading], [defaultKind], [defaultVisible],
-          [checklist] = [{ kind, label }] — required document kinds, shown as ✓ / missing chips
+          [checklist] = [{ kind, label, [short], [optional] }] (short = text on the chip; label shown on hover) — required document kinds, shown as ✓ / missing chips
           [sendUrl] = '/admin/documents/send' — adds tick boxes + a "Send by email" dialog (needs [clientEmails] = [{ email, label }], [sends] = { documentId: [rows] } for the history)
           [chipActions] = { kind: { post: '/url' } | { file: true } } — makes a missing chip a button: post = generate the document, file = pick a file to attach
 %>
@@ -18,20 +18,25 @@
     <% const _act = (typeof chipActions !== 'undefined' && chipActions) || {}; %>
     <% _check.forEach(c => { const a = _act[c.kind]; const have = docs.find(d => d.kind === c.kind); %>
       <% if (have) { %>
-        <span class="chk yes"><a href="/admin/documents/<%= have.id %>/download" target="_blank" title="Open <%= have.title %>">✓ <%= c.label %></a><% if (a && a.post) { %><form method="post" action="<%= a.post %>" class="inline"><button class="chkre" title="Create it again from the latest data" onclick="return confirm('Create a new version of the <%= c.label.toLowerCase() %>? The earlier ones are kept.')">↻</button></form><% } else if (a && a.file) { %><form method="post" action="/admin/documents/upload" enctype="multipart/form-data" class="inline"><input type="hidden" name="entity_type" value="<%= entityType %>"><input type="hidden" name="entity_id" value="<%= entityId %>"><input type="hidden" name="redirect" value="<%= redirect %>"><input type="hidden" name="kind" value="<%= c.kind %>"><input type="hidden" name="client_visible" value="on"><label class="chkre" title="Attach another file"><input type="file" name="files" style="display:none" onchange="this.form.submit()">+</label></form><% } %></span>
+        <span class="chk yes"><a href="/admin/documents/<%= have.id %>/download" target="_blank" title="<%= c.label %> — click to open the latest file (<%= have.title %>)">✓ <%= c.short || c.label %></a><% if (a && a.post) { %><form method="post" action="<%= a.post %>" class="inline"><button class="chkre" title="Create a new version of the <%= c.label.toLowerCase() %> from the latest data" onclick="return confirm('Create a new version of the <%= c.label.toLowerCase() %>? The earlier ones are kept.')">↻</button></form><% } else if (a && a.file) { %><form method="post" action="/admin/documents/upload" enctype="multipart/form-data" class="inline"><input type="hidden" name="entity_type" value="<%= entityType %>"><input type="hidden" name="entity_id" value="<%= entityId %>"><input type="hidden" name="redirect" value="<%= redirect %>"><input type="hidden" name="kind" value="<%= c.kind %>"><input type="hidden" name="client_visible" value="on"><label class="chkre" title="Attach another <%= c.label.toLowerCase() %> file"><input type="file" name="files" style="display:none" onchange="this.form.submit()">+</label></form><% } %></span>
       <% } else if (a && a.post) { %>
-        <form method="post" action="<%= a.post %>" class="inline"><button class="chk no act" title="Create it now"><%= '○ ' + c.label %></button></form>
+        <form method="post" action="<%= a.post %>" class="inline"><button class="chk no act" title="<%= c.label %> — click to create it now"><%= '○ ' + (c.short || c.label) %></button></form>
       <% } else if (a && a.file) { %>
-        <form method="post" action="/admin/documents/upload" enctype="multipart/form-data" class="inline"><input type="hidden" name="entity_type" value="<%= entityType %>"><input type="hidden" name="entity_id" value="<%= entityId %>"><input type="hidden" name="redirect" value="<%= redirect %>"><input type="hidden" name="kind" value="<%= c.kind %>"><input type="hidden" name="client_visible" value="on"><label class="chk no act" title="Choose the file to attach"><input type="file" name="files" style="display:none" onchange="this.form.submit()">○ <%= c.label %></label></form>
-      <% } else { %><span class="chk <%= have ? 'yes' : 'no' %>"><%= have ? '✓' : '○' %> <%= c.label %></span><% } %>
+        <form method="post" action="/admin/documents/upload" enctype="multipart/form-data" class="inline"><input type="hidden" name="entity_type" value="<%= entityType %>"><input type="hidden" name="entity_id" value="<%= entityId %>"><input type="hidden" name="redirect" value="<%= redirect %>"><input type="hidden" name="kind" value="<%= c.kind %>"><input type="hidden" name="client_visible" value="on"><label class="chk no act" title="<%= c.label %> — click to choose the file to attach"><input type="file" name="files" style="display:none" onchange="this.form.submit()">○ <%= c.short || c.label %></label></form>
+      <% } else { %><span class="chk no" title="<%= c.label %>">○ <%= c.short || c.label %></span><% } %>
     <% }) %>
   </div>
+  <% } %>
+
+  <% if (_canSend && (_photos.length || _files.length)) { %>
+  <div class="sendbar"><label class="check small"><input type="checkbox" id="docs-all"> Select all</label><button type="button" class="btn small" id="docs-send" disabled>✉ Send selected…</button></div>
   <% } %>
 
   <% if (_photos.length) { %>
   <div class="gallery">
     <% _photos.forEach(d => { %>
       <figure>
+        <% if (_canSend) { %><input type="checkbox" class="docpick photopick" value="<%= d.id %>" aria-label="Select <%= d.title %>"><% } %>
         <a href="/admin/documents/<%= d.id %>/download" target="_blank" title="<%= d.title %>"><img loading="lazy" src="/admin/documents/<%= d.id %>/download" alt="<%= d.title %>"></a>
         <figcaption>
           <span class="tag"><%= fmt.status(d.kind) %></span><% if (!d.client_visible) { %> <span class="tag internal">internal</span><% } %>
@@ -43,9 +48,6 @@
   <% } %>
 
   <% if (_files.length) { %>
-  <% if (_canSend) { %>
-  <div class="sendbar"><label class="check small"><input type="checkbox" id="docs-all"> Select all</label><button type="button" class="btn small" id="docs-send" disabled>✉ Send selected…</button></div>
-  <% } %>
   <ul class="doclist">
     <% _files.forEach(d => { %>
       <li>
@@ -108,7 +110,7 @@
     btn.addEventListener('click', function () {
       var on = picks().filter(function (c) { return c.checked; });
       document.getElementById('send-ids').innerHTML = on.map(function (c) { return '<input type="hidden" name="ids" value="' + c.value + '">'; }).join('');
-      document.getElementById('send-count').textContent = on.length + ' document' + (on.length === 1 ? '' : 's') + ' will be attached to one email.';
+      document.getElementById('send-count').textContent = on.length + ' file' + (on.length === 1 ? '' : 's') + ' will be attached to one email.';
       dlg.showModal();
     });
     document.getElementById('send-cancel').addEventListener('click', function () { dlg.close(); });

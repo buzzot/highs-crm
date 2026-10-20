@@ -84,7 +84,7 @@ export function ciDocument(pi, order, company, { shipment, info } = {}) {
     partyLabel: 'Bill to', party: { name: b.company || '—', lines: clientLines(b) },
     meta: [['Order', order?.order_no], ['Proforma invoice', pi.pi_no], ['Client PO ref', d.po_ref], ['Incoterm', d.incoterm], ['Shipment mode', mode], ['Port of loading', info?.pol], ['Destination', info?.pod], ['Currency', d.currency]],
     currency: d.currency, lines: piLines(d),
-    sections: [{ heading: 'Payment terms', text: d.payment_terms }, { heading: 'Bank details', text: d.bank }],
+    sections: [{ heading: 'Payment terms', text: d.payment_terms }],
     footer: `${ciNo(pi)} · ${company.name}`,
   };
 }

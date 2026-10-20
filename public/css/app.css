@@ -1198,3 +1198,8 @@ dialog.pickdlg[open] { display: flex; flex-direction: column; }
 .senddlg .sendto .lbl { font-size: 13px; color: var(--muted); }
 .senddlg .check { display: flex; align-items: center; gap: 8px; margin: 0; }
 .senddlg .check input { width: auto; }
+.gallery figure { position: relative; }
+.gallery figure .photopick { position: absolute; top: 8px; left: 8px; width: 18px; height: 18px; margin: 0; z-index: 2; accent-color: var(--accent); }
+.checklist { flex-wrap: wrap; row-gap: 8px; }
+.chk { cursor: default; }
+.checklist { gap: 5px; } .chk { padding: 3px 8px; }

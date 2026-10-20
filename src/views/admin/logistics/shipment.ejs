@@ -32,10 +32,10 @@
   const refs = [[air ? 'Air waybill' : 'Bill of lading', s.bl_no], ['Tracking', s.tracking_no]];
   if (s.container_no || s.mode === 'sea_fcl') refs.push(['Container', s.container_no]);
   const docChecklist = [
-    { kind: 'commercial_invoice', label: 'Commercial invoice' },
-    { kind: 'packing_list', label: 'Packing list' },
-    air ? { kind: 'airway_bill', label: 'Air waybill' } : { kind: 'bill_of_lading', label: 'Bill of lading' },
-    { kind: 'export_declaration', label: 'Export declaration', optional: !s.export_official },
+    { kind: 'commercial_invoice', label: 'Commercial invoice', short: 'CI' },
+    { kind: 'packing_list', label: 'Packing list', short: 'Packing' },
+    air ? { kind: 'airway_bill', label: 'Air waybill', short: 'AWB' } : { kind: 'bill_of_lading', label: 'Bill of lading', short: 'BL' },
+    { kind: 'export_declaration', label: 'Export declaration', short: 'Declaration', optional: !s.export_official },
   ];
 %>
 <div class="kpis five">

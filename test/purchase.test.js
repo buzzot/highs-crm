@@ -60,7 +60,7 @@ test('commercial invoice: built from the PI, totals only, no payment schedule', 
   const d = ciDocument(_pi, { order_no: 'HB-2610-2864' }, { name: 'Lumi Trade' }, { shipment: { mode: 'sea_lcl' }, info: { pol: 'Ningbo' } });
   assert.equal(d.title, 'COMMERCIAL INVOICE');
   assert.equal(d.no, 'CI-2610-1259');
-  assert.ok(!d.sections.some(s => /schedule/i.test(s.heading)));
+  assert.ok(!d.sections.some(s => /schedule|bank/i.test(s.heading)));
   assert.ok(d.meta.some(([k, v]) => k === 'Proforma invoice' && v === 'PI-2610-1259'));
   const pdf = ciPdf(_pi, { order_no: 'HB-2610-2864' }, { name: 'Lumi Trade' }, {});
   assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
