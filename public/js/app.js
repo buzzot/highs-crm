@@ -95,3 +95,6 @@
   // fade flash messages
   setTimeout(() => document.querySelectorAll('.flash.ok').forEach(f => f.classList.add('gone')), 4000);
 })();
+
+// times recorded by the server (<time class="localtime" datetime=…>) are shown in the viewer's own time zone
+document.querySelectorAll('time.localtime').forEach(function (t) { var d = new Date(t.getAttribute('datetime')); if (!Number.isNaN(d.getTime())) t.textContent = d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); });

@@ -235,11 +235,23 @@ r.get('/shipments/:id', async (req, res) => {
   if (!s) return notFound(res, 'Shipment');
   const { data: items } = await admin.from('order_items').select('*').eq('order_id', s.order_id);
   const { data: order } = await admin.from('orders').select('*').eq('id', s.order_id).single();
+  // e-mail history of the documents + who the client is (for the "send" dialog)
+  const docIds = (docs || []).map(d => d.id);
+  const { data: sendRows } = docIds.length ? await admin.from('document_sends').select('*').in('document_id', docIds).order('sent_at', { ascending: false }) : { data: [] };
+  const sends = {}; (sendRows || []).forEach(x => (sends[x.document_id] ||= []).push(x));
+  const [{ data: people }, { data: pis }] = await Promise.all([
+    order?.org_id ? admin.from('profiles').select('email, full_name').eq('org_id', order.org_id).eq('role', 'client') : { data: [] },
+    admin.from('proforma_invoices').select('data').eq('order_id', s.order_id).order('created_at', { ascending: false }).limit(1),
+  ]);
+  const clientEmails = []; const seen = new Set();
+  const addEmail = (email, label) => { const e = String(email || '').trim().toLowerCase(); if (e && !seen.has(e)) { seen.add(e); clientEmails.push({ email: e, label }); } };
+  (people || []).forEach(p => addEmail(p.email, p.full_name));
+  addEmail(pis?.[0]?.data?.buyer?.email, pis?.[0]?.data?.buyer?.contact);
   const totalCost = (costs || []).reduce((t, c) => t + Number(c.amount) * Number(c.fx_to_order || 1), 0);
   const byType = {};
   (costs || []).forEach(c => { byType[c.type] = (byType[c.type] || 0) + Number(c.amount) * Number(c.fx_to_order || 1); });
   res.render('admin/logistics/shipment', {
-    title: `Shipment · ${s.orders?.order_no}`, s, costs: costs || [], docs: docs || [], totalCost, byType,
+    title: `Shipment · ${s.orders?.order_no}`, s, costs: costs || [], docs: docs || [], sends, clientEmails, totalCost, byType,
     land: landed(order || {}, items || []), order: order || {},
     freightTypes: FREIGHT_TYPES, statuses: SHIPMENT_STATUSES, currencies: CURRENCIES,
     defaultFx: c => fxRate(settings, c, s.orders?.currency || 'USD'),
@@ -248,12 +260,14 @@ r.get('/shipments/:id', async (req, res) => {
 });
 
 // ---- shipping documents generated from the order's data (commercial invoice, packing list) ----
-async function storeGenerated(req, shipmentId, { kind, title, filename, pdf, orderId }) {
-  // a newer copy replaces the one generated earlier (files uploaded by hand are left alone)
-  const { data: old } = await admin.from('documents').select('id').eq('entity_type', 'shipment').eq('entity_id', shipmentId).eq('kind', kind).like('title', `${title.split(' ')[0]} %`).like('title', '% (generated)');
-  await uploadDocument({ file: { originalname: filename, mimetype: 'application/pdf', buffer: pdf, size: pdf.length }, entityType: 'shipment', entityId: shipmentId, kind, title: `${title} (generated)`, clientVisible: true, uploadedBy: req.user.id });
-  for (const d of old || []) await deleteDocument(d.id);
-  await log({ entityType: 'order', entityId: orderId, action: 'documents_uploaded', actorId: req.user.id, clientVisible: false, detail: { kind, count: 1, note: `${title} generated` } });
+async function storeGenerated(req, shipmentId, { kind, title, filename, build, orderId }) {
+  // every new version gets the next serial number: "<title> (001)", "(002)", …  (earlier versions are kept)
+  const { data: same } = await admin.from('documents').select('title').eq('entity_type', 'shipment').eq('entity_id', shipmentId).eq('kind', kind).like('title', `${title} (%)`);
+  const serial = String(Math.max(0, ...(same || []).map(d => Number((d.title.match(/\((\d{3})\)$/) || [])[1] || 0))) + 1).padStart(3, '0');
+  const pdf = build();
+  await uploadDocument({ file: { originalname: `${filename}-${serial}.pdf`, mimetype: 'application/pdf', buffer: pdf, size: pdf.length }, entityType: 'shipment', entityId: shipmentId, kind, title: `${title} (${serial})`, clientVisible: true, uploadedBy: req.user.id });
+  await log({ entityType: 'order', entityId: orderId, action: 'documents_uploaded', actorId: req.user.id, clientVisible: false, detail: { kind, count: 1, note: `${title} (${serial}) created` } });
+  return serial;
 }
 
 r.post('/shipments/:id/docs/commercial-invoice', async (req, res) => {
@@ -268,10 +282,10 @@ r.post('/shipments/:id/docs/commercial-invoice', async (req, res) => {
   const pi = (pis || []).find(x => x.status === 'sent') || (pis || [])[0];
   if (!pi) return back(res, to, { err: 'This order has no proforma invoice yet — create one first, the commercial invoice is built from it.' });
   try {
-    const pdf = ciPdf(pi, order, await getCompany(admin), { shipment: s, info });
-    await storeGenerated(req, s.id, { kind: 'commercial_invoice', title: `Commercial invoice ${ciNo(pi)}`, filename: `${ciNo(pi)}.pdf`, pdf, orderId: s.order_id });
+    const company = await getCompany(admin);
+    var serial = await storeGenerated(req, s.id, { kind: 'commercial_invoice', title: `Commercial invoice ${ciNo(pi)}`, filename: ciNo(pi), build: () => ciPdf(pi, order, company, { shipment: s, info }), orderId: s.order_id });
   } catch (e) { return back(res, to, { err: `Could not create the commercial invoice: ${e.message}` }); }
-  back(res, to, { msg: `Commercial invoice ${ciNo(pi)} created from ${pi.pi_no}.` });
+  back(res, to, { msg: `Commercial invoice ${ciNo(pi)} (${serial}) created from ${pi.pi_no}.` });
 });
 
 r.post('/shipments/:id/docs/packing-list', async (req, res) => {
@@ -282,10 +296,10 @@ r.post('/shipments/:id/docs/packing-list', async (req, res) => {
   if (!order) return notFound(res, 'Order');
   if (!rows.length) return back(res, to, { err: 'The order has no packing lines yet — add them on the packing list page first.' });
   try {
-    const pdf = packingListPdf({ company: await getCompany(admin), order, info, rows, t });
-    await storeGenerated(req, s.id, { kind: 'packing_list', title: `Packing list ${order.order_no}`, filename: `packing-list-${order.order_no}.pdf`, pdf, orderId: s.order_id });
+    const company = await getCompany(admin);
+    var serial = await storeGenerated(req, s.id, { kind: 'packing_list', title: `Packing list ${order.order_no}`, filename: `packing-list-${order.order_no}`, build: () => packingListPdf({ company, order, info, rows, t }), orderId: s.order_id });
   } catch (e) { return back(res, to, { err: `Could not create the packing list: ${e.message}` }); }
-  back(res, to, { msg: 'Packing list PDF created from the current packing lines.' });
+  back(res, to, { msg: `Packing list (${serial}) created from the current packing lines.` });
 });
 
 r.get('/shipments/:id/edit', async (req, res) => {

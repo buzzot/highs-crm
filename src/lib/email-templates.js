@@ -28,14 +28,15 @@ export function layout(o) {
             <tr><td style="padding:36px 40px 0;font-family:${FONT};font-size:13px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#0b8a7a;">${esc(o.eyebrow)}</td></tr>
             <tr><td style="padding:10px 40px 0;font-family:${FONT};font-size:32px;line-height:1.2;font-weight:800;letter-spacing:-0.6px;color:#16202e;">${esc(o.title)}</td></tr>
             <tr><td style="padding:16px 40px 26px;font-family:${FONT};font-size:18px;line-height:1.6;color:#2f3a4a;">${o.introHtml}</td></tr>${code}
-            <tr><td style="padding:0 40px 30px;">
+${o.buttonUrl ? `            <tr><td style="padding:0 40px 30px;">
               <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="background:#0b8a7a;border-radius:12px;">
                 <a href="${url}" style="display:inline-block;padding:17px 34px;font-family:${FONT};font-size:18px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:12px;">${esc(o.buttonText)} &rarr;</a>
               </td></tr></table>
             </td></tr>
+` : ''}
             <tr><td style="padding:10px 40px 36px;font-family:${FONT};font-size:14px;line-height:1.6;color:#7a8494;border-top:1px solid #eef0f3;">
               <div style="padding-top:18px;">${o.fineHtml}</div>
-              <div style="padding-top:10px;">Button not working? Copy this link into your browser:<br><a href="${url}" style="color:#2a62b8;word-break:break-all;">${url}</a></div>
+              ${o.buttonUrl ? `<div style="padding-top:10px;">Button not working? Copy this link into your browser:<br><a href="${url}" style="color:#2a62b8;word-break:break-all;">${url}</a></div>` : ''}
             </td></tr>
           </table>
         </td></tr>
@@ -167,6 +168,20 @@ export function piEmail({ pi, order, company, total, currency, schedule = [], me
       buttonText: 'Open your order', buttonUrl: url, fineHtml: `${esc(company?.name || 'Lumi Trade')} · reply to this email with any questions.`,
     }),
     text: `Proforma invoice ${pi.pi_no} for order ${order.order_no} is attached (${currency} ${total}). ${message || ''} ${url}`,
+  };
+}
+
+/** Shipping documents sent by hand (for clients who don't use their cabinet). Files are attached. */
+export function documentsEmail({ order, docs, company, message }) {
+  const list = docs.map(d => `<li>${esc(d.title)}</li>`).join('');
+  return {
+    subject: `Documents for order ${order.order_no} · ${company?.name || 'Lumi Trade'}`,
+    html: layout({
+      preheader: `${docs.length} document${docs.length === 1 ? '' : 's'} attached for order ${order.order_no}`, eyebrow: 'Shipping documents', title: `Order ${esc(order.order_no)}`,
+      introHtml: `Please find attached:<ul style="margin:10px 0 0;padding-left:20px;">${list}</ul>` + (message ? `<br>${esc(message).replace(/\n/g, '<br>')}` : ''),
+      fineHtml: `${esc(company?.name || 'Lumi Trade')} · reply to this email with any questions.`,
+    }),
+    text: `Documents for order ${order.order_no}: ${docs.map(d => d.title).join(', ')}. ${message || ''}`,
   };
 }
 

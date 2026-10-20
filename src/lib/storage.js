@@ -16,6 +16,13 @@ export async function uploadDocument({ file, entityType, entityId, kind = 'other
   return data;
 }
 
+/** File contents as a Buffer (for e-mail attachments). */
+export async function downloadDocument(storagePath) {
+  const { data, error } = await admin.storage.from(BUCKET).download(storagePath);
+  if (error) throw error;
+  return Buffer.from(await data.arrayBuffer());
+}
+
 export async function signedUrl(storagePath, seconds = 600) {
   const { data, error } = await admin.storage.from(BUCKET).createSignedUrl(storagePath, seconds);
   if (error) throw error;

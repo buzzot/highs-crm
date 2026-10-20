@@ -25,3 +25,11 @@ test('user-supplied names are escaped', () => {
   assert.doesNotMatch(all[0].html, /Acme <Retail>/);
   assert.equal(esc(`"'<&>`), '&quot;&#39;&lt;&amp;&gt;');
 });
+
+import { documentsEmail } from '../src/lib/email-templates.js';
+test('documents email lists the files and has no button when there is no link', () => {
+  const m = documentsEmail({ order: { order_no: 'HB-1' }, docs: [{ title: 'Commercial invoice CI-1 (001)' }], company: { name: 'Lumi Trade' }, message: 'Hello <b>' });
+  assert.match(m.subject, /HB-1/);
+  assert.ok(m.html.includes('Commercial invoice CI-1 (001)') && m.html.includes('Hello &lt;b&gt;'));
+  assert.ok(!m.html.includes('Button not working'));
+});

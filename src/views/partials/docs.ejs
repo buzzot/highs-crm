@@ -2,22 +2,23 @@
   Documents & photos panel for admin detail pages.
   locals: docs, entityType, entityId, redirect, [kinds], [heading], [defaultKind], [defaultVisible],
           [checklist] = [{ kind, label }] — required document kinds, shown as ✓ / missing chips
+          [sendUrl] = '/admin/documents/send' — adds tick boxes + a "Send by email" dialog (needs [clientEmails] = [{ email, label }], [sends] = { documentId: [rows] } for the history)
           [chipActions] = { kind: { post: '/url' } | { file: true } } — makes a missing chip a button: post = generate the document, file = pick a file to attach
 %>
 <% const _kinds = (typeof kinds !== 'undefined' && kinds) || ['product_photo','packing_photo','proforma_invoice','commercial_invoice','packing_list','bill_of_lading','airway_bill','export_declaration','certificate','qc_report','other']; %>
 <% const _photos = docs.filter(d => (d.mime_type || '').startsWith('image/')); const _files = docs.filter(d => !(d.mime_type || '').startsWith('image/')); %>
-<% const _check = (typeof checklist !== 'undefined' && checklist) || []; const _have = new Set(docs.map(d => d.kind)); %>
+<% const _check = (typeof checklist !== 'undefined' && checklist) || []; const _canSend = typeof sendUrl !== 'undefined' && !!sendUrl; const _sends = (typeof sends !== 'undefined' && sends) || {}; const _cl = (typeof clientEmails !== 'undefined' && clientEmails) || []; const _have = new Set(docs.map(d => d.kind)); %>
 <% const _ext = t => ((String(t || '').match(/\.([a-z0-9]{2,4})$/i) || [])[1] || 'file').toUpperCase(); %>
 <div class="card" id="docs">
   <h2><%= (typeof heading !== 'undefined' && heading) || 'Photos & documents' %> <span class="count"><%= docs.length %></span></h2>
 
-  <% if (_check.length) { const done = _check.filter(c => _have.has(c.kind)).length; %>
+  <% if (_check.length) { const _req = _check.filter(c => !c.optional); const done = _req.filter(c => _have.has(c.kind)).length; %>
   <div class="checklist">
-    <span class="small muted"><%= done %>/<%= _check.length %> required</span>
+    <span class="small muted"><%= done %>/<%= _req.length %> required</span>
     <% const _act = (typeof chipActions !== 'undefined' && chipActions) || {}; %>
     <% _check.forEach(c => { const a = _act[c.kind]; const have = docs.find(d => d.kind === c.kind); %>
       <% if (have) { %>
-        <span class="chk yes"><a href="/admin/documents/<%= have.id %>/download" target="_blank" title="Open <%= have.title %>">✓ <%= c.label %></a><% if (a && a.post) { %><form method="post" action="<%= a.post %>" class="inline"><button class="chkre" title="Create it again from the latest data" onclick="return confirm('Create <%= c.label.toLowerCase() %> again? The earlier generated file is replaced.')">↻</button></form><% } else if (a && a.file) { %><form method="post" action="/admin/documents/upload" enctype="multipart/form-data" class="inline"><input type="hidden" name="entity_type" value="<%= entityType %>"><input type="hidden" name="entity_id" value="<%= entityId %>"><input type="hidden" name="redirect" value="<%= redirect %>"><input type="hidden" name="kind" value="<%= c.kind %>"><input type="hidden" name="client_visible" value="on"><label class="chkre" title="Attach another file"><input type="file" name="files" style="display:none" onchange="this.form.submit()">+</label></form><% } %></span>
+        <span class="chk yes"><a href="/admin/documents/<%= have.id %>/download" target="_blank" title="Open <%= have.title %>">✓ <%= c.label %></a><% if (a && a.post) { %><form method="post" action="<%= a.post %>" class="inline"><button class="chkre" title="Create it again from the latest data" onclick="return confirm('Create a new version of the <%= c.label.toLowerCase() %>? The earlier ones are kept.')">↻</button></form><% } else if (a && a.file) { %><form method="post" action="/admin/documents/upload" enctype="multipart/form-data" class="inline"><input type="hidden" name="entity_type" value="<%= entityType %>"><input type="hidden" name="entity_id" value="<%= entityId %>"><input type="hidden" name="redirect" value="<%= redirect %>"><input type="hidden" name="kind" value="<%= c.kind %>"><input type="hidden" name="client_visible" value="on"><label class="chkre" title="Attach another file"><input type="file" name="files" style="display:none" onchange="this.form.submit()">+</label></form><% } %></span>
       <% } else if (a && a.post) { %>
         <form method="post" action="<%= a.post %>" class="inline"><button class="chk no act" title="Create it now"><%= '○ ' + c.label %></button></form>
       <% } else if (a && a.file) { %>
@@ -42,13 +43,18 @@
   <% } %>
 
   <% if (_files.length) { %>
+  <% if (_canSend) { %>
+  <div class="sendbar"><label class="check small"><input type="checkbox" id="docs-all"> Select all</label><button type="button" class="btn small" id="docs-send" disabled>✉ Send selected…</button></div>
+  <% } %>
   <ul class="doclist">
     <% _files.forEach(d => { %>
       <li>
+        <% if (_canSend) { %><input type="checkbox" class="docpick" value="<%= d.id %>" aria-label="Select <%= d.title %>"><% } %>
         <span class="ficon"><%= _ext(d.title) %></span>
         <div class="dmain">
           <a href="/admin/documents/<%= d.id %>/download" target="_blank" class="dtitle" title="<%= d.title %>"><%= d.title %></a>
           <div class="dmeta"><span class="tag"><%= fmt.status(d.kind) %></span> <%= fmt.date(d.created_at) %></div>
+          <% (_sends[d.id] || []).forEach(x => { %><div class="dsent">✉ Sent <time class="localtime" datetime="<%= x.sent_at %>"><%= fmt.datetime(x.sent_at) %></time> → <%= (x.to_emails || []).join(', ') %></div><% }) %>
         </div>
         <div class="dact">
           <form method="post" action="/admin/documents/<%= d.id %>/toggle" class="inline"><input type="hidden" name="redirect" value="<%= redirect %>"><button class="vis <%= d.client_visible ? 'on' : '' %>" title="Click to toggle client visibility"><%= d.client_visible ? 'Client sees' : 'Internal' %></button></form>
@@ -73,4 +79,41 @@
       <button class="btn">Upload</button>
     </div>
   </form>
+
+  <% if (_canSend) { %>
+  <dialog id="send-dialog" class="senddlg">
+    <form method="post" action="<%= sendUrl %>" id="send-form">
+      <input type="hidden" name="entity_type" value="<%= entityType %>"><input type="hidden" name="entity_id" value="<%= entityId %>"><input type="hidden" name="redirect" value="<%= redirect %>">
+      <div id="send-ids"></div>
+      <h3>Send by email</h3>
+      <p class="muted small" id="send-count"></p>
+      <% if (_cl.length) { %>
+      <div class="sendto"><span class="lbl">Client</span>
+        <% _cl.forEach((c, i) => { %><label class="check"><input type="checkbox" name="to_client" value="<%= c.email %>" <%= i === 0 ? 'checked' : '' %>> <%= c.label ? c.label + ' · ' : '' %><%= c.email %></label><% }) %>
+      </div>
+      <% } %>
+      <label>Other email address <span class="muted small">— separate several with commas</span><input type="text" name="to_other" placeholder="name@company.com"></label>
+      <label>Message <span class="muted small">— optional</span><textarea name="message" rows="3" placeholder="Short note to go with the files"></textarea></label>
+      <div class="row between"><button type="button" class="btn" id="send-cancel">Cancel</button><button class="btn primary">Send</button></div>
+    </form>
+  </dialog>
+  <script>
+  (function () {
+    var picks = function () { return [].slice.call(document.querySelectorAll('#docs .docpick')); };
+    var btn = document.getElementById('docs-send'), all = document.getElementById('docs-all'), dlg = document.getElementById('send-dialog');
+    if (!btn || !dlg) return;
+    var refresh = function () { var n = picks().filter(function (c) { return c.checked; }).length; btn.disabled = !n; btn.textContent = n ? '✉ Send selected (' + n + ')…' : '✉ Send selected…'; };
+    picks().forEach(function (c) { c.addEventListener('change', refresh); });
+    if (all) all.addEventListener('change', function () { picks().forEach(function (c) { c.checked = all.checked; }); refresh(); });
+    btn.addEventListener('click', function () {
+      var on = picks().filter(function (c) { return c.checked; });
+      document.getElementById('send-ids').innerHTML = on.map(function (c) { return '<input type="hidden" name="ids" value="' + c.value + '">'; }).join('');
+      document.getElementById('send-count').textContent = on.length + ' document' + (on.length === 1 ? '' : 's') + ' will be attached to one email.';
+      dlg.showModal();
+    });
+    document.getElementById('send-cancel').addEventListener('click', function () { dlg.close(); });
+    document.getElementById('send-form').addEventListener('submit', function (e) { var b = e.submitter; if (b) { b.disabled = true; b.textContent = 'Sending…'; } });
+  })();
+  </script>
+  <% } %>
 </div>
