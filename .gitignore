@@ -6,3 +6,5 @@ node_modules/
 .sync*.tgz
 .shipment-css.tmp
 .*.tgz
+.*.tgz
+*.tgz

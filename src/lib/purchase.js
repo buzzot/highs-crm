@@ -83,3 +83,4 @@ export function parseLines(body) {
     .filter(l => l.description && l.quantity > 0);
 }
 export const text = (v, max = 4000) => (String(v ?? '').trim().slice(0, max) || null);
+

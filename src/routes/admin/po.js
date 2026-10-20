@@ -9,7 +9,7 @@ import { poRejectedEmail, piEmail } from '../../lib/email-templates.js';
 import { DEFAULT_SCHEDULE, parseSchedule, withAmounts } from '../../lib/payments.js';
 import { recalcOrder } from '../../lib/payments-db.js';
 import { piLines, PI_FREIGHT_MODES } from '../../lib/freight-mode.js';
-import { getCompany, poPdf, piPdf, totalOf, parseLines, text } from '../../lib/purchase.js';
+import { getCompany, poPdf, piPdf, piDocument, totalOf, parseLines, text } from '../../lib/purchase.js';
 
 const appUrl = () => (process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
 const s = (v, n = 300) => String(v ?? '').trim().slice(0, n);
@@ -158,6 +158,11 @@ pi.get('/:id', async (req, res) => {
   const p = await loadPi(req.params.id);
   if (!p) return notFound(res, 'Proforma invoice');
   res.render('admin/pi', { title: p.pi_no, p, order: p.orders, total: totalOf(piLines(p.data)), shown: piLines(p.data), msg: req.query.msg, err: req.query.err });
+});
+pi.get('/:id/print', async (req, res) => {
+  const p = await loadPi(req.params.id);
+  if (!p) return notFound(res, 'Proforma invoice');
+  res.render('admin/doc_print', { title: p.pi_no, doc: piDocument(p, p.orders, await getCompany(admin)), back: `/admin/pi/${p.id}`, pdfHref: `/admin/pi/${p.id}/pdf` });
 });
 pi.get('/:id/pdf', async (req, res) => {
   const p = await loadPi(req.params.id);

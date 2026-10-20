@@ -1,0 +1,56 @@
+<%- include('../partials/head') %>
+<%
+  const money = v => Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const price = v => (v == null || v === '' ? '' : Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: Math.abs(Number(v)) > 0 && Math.abs(Number(v)) < 0.1 ? 4 : 2 }));
+  const total = (doc.lines || []).reduce((t, l) => t + Number(l.quantity || 0) * Number(l.unit_price || 0), 0);
+  const meta = (doc.meta || []).filter(([, v]) => v != null && v !== '');
+%>
+<style>@page { size: A4 portrait; margin: 14mm 14mm 16mm; }</style>
+<div class="pagehead noprint">
+  <div><a class="back" href="<%= back %>">← <%= doc.no %></a>
+    <h1><%= doc.title %></h1>
+    <p class="muted">Print view — use Print / PDF to save or print this page. The PDF emailed to the client is generated separately.</p></div>
+  <div class="actions">
+    <a class="btn" href="<%= back %>">Back to edit</a>
+    <% if (pdfHref) { %><a class="btn" href="<%= pdfHref %>" target="_blank">⇩ PDF file</a><% } %>
+    <button class="btn primary" onclick="window.print()">Print / PDF</button>
+  </div>
+</div>
+
+<div class="pldoc card docprint">
+  <div class="plhead">
+    <div><div class="plbrand"><%= doc.seller.name %></div>
+      <% (doc.seller.lines || []).forEach(l => { %><div class="muted small"><%= l %></div><% }) %></div>
+    <div class="docright"><div class="pltitle"><%= doc.title %></div>
+      <dl class="plmeta"><dt>No.</dt><dd><%= doc.no %></dd><dt>Date</dt><dd><%= doc.date %></dd><% if (doc.status) { %><dt>Status</dt><dd><%= doc.status %></dd><% } %></dl></div>
+  </div>
+
+  <div class="docparties">
+    <div><div class="doclabel"><%= doc.partyLabel %></div>
+      <strong><%= doc.party.name || '—' %></strong>
+      <% (doc.party.lines || []).forEach(l => { %><div><%= l %></div><% }) %></div>
+    <div><div class="doclabel">Details</div>
+      <dl class="plmeta"><% meta.forEach(([k, v]) => { %><dt><%= k %></dt><dd><%= v %></dd><% }) %></dl></div>
+  </div>
+
+  <table class="tbl pltable">
+    <thead><tr><th>#</th><th>Description</th><th class="right">Qty</th><th class="right">Price (<%= doc.currency %>)</th><th class="right">Amount</th></tr></thead>
+    <tbody>
+    <% (doc.lines || []).forEach((l, i) => { %>
+      <tr><td><%= i + 1 %></td>
+        <td><%= l.description || '—' %><% if (l.sku) { %><div class="muted small">SKU / part no.: <%= l.sku %></div><% } %></td>
+        <td class="right num"><%= Number(l.quantity || 0).toLocaleString('en-US', { maximumFractionDigits: 3 }) %><%= l.unit ? ' ' + l.unit : '' %></td>
+        <td class="right num"><%= price(l.unit_price) %></td>
+        <td class="right num"><%= money(Number(l.quantity || 0) * Number(l.unit_price || 0)) %></td></tr>
+    <% }) %>
+    </tbody>
+    <tfoot><tr><td colspan="4">TOTAL</td><td class="right num"><%= doc.currency %> <%= money(total) %></td></tr></tfoot>
+  </table>
+
+  <div class="plfoot">
+    <% (doc.sections || []).filter(s => s.text && String(s.text).trim()).forEach(s => { %>
+      <div class="docsec"><span class="muted"><%= s.heading %></span><div class="pre"><%= s.text %></div></div>
+    <% }) %>
+  </div>
+</div>
+<%- include('../partials/foot') %>

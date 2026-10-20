@@ -112,3 +112,4 @@ function finish(pdf, d, n) {
   pdf.pages = all;
   return pdf.toBuffer({ title: `${d.title} ${d.no}` });
 }
+

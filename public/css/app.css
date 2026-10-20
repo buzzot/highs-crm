@@ -970,6 +970,7 @@ h1 { letter-spacing: -.02em; }
 .plmeta { display: grid; grid-template-columns: auto auto; gap: 3px 16px; margin: 0; font-size: 13px; }
 .plmeta dt { color: var(--muted); } .plmeta dd { margin: 0; color: var(--ink); }
 .pltable td, .pltable th { font-size: 13px; }
+.pltable td:nth-child(7), .pltable th:nth-child(7) { white-space: nowrap; } /* L × W × H on one line */
 .pltable tfoot td { font-weight: 600; border-top: 2px solid var(--line); background: #fafbfc; }
 .plfoot { margin-top: 14px; display: grid; gap: 6px; font-size: 13px; }
 .fwlist { display: grid; gap: 8px; margin-bottom: 12px; }
@@ -1000,7 +1001,7 @@ textarea.wechat { font-size: 12.5px; background: #fafbfc; font-variant-numeric: 
   .pltable { width: 100%; }
   .pltable th { color: #1f2937 !important; font-weight: 600; font-size: 10.5px; border-bottom: 1.5px solid #374151 !important; }
   .pltable td { color: #111827; font-size: 12px; border-bottom: 1px solid #9ca3af !important; vertical-align: top; }
-  .pltable td:nth-child(3) { min-width: 200px; }
+  .pltable td:nth-child(3) { min-width: 150px; }
   .pltable tfoot td { background: #eef1f4 !important; border-top: 1.5px solid #374151 !important; color: #111827; }
   .pldoc .muted, .plfoot .muted, .plfoot .small { color: #374151 !important; }
   .plfoot { font-size: 12px; }
@@ -1169,3 +1170,11 @@ dialog.pickdlg[open] { display: flex; flex-direction: column; }
 .pthumbcell { width: 64px; } .pthumbcell img { width: 52px; height: 52px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); display: block; }
 .prodpick { display: flex; align-items: center; gap: 8px; } .prodpick img { width: 36px; height: 36px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); }
 .freightmode select{width:auto;min-width:260px;flex:0 0 auto}
+
+/* printable documents (proforma invoice …) — same look as the packing list, portrait */
+.docparties { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 18px; font-size: 13px; }
+.doclabel { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.docright { text-align: right; } .docright .plmeta { justify-content: end; }
+.docsec { display: grid; gap: 2px; } .docsec .pre { white-space: pre-line; }
+.docprint .pltable tfoot td { font-size: 14px; }
+@media print { .docprint .doclabel, .docprint .muted { color: #374151 !important; } .docparties { font-size: 12px; } }

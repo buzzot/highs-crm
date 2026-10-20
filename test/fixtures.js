@@ -1,3 +1,4 @@
+import { piDocument } from '../src/lib/purchase.js';
 import { cargoLine, cargoTotals } from '../src/lib/cargo.js';
 // Realistic sample data shaped like the Supabase query results each route passes to its view.
 import { fmt } from '../src/lib/format.js';
@@ -158,6 +159,7 @@ export const pages = {
   'admin/po': base(staffUser, '/admin/po/po1', { title: poRow.po_no, p: poRow, order: null, pis: [], quoteTotal: 19440, total: 19440, editable: true, msg: null, err: null }),
   'admin/po_approved': ['admin/po', base(staffUser, '/admin/po/po1', { title: poRow.po_no, p: { ...poRow, status: 'approved', order_id: 'ord1' }, order: { id: 'ord1', order_no: 'HB-2610-0001' }, pis: [], quoteTotal: 19000, total: 19440, editable: false, msg: 'ok', err: null })],
   'admin/pi': base(staffUser, '/admin/pi/pi1', { title: piRow.pi_no, p: piRow, order: piRow.orders, total: 19440, shown: piRow.data.lines || [], msg: null, err: null }),
+  'admin/doc_print': base(staffUser, '/admin/pi/pi1/print', { title: piRow.pi_no, back: '/admin/pi/pi1', pdfHref: '/admin/pi/pi1/pdf', doc: piDocument(piRow, piRow.orders, { name: 'Lumi Trade', address: 'Ningbo, China', email: 'orders@lumitrade.cc', phone: '+86 574 0000', website: 'lumitrade.cc' }) }),
   'portal/po': base(clientUser, '/portal/po/po1', { title: poRow.po_no, po: { ...poRow, status: 'draft' }, request: { id: 'r1', ref: 'REQ-2610-0001' }, order: null, msg: null, err: null }),
   'portal/po_sent': ['portal/po', base(clientUser, '/portal/po/po1', { title: poRow.po_no, po: poRow, request: { id: 'r1', ref: 'REQ-2610-0001' }, order: null, msg: 'Sent.', err: null })],
   'admin/pricing/settings': base(staffUser, '/admin/pricing/settings', { title: 'Pricing settings', settings, company: { name: 'Lumi Trade', email: 'orders@lumitrade.cc', phone: '+86 574 0000', website: 'lumitrade.cc', address: 'Ningbo, China', bank: 'Beneficiary: Lumi Trade', payment_terms: '30% deposit' } }),

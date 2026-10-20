@@ -4,7 +4,7 @@
   <div><a class="back" href="/admin/orders/<%= order.id %>">← <%= order.order_no %></a><h1>Proforma invoice <%= p.pi_no %></h1>
     <p class="muted"><%= order.organizations?.name %> · <%= sent ? 'sent ' + fmt.datetime(p.sent_at) : 'draft — not sent' %></p></div>
   <div class="headactions">
-    <a class="btn" href="/admin/pi/<%= p.id %>/pdf" target="_blank"><%- icon('file') %> Print / PDF</a>
+    <a class="btn" href="/admin/pi/<%= p.id %>/print" target="_blank"><%- icon('file') %> Print / PDF</a>
     <span class="pill lg <%= sent ? 'ok' : '' %>"><%= sent ? 'Sent' : 'Draft' %></span>
   </div>
 </div>
