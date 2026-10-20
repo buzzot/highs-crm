@@ -1203,3 +1203,10 @@ dialog.pickdlg[open] { display: flex; flex-direction: column; }
 .checklist { flex-wrap: wrap; row-gap: 8px; }
 .chk { cursor: default; }
 .checklist { gap: 5px; } .chk { padding: 3px 8px; }
+/* checklist chips: one height, one baseline, whether they are links, buttons or file pickers */
+.checklist { align-items: center; }
+.checklist form.inline { display: flex; margin: 0; }
+.checklist .chk { display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; height: 28px; line-height: 1; margin: 0; padding: 0 10px; }
+.checklist .chk a { display: inline-flex; align-items: center; }
+.checklist .chk form.inline { display: inline-flex; }
+.checklist .chkre { display: inline-flex; align-items: center; height: auto; }
