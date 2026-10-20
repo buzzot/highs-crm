@@ -9,7 +9,7 @@
     <h1>Packing list</h1>
     <p class="muted"><%= order.client_name %><%= order.supplier_name ? ' · from ' + order.supplier_name : '' %> · <%= rows.length %> lines</p></div>
   <div class="actions">
-    <a class="btn" href="/admin/orders/<%= order.id %>#packing">Edit lines</a>
+    <a class="btn" href="/admin/orders/<%= order.id %>/packing-list/edit">Edit lines</a>
     <a class="btn" href="/admin/orders/<%= order.id %>/packing-list.xlsx">⇩ Excel</a>
     <button class="btn" onclick="window.print()">Print / PDF</button>
     <a class="btn primary" href="#send">✉ Request freight quotes</a>

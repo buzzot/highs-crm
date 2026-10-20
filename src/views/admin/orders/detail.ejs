@@ -119,7 +119,7 @@
     <div class="card" id="packing">
       <% const pt = { cartons: 0, pcs: 0, gw: 0, cbm: 0 }; packing.forEach(p => { const c = Number(p.cartons || 1); pt.cartons += c; pt.pcs += (Number(p.quantity) || 0) * c; pt.gw += (Number(p.gross_weight_kg) || 0) * c; pt.cbm += (Number(p.cbm) || 0) * c; }); %>
       <h2>Packing list <span class="muted small"><%= pt.cartons %> cartons · <%= Number(pt.pcs).toLocaleString('en-US') %> pcs · <%= fmt.num(pt.gw, 1) %> kg · <%= fmt.num(pt.cbm, 3) %> cbm</span>
-        <span class="hactions"><% if (packing.length) { %><a class="btn small primary" href="/admin/orders/<%= order.id %>/packing-list">Packing list &amp; freight quotes →</a><% } %></span></h2>
+        <span class="hactions"><% if (packing.length) { %><a class="btn small" href="/admin/orders/<%= order.id %>/packing-list/edit">Edit lines</a> <a class="btn small primary" href="/admin/orders/<%= order.id %>/packing-list">Packing list &amp; freight quotes →</a><% } %></span></h2>
       <% if (packing.length) { %>
       <table class="tbl compact"><thead><tr><th>CTN No.</th><th class="right">Ctns</th><th>Contents</th><th class="right">Pcs/ctn</th><th>L×W×H cm</th><th class="right">GW/ctn</th><th class="right">CBM total</th><th></th></tr></thead><tbody>
       <% packing.forEach(p => { const c = Number(p.cartons || 1); %>

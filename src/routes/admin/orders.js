@@ -254,6 +254,14 @@ r.post('/:id/packing/import', packUpload.single('file'), async (req, res) => {
   });
 });
 
+// edit the saved lines (same grid as the import review; saving replaces the lines with what is on screen)
+r.get('/:id/packing-list/edit', async (req, res) => {
+  const { order, rows, t, info } = await packingData(req.params.id);
+  if (!order) return notFound(res, 'Order');
+  if (!rows.length) return res.redirect(`/admin/orders/${order.id}/packing-list?err=` + encodeURIComponent('There are no packing lines to edit yet — read a packing list or add cartons first.'));
+  res.render('admin/orders/packing_edit', { title: `Edit packing lines · ${order.order_no}`, order, rows, t, marks: info?.marks || '' });
+});
+
 r.post('/:id/packing/confirm', async (req, res) => {
   const id = req.params.id;
   const raw = req.body.rows ? (Array.isArray(req.body.rows) ? req.body.rows : Object.values(req.body.rows)) : [];
@@ -271,7 +279,8 @@ r.post('/:id/packing/confirm', async (req, res) => {
     const { data: o } = await admin.from('orders').select('packing_info').eq('id', id).single();
     if (!o?.packing_info?.marks) await admin.from('orders').update({ packing_info: { ...(o?.packing_info || {}), marks: String(req.body.marks).slice(0, 500) } }).eq('id', id);
   }
-  await log({ entityType: 'order', entityId: id, action: 'packing_list_imported', actorId: req.user.id, detail: { note: `${rows.length} lines · ${packTotals(rows).cartons} cartons` } });
+  const edited = req.body.source === 'edit';
+  await log({ entityType: 'order', entityId: id, action: edited ? 'packing_list_edited' : 'packing_list_imported', actorId: req.user.id, detail: { note: `${rows.length} lines · ${packTotals(rows).cartons} cartons` } });
   res.redirect(`/admin/orders/${id}/packing-list?msg=` + encodeURIComponent(`Packing list saved: ${rows.length} lines, ${packTotals(rows).cartons} cartons.`));
 });
 
