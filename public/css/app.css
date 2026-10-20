@@ -1210,3 +1210,6 @@ dialog.pickdlg[open] { display: flex; flex-direction: column; }
 .checklist .chk a { display: inline-flex; align-items: center; }
 .checklist .chk form.inline { display: inline-flex; }
 .checklist .chkre { display: inline-flex; align-items: center; height: auto; }
+/* printable documents (PI …): shown as an A4 portrait sheet on screen too */
+.docprint { max-width: 210mm; margin: 0 auto 24px; padding: 14mm 14mm 16mm; }
+@media print { .docprint { max-width: none; margin: 0; padding: 0 !important; } }
