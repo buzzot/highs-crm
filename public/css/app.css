@@ -1243,3 +1243,6 @@ label:has(> .picker-native) { position: relative; }
 .pickdlg .pk-plus { width: 32px; height: 32px; border-radius: 50%; border: 1.5px dashed var(--accent); display: grid; place-items: center; font-size: 18px; flex: none; }
 .pickdlg li.empty { cursor: default; color: var(--muted); justify-content: center; }
 .pickdlg li.empty:hover { background: none; }
+
+.btn.bad-text { color: var(--bad); border-color: #f1c9c4; }
+.btn.bad-text:hover { background: #fdf1ef; }

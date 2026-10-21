@@ -141,11 +141,11 @@
           </div>
           <div class="fgrid" data-drop-list></div>
         </div>
-        <div class="actions"><button class="btn primary" id="packRead">✦ Read packing list</button>
+        <div class="actions"><button class="btn primary small" id="packRead">✦ Read packing list</button>
           <details class="inline-details">
             <summary class="btn small">+ Add cartons by hand</summary>
           </details>
-          <% if (packing.length) { %><button class="link small danger" formaction="/admin/orders/<%= order.id %>/packing-clear" formenctype="application/x-www-form-urlencoded" onclick="return confirm('Remove all packing lines?')">Clear packing list</button><% } %>
+          <% if (packing.length) { %><button class="btn small bad-text" formaction="/admin/orders/<%= order.id %>/packing-clear" formenctype="application/x-www-form-urlencoded" onclick="return confirm('Remove all packing lines?')">Clear packing list</button><% } %>
         </div>
       </form>
       <form method="post" action="/admin/orders/<%= order.id %>/packing" class="sub" id="packManual" hidden>
