@@ -51,8 +51,8 @@
     <tfoot><tr><td>TOTAL</td><td class="right num"><%= t.cartons %></td><td></td><td></td><td></td><td class="right num"><%= n0(t.pieces) %></td><td></td><td class="right num"><%= t.cbm %></td><td></td><td class="right num"><%= n0(t.gross) %> kg</td><td class="right num"><%= n0(t.net) %> kg</td></tr></tfoot>
   </table>
   <div class="plfoot">
-    <% if (info.marks) { %><div><span class="muted">Shipping marks</span> <%= info.marks %></div><% } %>
-    <% if (info.remarks) { %><div><span class="muted">Notes</span> <%= info.remarks %></div><% } %>
+    <% if (info.marks) { %><div><span class="muted">Shipping marks:</span> <%= info.marks %></div><% } %>
+    <% if (info.remarks) { %><div><span class="muted">Notes:</span> <%= info.remarks %></div><% } %>
     <div class="muted small">For forwarders: air chargeable ≈ <%= n0(t.chargeableAir) %> kg (volumetric <%= n0(t.volumetricAir) %> kg at 1:6000) · sea LCL W/M <%= t.wm %><%= t.missing.length ? ' · missing on some lines: ' + t.missing.join(', ') : '' %></div>
   </div>
   <% } %>

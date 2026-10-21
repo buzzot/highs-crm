@@ -180,8 +180,8 @@ export function renderPackingList(d) {
   y += 34;
 
   const notes = [];
-  if (info.marks) notes.push(['Shipping marks', info.marks]);
-  if (info.remarks) notes.push(['Notes', info.remarks]);
+  if (info.marks) notes.push(['Shipping marks:', info.marks]);
+  if (info.remarks) notes.push(['Notes:', info.remarks]);
   for (const [k, v] of notes) {
     for (const [i, l] of wrap(String(v), PW - 90, 9).entries()) { ensure(14); if (i === 0) pdf.text(k, PM, y, { size: 9, color: MUTED }); pdf.text(l, PM + 90, y, { size: 9 }); y += 12.5; }
   }
