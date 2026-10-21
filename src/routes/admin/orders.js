@@ -183,6 +183,7 @@ r.post('/:id/items', async (req, res) => {
     const { data: p } = await admin.from('products').select('name, hs_code').eq('id', b.product_id).single();
     b.description = p?.name; b.hs_code ||= p?.hs_code;
   }
+  if (!b.description) return back(res, `/admin/orders/${req.params.id}`, { err: 'Choose a product or type a description for the item.' });
   const { error } = await admin.from('order_items').insert({ ...b, order_id: req.params.id });
   if (!error) await recalc(req.params.id);
   back(res, `/admin/orders/${req.params.id}`, error ? { err: error.message } : { msg: 'Item added.' });

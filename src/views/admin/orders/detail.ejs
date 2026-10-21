@@ -273,7 +273,7 @@
         f('quantity').focus();
       } catch (e) { err(e.message); } finally { btn.disabled = false; }
     });
-    form.addEventListener('submit', () => { if (sel.value === '__new') sel.value = prev; });
+    form.addEventListener('submit', e => { if (sel.value === '__new') { e.preventDefault(); err('Fill in the new product and press "Add product" first, or choose another product.'); box.hidden = false; $('np_name').focus(); } });
   })();
 </script>
 <%- include('../../partials/foot') %>
