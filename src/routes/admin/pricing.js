@@ -7,7 +7,7 @@ import { sendEmail } from '../../lib/mailer.js';
 import { getCompany } from '../../lib/purchase.js';
 import { combineQuotes, dropReplaced, quotationPdf, LIVE } from '../../lib/combined-quote.js';
 import { modeOf } from '../../lib/freight-mode.js';
-import { okCurrency } from '../../lib/currency.js';
+import { okCurrency, clearDefaultCurrency } from '../../lib/currency.js';
 import { quoteSentEmail } from '../../lib/email-templates.js';
 import { requireAdmin } from '../../middleware/auth.js';
 import { cargoLine, cargoTotals, AIR_KG_PER_CBM } from '../../lib/cargo.js';
@@ -466,6 +466,7 @@ r.post('/settings', requireAdmin, async (req, res) => {
     { key: 'company', value: { name: String(req.body.co_name || '').trim() || 'Lumi Trade', email: String(req.body.co_email || '').trim(), phone: String(req.body.co_phone || '').trim(), website: String(req.body.co_website || '').trim(),
       address: String(req.body.co_address || '').trim(), bank: String(req.body.co_bank || '').trim(), payment_terms: String(req.body.co_payment_terms || '').trim(), default_currency: okCurrency(req.body.co_default_currency) }, updated_at: new Date().toISOString() },
   ]);
+  clearDefaultCurrency();
   back(res, '/admin/pricing/settings', { msg: 'Settings saved.' });
 });
 

@@ -23,17 +23,24 @@ export function clearSession(res, why) {
 }
 
 // Token check = one network round trip to Supabase Auth; a token that was accepted a moment ago is trusted for 60 s
-const verified = new Map();
-async function verifyToken(token) {
+const verified = new Map(); // token → { until, promise }  (the promise is shared by requests that arrive together, e.g. a page's 8 thumbnails)
+function verifyToken(token) {
   const hit = verified.get(token);
-  if (hit && hit.until > Date.now()) return { data: { user: hit.user }, error: null };
-  const res = await anon.auth.getUser(token);
-  if (res.data?.user && !res.error) {
-    if (verified.size > 500) for (const [k, v] of verified) if (v.until < Date.now()) verified.delete(k);
-    if (verified.size > 500) verified.clear();
-    verified.set(token, { user: res.data.user, until: Date.now() + 60e3 });
-  }
-  return res;
+  if (hit && hit.until > Date.now()) return hit.promise;
+  if (verified.size > 500) for (const [k, v] of verified) if (v.until < Date.now()) verified.delete(k);
+  if (verified.size > 500) verified.clear();
+  const promise = anon.auth.getUser(token).then(res => { if (!res.data?.user || res.error) verified.delete(token); return res; }, e => { verified.delete(token); throw e; });
+  verified.set(token, { until: Date.now() + 60e3, promise });
+  return promise;
+}
+
+// the signed-in person's profile: requests that arrive at the same moment share one lookup (nothing is kept afterwards, so changes show at once)
+const profileLoads = new Map();
+function loadProfile(id, run) {
+  if (profileLoads.has(id)) return profileLoads.get(id);
+  const p = run().finally(() => profileLoads.delete(id));
+  profileLoads.set(id, p);
+  return p;
 }
 
 /** Attach req.user (profile) and req.db (RLS-scoped client) when a valid session exists. */
@@ -59,15 +66,19 @@ export async function loadUser(req, res, next) {
     user = data.session.user;
   }
 
-  let { data: profile, error: pErr } = await admin.from('profiles')
-    .select('*, organizations!profiles_org_id_fkey(id, name, country, details_completed_at)').eq('id', user.id).single();
-  if (pErr && /details_completed_at|column/i.test(pErr.message || '')) {
-    // migration 0008 not applied yet: still let people in, skip the company-details gate
-    console.error(`[session] ${pErr.message} — run supabase/migrations/0008_company_details.sql`);
-    ({ data: profile, error: pErr } = await admin.from('profiles')
-      .select('*, organizations!profiles_org_id_fkey(id, name, country)').eq('id', user.id).single());
-    if (profile) profile.detailsGateOff = true;
-  }
+  let { data: profile, error: pErr } = await loadProfile(user.id, async () => {
+    let { data: profile, error: pErr } = await admin.from('profiles')
+      .select('*, organizations!profiles_org_id_fkey(id, name, country, details_completed_at)').eq('id', user.id).single();
+    if (pErr && /details_completed_at|column/i.test(pErr.message || '')) {
+      // migration 0008 not applied yet: still let people in, skip the company-details gate
+      console.error(`[session] ${pErr.message} — run supabase/migrations/0008_company_details.sql`);
+      ({ data: profile, error: pErr } = await admin.from('profiles')
+        .select('*, organizations!profiles_org_id_fkey(id, name, country)').eq('id', user.id).single());
+      if (profile) profile.detailsGateOff = true;
+    }
+    return { data: profile, error: pErr };
+  });
+  if (profile) profile = { ...profile }; // each request gets its own copy
   if (!profile || !profile.active) {
     const why = `${user.email}: profile ${profile ? 'inactive' : 'not found'}${pErr ? ` (${pErr.message})` : ''}`;
     console.error(`[session] ${why}`);

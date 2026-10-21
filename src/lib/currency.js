@@ -5,8 +5,13 @@ import { fxRate } from './util.js';
 export const CURRENCY_CHOICES = ['CNY', 'USD', 'EUR', 'GBP'];
 export const okCurrency = c => (CURRENCY_CHOICES.includes(c) ? c : 'CNY');
 
+// read on every admin page, changes only when the company settings are saved → kept for 30 s (and dropped on save)
+let curCache = { at: 0, value: 'CNY' };
+export const clearDefaultCurrency = () => { curCache = { at: 0, value: 'CNY' }; };
 export async function defaultCurrency(db) {
-  try { return okCurrency((await getCompany(db)).default_currency); } catch { return 'CNY'; }
+  if (Date.now() - curCache.at < 30e3) return curCache.value;
+  try { curCache = { at: Date.now(), value: okCurrency((await getCompany(db)).default_currency) }; } catch { return curCache.value; }
+  return curCache.value;
 }
 
 /** Sum amounts that are in different currencies in one currency: sumIn(settings, 'CNY', [[100, 'USD'], [50, 'CNY']]). */

@@ -75,10 +75,21 @@ r.post('/send', async (req, res) => {
     : { msg: `${docs.length} document${docs.length === 1 ? '' : 's'} sent to ${emails.join(', ')}.` });
 });
 
+// a document's file never changes, so its path and a signed link are remembered for 5 minutes — a page with many thumbnails
+// then costs one lookup per picture at most once, and the browser keeps the redirect for a few minutes too
+const linkCache = new Map();
 r.get('/:id/download', async (req, res) => {
-  const { data: doc } = await admin.from('documents').select('storage_path').eq('id', req.params.id).single();
-  if (!doc) return res.status(404).send('Not found');
-  res.redirect(await signedUrl(doc.storage_path));
+  const hit = linkCache.get(req.params.id);
+  let url = hit && hit.until > Date.now() ? hit.url : null;
+  if (!url) {
+    const { data: doc } = await admin.from('documents').select('storage_path').eq('id', req.params.id).single();
+    if (!doc) return res.status(404).send('Not found');
+    url = await signedUrl(doc.storage_path);
+    if (linkCache.size > 2000) linkCache.clear();
+    linkCache.set(req.params.id, { url, until: Date.now() + 300e3 });
+  }
+  res.set('Cache-Control', 'private, max-age=240');
+  res.redirect(url);
 });
 
 r.post('/:id/toggle', async (req, res) => {
@@ -89,6 +100,7 @@ r.post('/:id/toggle', async (req, res) => {
 
 r.post('/:id/delete', async (req, res) => {
   await deleteDocument(req.params.id);
+  linkCache.delete(req.params.id);
   back(res, safeBack(req.body.redirect), { msg: 'File deleted.' });
 });
 
