@@ -36,6 +36,7 @@ const safeUrl = url || 'http://localhost';
 
 /** Service-role client: bypasses RLS. Use only in admin routes and auth plumbing. */
 export const admin = createClient(safeUrl, serviceKey || 'x', opts);
+admin.isServiceClient = true; // lets shared caches tell it from a per-user client
 
 /** Anonymous client for sign-in flows. */
 export const anon = createClient(safeUrl, anonKey || 'x', opts);

@@ -20,7 +20,7 @@ export function requestTiming() {
     const st = { calls: 0, ms: 0 }, t0 = performance.now();
     res.on('finish', () => {
       const total = performance.now() - t0;
-      if (total >= SLOW_MS) console.log(`[slow] ${req.method} ${req.path} ${Math.round(total)} ms · ${st.calls} database calls took ${Math.round(st.ms)} ms (${st.calls ? Math.round(st.ms / st.calls) : 0} ms each) · status ${res.statusCode}`);
+      if (total >= SLOW_MS) console.log(`[slow] ${req.method} ${req.originalUrl.split("?")[0]} ${Math.round(total)} ms · ${st.calls} database calls took ${Math.round(st.ms)} ms (${st.calls ? Math.round(st.ms / st.calls) : 0} ms each) · status ${res.statusCode}`);
     });
     als.run(st, next);
   };

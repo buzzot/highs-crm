@@ -16,7 +16,17 @@ export const back = (res, url, { msg, err } = {}) => {
 
 export const notFound = (res, what = 'Record') => res.status(404).render('error', { title: 'Not found', message: `${what} not found.` });
 
+// read by ~20 pages, changed only on the pricing settings page → shared for 30 s (staff/admin client only) and dropped on save
+let settingsCache = null;
+export const clearSettingsCache = () => { settingsCache = null; };
 export async function getSettings(db) {
+  const shared = !!db.isServiceClient;
+  if (shared && settingsCache && Date.now() - settingsCache.at < 30e3) return settingsCache.value;
+  const value = await readSettings(db);
+  if (shared) settingsCache = { at: Date.now(), value };
+  return value;
+}
+async function readSettings(db) {
   const { data } = await db.from('settings').select('key, value');
   const s = Object.fromEntries((data || []).map(r => [r.key, r.value]));
   return {

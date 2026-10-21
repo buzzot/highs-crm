@@ -375,6 +375,35 @@ r.post('/shipments/:id/costs', async (req, res) => {
   const { error } = await admin.from('freight_costs').insert(b);
   back(res, `/admin/logistics/shipments/${req.params.id}#costs`, error ? { err: error.message } : { msg: 'Cost added.' });
 });
+// edit a cost line (typo, revised forwarder invoice, currency / FX, paid state); every change is written to the order's history
+r.post('/costs/:cid/edit', async (req, res) => {
+  const { data: c } = await admin.from('freight_costs').select('*, shipments(order_id)').eq('id', req.params.cid).single();
+  if (!c) return notFound(res, 'Cost');
+  const to = `/admin/logistics/shipments/${c.shipment_id}#costs`;
+  const amount = Number(String(req.body.amount ?? '').replace(',', '.'));
+  const fx = Number(String(req.body.fx_to_order ?? '1').replace(',', '.')) || 1;
+  if (!Number.isFinite(amount) || amount < 0 || fx <= 0) return back(res, to, { err: 'Enter a valid amount and exchange rate.' });
+  const today = new Date().toISOString().slice(0, 10);
+  const paid = bool(req.body.paid);
+  const patch = {
+    type: FREIGHT_TYPES.includes(req.body.type) ? req.body.type : c.type,
+    description: String(req.body.description || '').trim().slice(0, 300) || null,
+    invoice_ref: String(req.body.invoice_ref || '').trim().slice(0, 100) || null,
+    amount, currency: CURRENCIES.includes(req.body.currency) ? req.body.currency : c.currency, fx_to_order: fx,
+    paid, paid_at: paid ? (/^\d{4}-\d{2}-\d{2}$/.test(req.body.paid_at || '') ? req.body.paid_at : c.paid_at || today) : null,
+  };
+  const { error } = await admin.from('freight_costs').update(patch).eq('id', c.id); // the database trigger refreshes the order's freight total
+  if (error) return back(res, to, { err: error.message });
+  const changes = [];
+  if (Number(c.amount) !== amount || c.currency !== patch.currency) changes.push(`amount ${c.currency} ${Number(c.amount)} → ${patch.currency} ${amount}`);
+  if (Number(c.fx_to_order) !== fx) changes.push(`FX ${Number(c.fx_to_order)} → ${fx}`);
+  if (c.type !== patch.type) changes.push(`type ${c.type} → ${patch.type}`);
+  if ((c.invoice_ref || null) !== patch.invoice_ref) changes.push(`invoice ref ${c.invoice_ref || '—'} → ${patch.invoice_ref || '—'}`);
+  if ((c.description || null) !== patch.description) changes.push('description changed');
+  if (!!c.paid !== paid) changes.push(paid ? 'marked paid' : 'marked unpaid');
+  if (c.shipments?.order_id && changes.length) await log({ entityType: 'order', entityId: c.shipments.order_id, action: 'freight_cost_edited', actorId: req.user.id, clientVisible: false, detail: { note: `${fmt.status(c.type)}: ${changes.join('; ')}` } });
+  back(res, to, { msg: changes.length ? 'Cost updated.' : 'No changes.' });
+});
 r.post('/costs/:cid/paid', async (req, res) => {
   const { data: c } = await admin.from('freight_costs').select('shipment_id, paid').eq('id', req.params.cid).single();
   if (!c) return notFound(res, 'Cost');

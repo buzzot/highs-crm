@@ -89,6 +89,11 @@ app.get('/health/db', async (req, res) => {
     return { type: 'unrecognised', length: v.length, starts_with: v.slice(0, 4) + '…' };
   };
   const { data, error } = await admin.from('profiles').select('id').limit(5);
+  // how long does one trivial database call take from this server? (network + Supabase itself, no app logic)
+  const time = async fn => { const t = performance.now(); await fn(); return Math.round(performance.now() - t); };
+  const one = () => admin.from('profiles').select('id').limit(1);
+  const sequential = []; for (let i = 0; i < 5; i++) sequential.push(await time(one));
+  const parallel5 = await time(() => Promise.all([one(), one(), one(), one(), one()]));
   const urlRef = (tidy(process.env.SUPABASE_URL).match(/https?:\/\/([a-z0-9]+)\.supabase\.co/i) || [])[1] || null;
   res.json({
     url_project_ref: urlRef,
@@ -97,6 +102,7 @@ app.get('/health/db', async (req, res) => {
     profiles_readable: !error, profiles_found: data ? data.length : null,
     error: error ? [error.code, error.message, error.hint].filter(Boolean).join(' · ') || JSON.stringify(error) : null,
     app_url: process.env.APP_URL || null,
+    latency_ms: { one_call_each_of_5_in_a_row: sequential, five_calls_at_once_total: parallel5, railway_region: process.env.RAILWAY_REPLICA_REGION || process.env.RAILWAY_REGION || null },
   });
 });
 app.use('/hooks', hookRoutes);

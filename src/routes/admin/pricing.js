@@ -12,7 +12,7 @@ import { quoteSentEmail } from '../../lib/email-templates.js';
 import { requireAdmin } from '../../middleware/auth.js';
 import { cargoLine, cargoTotals, AIR_KG_PER_CBM } from '../../lib/cargo.js';
 import { CONTAINER_DEFAULTS } from '../../lib/product-metrics.js';
-import { clean, bool, back, notFound, getSettings, fxRate, INCOTERMS, CURRENCIES } from '../../lib/util.js';
+import { clean, bool, back, notFound, getSettings, clearSettingsCache, fxRate, INCOTERMS, CURRENCIES } from '../../lib/util.js';
 
 const r = Router();
 const QUOTE_FIELDS = ['request_id', 'request_item_id', 'product_id', 'supplier_id', 'quantity', 'unit_cost', 'cost_currency', 'fx_rate', 'margin_pct', 'sell_currency',
@@ -466,7 +466,7 @@ r.post('/settings', requireAdmin, async (req, res) => {
     { key: 'company', value: { name: String(req.body.co_name || '').trim() || 'Lumi Trade', email: String(req.body.co_email || '').trim(), phone: String(req.body.co_phone || '').trim(), website: String(req.body.co_website || '').trim(),
       address: String(req.body.co_address || '').trim(), bank: String(req.body.co_bank || '').trim(), payment_terms: String(req.body.co_payment_terms || '').trim(), default_currency: okCurrency(req.body.co_default_currency) }, updated_at: new Date().toISOString() },
   ]);
-  clearDefaultCurrency();
+  clearDefaultCurrency(); clearSettingsCache();
   back(res, '/admin/pricing/settings', { msg: 'Settings saved.' });
 });
 

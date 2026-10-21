@@ -96,8 +96,25 @@
             <td class="right nowrap"><strong><%= fmt.money(Number(c.amount) * Number(c.fx_to_order || 1), cur) %></strong></td>
             <td class="small"><%= c.invoice_ref || '' %></td>
             <td><form method="post" action="/admin/logistics/costs/<%= c.id %>/paid" class="inline"><button class="link small <%= c.paid ? 'ok' : 'bad' %>"><%= c.paid ? '✓ ' + fmt.date(c.paid_at) : 'unpaid' %></button></form></td>
-            <td class="right"><form method="post" action="/admin/logistics/costs/<%= c.id %>/delete" class="inline" onsubmit="return confirm('Delete this cost?')"><button class="link small danger" title="Delete">×</button></form></td>
+            <td class="right nowrap"><button type="button" class="link small" title="Edit this cost" onclick="var r=this.closest('tr').nextElementSibling; r.hidden=!r.hidden">✎</button> <form method="post" action="/admin/logistics/costs/<%= c.id %>/delete" class="inline" onsubmit="return confirm('Delete this cost?')"><button class="link small danger" title="Delete">×</button></form></td>
           </tr>
+          <tr class="editrow" hidden><td colspan="8">
+            <form method="post" action="/admin/logistics/costs/<%= c.id %>/edit" class="sub">
+              <div class="row">
+                <label>Type <select name="type"><% freightTypes.forEach(t => { %><option value="<%= t %>" <%= t === c.type ? 'selected' : '' %>><%= fmt.status(t) %></option><% }) %></select></label>
+                <label class="grow2">Description <input name="description" value="<%= c.description || '' %>"></label>
+                <label>Invoice ref <input name="invoice_ref" value="<%= c.invoice_ref || '' %>"></label>
+              </div>
+              <div class="row">
+                <label>Amount <input type="number" step="0.01" name="amount" value="<%= Number(c.amount) %>" required></label>
+                <label>Currency <select name="currency" onchange="var o=this.selectedOptions[0]; if (o.dataset.fx) this.form.fx_to_order.value = o.dataset.fx"><% currencies.forEach(k => { %><option value="<%= k %>" data-fx="<%= defaultFx(k) %>" <%= k === c.currency ? 'selected' : '' %>><%= k %></option><% }) %></select></label>
+                <label>FX → <%= cur %> <input type="number" step="0.000001" name="fx_to_order" value="<%= Number(c.fx_to_order || 1) %>"></label>
+                <label class="check"><input type="checkbox" name="paid" <%= c.paid ? 'checked' : '' %>> paid</label>
+                <label>Paid on <input type="date" name="paid_at" value="<%= c.paid_at ? String(c.paid_at).slice(0, 10) : '' %>"></label>
+              </div>
+              <div class="row between"><button type="button" class="btn" onclick="this.closest('tr').hidden = true">Cancel</button><button class="btn primary">Save changes</button></div>
+            </form>
+          </td></tr>
         <% }) %>
         <% if (costs.length) { %><tr class="total"><td colspan="4">Total this shipment</td><td class="right nowrap"><%= fmt.money(totalCost, cur) %></td><td colspan="3"></td></tr><% } %>
         </tbody>
