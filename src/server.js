@@ -4,6 +4,8 @@ import cookieParser from 'cookie-parser';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadUser } from './middleware/auth.js';
+import { compress, staticGzip } from './lib/compress.js';
+import { requestTiming } from './lib/perf.js';
 import authRoutes from './routes/auth.js';
 import portalRoutes from './routes/portal.js';
 import supplierRoutes from './routes/supplier.js';
@@ -27,10 +29,28 @@ const formParser = express.urlencoded({ extended: true, parameterLimit: 50000, l
 const jsonParser = express.json();
 app.use((req, res, next) => (req.path.startsWith('/hooks/') ? next() : formParser(req, res, next)));
 app.use((req, res, next) => (req.path.startsWith('/hooks/') ? next() : jsonParser(req, res, next)));
+app.use(requestTiming());
+app.use(compress());
 app.use(cookieParser());
-app.use(express.static(path.join(__dirname, '..', 'public')));
+const PUBLIC = path.join(__dirname, '..', 'public');
+app.use(staticGzip(PUBLIC));
+app.use(express.static(PUBLIC, { maxAge: '10m' }));
 // the quote calculator in the browser uses the exact same pricing module as the server
 app.get('/js/pricing.js', (req, res) => res.type('application/javascript').sendFile(path.join(__dirname, 'lib', 'pricing.js')));
+// counts behind the red balls in the menu: four queries run together and are reused for 20 s
+let navCache = { at: 0, value: { sourcing: 0, orders: 0, purchasing: 0 }, pending: null };
+async function navPending() {
+  if (Date.now() - navCache.at < 20e3) return navCache.value;
+  navCache.pending ||= (async () => {
+    const n = async q => { try { return (await q).count || 0; } catch { return 0; } }; // a table missing before its migration counts as 0
+    const head = (table, status) => admin.from(table).select('id', { count: 'exact', head: true }).eq('status', status);
+    const [rev, po, pay, spo] = await Promise.all([n(head('request_revisions', 'pending')), n(head('purchase_orders', 'submitted')), n(head('order_payments', 'submitted')), n(head('supplier_pos', 'replied'))]);
+    navCache = { at: Date.now(), value: { sourcing: rev + po, orders: pay, purchasing: spo }, pending: null };
+    return navCache.value;
+  })().finally(() => { navCache.pending = null; });
+  return navCache.pending;
+}
+
 app.use((req, res, next) => {
   Object.assign(res.locals, { fmt, icon, showValue, deliveryLabel, path: req.path, query: req.query, msg: req.query.msg, err: req.query.err });
   next();
@@ -39,16 +59,9 @@ app.use(loadUser);
 // AI calls made while handling this request are attributed to the signed-in person; views get aiLine(usage)
 app.use(async (req, res, next) => {
   if (req.user && ['admin', 'staff'].includes(req.user.role)) {
-    const prices = await getPrices();
+    const [prices, nav] = await Promise.all([getPrices(), navPending()]);
     res.locals.aiLine = u => usageLine(u, prices);
-    // red ball on the Sourcing menu: client change requests waiting for approval
-    try {
-      const { count } = await admin.from('request_revisions').select('id', { count: 'exact', head: true }).eq('status', 'pending');
-      const { count: poCount } = await admin.from('purchase_orders').select('id', { count: 'exact', head: true }).eq('status', 'submitted');
-      const { count: payCount } = await admin.from('order_payments').select('id', { count: 'exact', head: true }).eq('status', 'submitted');
-      const { count: spoCount } = await admin.from('supplier_pos').select('id', { count: 'exact', head: true }).eq('status', 'replied'); // table missing before migration 0021 → count stays 0
-      res.locals.navPending = { sourcing: (count || 0) + (poCount || 0), orders: payCount || 0, purchasing: spoCount || 0 };
-    } catch { res.locals.navPending = { sourcing: 0, orders: 0, purchasing: 0 }; }
+    res.locals.navPending = nav; // red balls on the menu
   } else res.locals.aiLine = () => '';
   aiContext.run({ userId: req.user?.id || null, orgId: req.user?.org_id || null, supplierId: req.user?.supplier_id || null }, next);
 });

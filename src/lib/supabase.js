@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { countingFetch } from './perf.js';
 
 // Tidy up values pasted into hosting dashboards: stray quotes/spaces, missing https://,
 // a bare project ref ("abcd1234") or a dashboard link instead of the API URL.
@@ -30,7 +31,7 @@ if (url && !/^https?:\/\/[^\s/]+\.[^\s/]+/i.test(url)) {
 }
 if (url) console.log(`[config] Supabase: ${url}`);
 
-const opts = { auth: { autoRefreshToken: false, persistSession: false } };
+const opts = { auth: { autoRefreshToken: false, persistSession: false }, global: { fetch: countingFetch } };
 const safeUrl = url || 'http://localhost';
 
 /** Service-role client: bypasses RLS. Use only in admin routes and auth plumbing. */
@@ -41,5 +42,5 @@ export const anon = createClient(safeUrl, anonKey || 'x', opts);
 
 /** Per-request client acting as the signed-in user (RLS applies). */
 export function asUser(accessToken) {
-  return createClient(safeUrl, anonKey || 'x', { ...opts, global: { headers: { Authorization: `Bearer ${accessToken}` } } });
+  return createClient(safeUrl, anonKey || 'x', { ...opts, global: { ...opts.global, headers: { Authorization: `Bearer ${accessToken}` } } });
 }

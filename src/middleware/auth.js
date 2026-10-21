@@ -22,6 +22,20 @@ export function clearSession(res, why) {
   if (why) res.cookie('hb_why', why.slice(0, 300), { httpOnly: true, sameSite: 'lax', secure, maxAge: 5 * 60e3 });
 }
 
+// Token check = one network round trip to Supabase Auth; a token that was accepted a moment ago is trusted for 60 s
+const verified = new Map();
+async function verifyToken(token) {
+  const hit = verified.get(token);
+  if (hit && hit.until > Date.now()) return { data: { user: hit.user }, error: null };
+  const res = await anon.auth.getUser(token);
+  if (res.data?.user && !res.error) {
+    if (verified.size > 500) for (const [k, v] of verified) if (v.until < Date.now()) verified.delete(k);
+    if (verified.size > 500) verified.clear();
+    verified.set(token, { user: res.data.user, until: Date.now() + 60e3 });
+  }
+  return res;
+}
+
 /** Attach req.user (profile) and req.db (RLS-scoped client) when a valid session exists. */
 export async function loadUser(req, res, next) {
   req.user = null;
@@ -31,7 +45,7 @@ export async function loadUser(req, res, next) {
   let tokens;
   try { tokens = JSON.parse(raw); } catch { console.error('[session] unreadable cookie'); clearSession(res); return next(); }
 
-  let { data: { user }, error } = await anon.auth.getUser(tokens.a);
+  let { data: { user }, error } = await verifyToken(tokens.a);
   if (error || !user) {
     // try refresh
     const { data, error: rErr } = await anon.auth.refreshSession({ refresh_token: tokens.r });
