@@ -5,7 +5,7 @@
   <p class="muted">Most orders are created from an accepted quote on the Sourcing page. Use this for repeat orders or deals agreed offline — add items on the next screen.</p>
   <form method="post" action="/admin/orders">
     <div class="row">
-      <label class="grow2">Client <select name="org_id" required><option value="">—</option><% clients.forEach(c => { %><option value="<%= c.id %>" <%= org === c.id ? 'selected' : '' %>><%= c.name %></option><% }) %><option value="__new">+ Add new client…</option></select></label>
+      <label class="grow2">Client <select data-picker name="org_id" required><option value="">—</option><% clients.forEach(c => { %><option value="<%= c.id %>" <%= org === c.id ? 'selected' : '' %>><%= c.name %></option><% }) %><option value="__new">+ Add new client…</option></select></label>
       <label>Currency <select name="currency"><% currencies.forEach(c => { %><option <%= c === defCur ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
     </div>
     <div class="newsup" id="newClient" hidden>
@@ -24,7 +24,7 @@
       <div class="actions"><button type="button" class="btn small primary" id="nc_save">Add client</button><button type="button" class="btn small" id="nc_cancel">Cancel</button></div>
     </div>
     <div class="row">
-      <label class="grow2">Supplier <select name="supplier_id" id="o_sup"><option value="">—</option><% suppliers.forEach(s => { %><option value="<%= s.id %>"><%= s.name %></option><% }) %><option value="__new">+ Add new supplier…</option></select></label>
+      <label class="grow2">Supplier <select data-picker name="supplier_id" id="o_sup"><option value="">—</option><% suppliers.forEach(s => { %><option value="<%= s.id %>"><%= s.name %></option><% }) %><option value="__new">+ Add new supplier…</option></select></label>
       <label>Expected ship date <input type="date" name="expected_ship_date"></label>
     </div>
     <div class="newsup" id="newSup" hidden>

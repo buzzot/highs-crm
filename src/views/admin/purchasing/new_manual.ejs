@@ -7,7 +7,7 @@
     <h2>Supplier</h2>
     <div class="row">
       <label class="grow2">Supplier
-        <select name="supplier_id" id="m_sup" required><option value="">— choose —</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= s.id === supplier_id ? 'selected' : '' %>><%= s.name %></option><% }) %><option value="__new">+ Add new supplier…</option></select></label>
+        <select data-picker name="supplier_id" id="m_sup" required><option value="">— choose —</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= s.id === supplier_id ? 'selected' : '' %>><%= s.name %></option><% }) %><option value="__new">+ Add new supplier…</option></select></label>
       <label class="grow2">Label <span class="muted small">optional, for us — e.g. “Stock for November”</span><input name="title" maxlength="200"></label>
     </div>
     <div class="newsup" id="newSup" hidden>

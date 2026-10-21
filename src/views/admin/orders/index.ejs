@@ -12,7 +12,7 @@
   <form class="row tight" method="get">
     <input type="hidden" name="status" value="<%= status %>">
     <input name="q" value="<%= query.q || '' %>" placeholder="Order no, client, supplier…">
-    <select name="client"><option value="">All clients</option><% clients.forEach(c => { %><option value="<%= c.id %>" <%= query.client === c.id ? 'selected' : '' %>><%= c.name %></option><% }) %></select>
+    <select data-picker="Client" name="client"><option value="">All clients</option><% clients.forEach(c => { %><option value="<%= c.id %>" <%= query.client === c.id ? 'selected' : '' %>><%= c.name %></option><% }) %></select>
     <button class="btn">Filter</button>
   </form>
   <table class="tbl">

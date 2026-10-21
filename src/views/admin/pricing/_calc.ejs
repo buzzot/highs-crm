@@ -26,7 +26,7 @@
         <select name="request_item_id" id="f_item"><option value="">— whole request —</option><% selItems.forEach(i => { %><option value="<%= i.id %>" <%= q.request_item_id === i.id ? 'selected' : '' %>><%= i.name %><%= i.quantity ? ' · ' + i.quantity + ' ' + (i.unit || 'pcs') : '' %></option><% }) %></select></label>
       <div class="row">
         <label class="grow2">Product <select name="product_id" id="f_product"><option value="">— custom —</option><option value="__new__">＋ New product…</option><% products.forEach(p => { %><option value="<%= p.id %>" <%= q.product_id === p.id ? 'selected' : '' %>><%= p.name %><%= p.sku ? ' · ' + p.sku : '' %></option><% }) %></select></label>
-        <label class="grow2">Supplier <span class="muted small" id="f_supplier_note" hidden>from the product</span><select name="supplier_id" id="f_supplier"><option value="">—</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" data-lead="<%= s.lead_time_days || '' %>" <%= q.supplier_id === s.id ? 'selected' : '' %>><%= s.name %></option><% }) %></select></label>
+        <label class="grow2">Supplier <span class="muted small" id="f_supplier_note" hidden>from the product</span><select data-picker name="supplier_id" id="f_supplier"><option value="">—</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" data-lead="<%= s.lead_time_days || '' %>" <%= q.supplier_id === s.id ? 'selected' : '' %>><%= s.name %></option><% }) %></select></label>
       </div>
       <h3>Product cost</h3>
       <div class="row">

@@ -50,7 +50,7 @@
       <textarea name="spec" rows="4" placeholder="Material: 304 stainless steel&#10;Capacity: 500 ml&#10;Colour: matte black"><%= specText || '' %></textarea></label>
     <h3>Supply</h3>
     <div class="row">
-      <label class="grow2">Supplier <select name="supplier_id"><option value="">—</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= p.supplier_id === s.id ? 'selected' : '' %>><%= s.name %></option><% }) %><option value="__new">+ Add new supplier…</option></select></label>
+      <label class="grow2">Supplier <select data-picker name="supplier_id"><option value="">—</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= p.supplier_id === s.id ? 'selected' : '' %>><%= s.name %></option><% }) %><option value="__new">+ Add new supplier…</option></select></label>
       <label>Unit cost <input type="number" step="0.0001" name="unit_cost" value="<%= p.unit_cost ?? '' %>"></label>
       <label>Currency <select name="cost_currency"><% ['CNY','USD','EUR'].forEach(c => { %><option <%= (p.cost_currency || 'CNY') === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
       <label>MOQ <input type="number" name="moq" value="<%= p.moq ?? '' %>"></label>

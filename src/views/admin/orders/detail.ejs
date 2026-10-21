@@ -236,7 +236,7 @@
       <h2>Order details</h2>
       <form method="post" action="/admin/orders/<%= order.id %>">
         <div class="row">
-          <label class="grow2">Supplier <select name="supplier_id"><option value="">—</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= order.supplier_id === s.id ? 'selected' : '' %>><%= s.name %></option><% }) %></select></label>
+          <label class="grow2">Supplier <select data-picker name="supplier_id"><option value="">—</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= order.supplier_id === s.id ? 'selected' : '' %>><%= s.name %></option><% }) %></select></label>
           <label>Expected ship <input type="date" name="expected_ship_date" value="<%= order.expected_ship_date || '' %>"></label>
         </div>
         <label>Note for client <span class="muted small">— shown in their portal</span><textarea name="client_notes" rows="2"><%= order.client_notes || '' %></textarea></label>

@@ -1213,3 +1213,33 @@ dialog.pickdlg[open] { display: flex; flex-direction: column; }
 /* printable documents (PI …): shown as an A4 portrait sheet on screen too */
 .docprint { max-width: 210mm; margin: 0 auto 24px; padding: 14mm 14mm 16mm; }
 @media print { .docprint { max-width: none; margin: 0; padding: 0 !important; } }
+
+/* picker window (select[data-picker]) */
+label:has(> .picker-native) { position: relative; }
+.picker-native { position: absolute; left: 20px; bottom: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; margin: 0; padding: 0; border: 0; }
+.picker-btn { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; margin-top: 4px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; background: #fff; color: var(--ink); font: 14px var(--font); text-align: left; cursor: pointer; }
+.picker-btn:hover { border-color: #b8c2cf; }
+.picker-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.picker-btn:disabled { background: #f4f6f8; color: var(--muted); cursor: not-allowed; }
+.picker-btn .pb-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-btn .pb-text.ph { color: var(--muted); }
+.picker-btn .pb-chev { color: var(--muted); font-size: 16px; line-height: 1; transform: translateY(-2px); }
+.pickdlg { border: 0; border-radius: 16px; padding: 0; width: min(440px, 92vw); max-height: min(560px, 80vh); box-shadow: 0 24px 70px rgba(15, 23, 42, .35); overflow: hidden; flex-direction: column; }
+.pickdlg[open] { display: flex; }
+.pickdlg::backdrop { background: rgba(15, 23, 42, .45); }
+.pickdlg .pk-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 18px 6px; font-size: 15px; }
+.pickdlg .pk-x { border: 0; background: none; font-size: 22px; line-height: 1; color: var(--muted); cursor: pointer; padding: 0 4px; }
+.pickdlg .pk-search { margin: 8px 14px 6px; width: auto; padding: 10px 12px; border-radius: 10px; }
+.pickdlg .pk-list { list-style: none; margin: 0; padding: 6px 8px 10px; overflow-y: auto; flex: 1; }
+.pickdlg li { display: flex; align-items: center; gap: 12px; padding: 9px 10px; border-radius: 10px; cursor: pointer; font-size: 14px; }
+.pickdlg li.on, .pickdlg li:hover { background: #f1f5f9; }
+.pickdlg li.sel .pk-name { font-weight: 600; }
+.pickdlg .pk-av { width: 32px; height: 32px; border-radius: 50%; background: #e6eef6; color: #1f4a6e; display: grid; place-items: center; font-size: 12px; font-weight: 700; flex: none; }
+.pickdlg li.none .pk-av { background: #f1f3f6; color: var(--muted); }
+.pickdlg .pk-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pickdlg .pk-check { color: var(--accent); font-weight: 700; visibility: hidden; }
+.pickdlg li.sel .pk-check { visibility: visible; }
+.pickdlg li.new { margin-top: 6px; border-top: 1px solid var(--line-2); border-radius: 0 0 10px 10px; padding-top: 12px; color: var(--accent); font-weight: 600; }
+.pickdlg .pk-plus { width: 32px; height: 32px; border-radius: 50%; border: 1.5px dashed var(--accent); display: grid; place-items: center; font-size: 18px; flex: none; }
+.pickdlg li.empty { cursor: default; color: var(--muted); justify-content: center; }
+.pickdlg li.empty:hover { background: none; }
