@@ -123,7 +123,7 @@ document.querySelectorAll('time.localtime').forEach(function (t) { var d = new D
     });
     list.addEventListener('click', e => { const li = e.target.closest('li[data-v]'); if (li) choose(li.dataset.v); });
   }
-  const move = d => { if (!items.length) return; active = (active + d + items.length) % items.length; items.forEach((li, i) => li.classList.toggle('on', i === active)); items[active].scrollIntoView({ block: 'nearest' }); };
+  const move = d => { if (!items.length) return; active = active < 0 ? (d > 0 ? 0 : items.length - 1) : (active + d + items.length) % items.length; items.forEach((li, i) => li.classList.toggle('on', i === active)); items[active].scrollIntoView({ block: 'nearest' }); };
   function choose(v) {
     const { sel, btn } = current;
     sel.value = v; sel.dispatchEvent(new Event('change', { bubbles: true }));
@@ -146,7 +146,7 @@ document.querySelectorAll('time.localtime').forEach(function (t) { var d = new D
     opts.filter(o => o.value !== '' && !o.value.startsWith('__') && (!needle || o.text.toLowerCase().includes(needle))).forEach(o => add(o, 'opt'));
     opts.filter(o => o.value.startsWith('__') && !o.disabled).forEach(o => add(o, 'new'));
     if (!items.some(li => li.classList.contains('opt'))) { const e = document.createElement('li'); e.className = 'empty'; e.textContent = 'Nothing found'; list.insertBefore(e, list.firstChild); }
-    active = Math.max(0, items.findIndex(li => li.classList.contains('sel'))); if (needle) active = Math.max(0, items.findIndex(li => li.classList.contains('opt')));
+    active = items.findIndex(li => li.classList.contains('sel')); if (needle) active = Math.max(0, items.findIndex(li => li.classList.contains('opt')));
     items.forEach((li, i) => li.classList.toggle('on', i === active));
     search.hidden = opts.length < 8;
   }
@@ -155,7 +155,7 @@ document.querySelectorAll('time.localtime').forEach(function (t) { var d = new D
     current = { sel, btn }; titleEl.textContent = title; search.value = '';
     render(); dlg.showModal();
     (search.hidden ? list : search).focus();
-    items[active]?.scrollIntoView({ block: 'center' });
+    if (active >= 0) items[active]?.scrollIntoView({ block: 'center' });
   }
 
   sels.forEach(sel => {
