@@ -1,15 +1,16 @@
 <%- include('../../partials/head') %>
 <div class="pagehead">
   <h1>Sourcing</h1>
-  <a class="btn" href="/admin/sourcing?status=<%= status %>&mine=1">Assigned to me</a>
+  <% const mine = !!query.mine, mq = mine ? '&mine=1' : ''; %>
+  <a class="btn<%= mine ? ' primary' : '' %>" href="/admin/sourcing?status=<%= status %><%= mine ? '' : '&mine=1' %>" title="<%= mine ? 'Showing only requests assigned to you — click to show all' : 'Show only requests assigned to you' %>"><%= mine ? '✓ Assigned to me' : 'Assigned to me' %></a>
 </div>
 <div class="tabs">
-  <a href="/admin/sourcing?status=open" class="<%= status === 'open' ? 'on' : '' %>">Open <span><%= (byStatus.new||0)+(byStatus.reviewing||0)+(byStatus.quoted||0) %></span></a>
-  <% statuses.filter(s => (byStatus[s] || 0) > 0 || status === s).forEach(s => { %><a href="/admin/sourcing?status=<%= s %>" class="<%= status === s ? 'on' : '' %>"><%= fmt.status(s) %> <span><%= byStatus[s] || 0 %></span></a><% }) %>
-  <a href="/admin/sourcing?status=all" class="<%= status === 'all' ? 'on' : '' %>">All</a>
+  <a href="/admin/sourcing?status=open<%= mq %>" class="<%= status === 'open' ? 'on' : '' %>">Open <span><%= (byStatus.new||0)+(byStatus.reviewing||0)+(byStatus.quoted||0) %></span></a>
+  <% statuses.filter(s => (byStatus[s] || 0) > 0 || status === s).forEach(s => { %><a href="/admin/sourcing?status=<%= s %><%= mq %>" class="<%= status === s ? 'on' : '' %>"><%= fmt.status(s) %> <span><%= byStatus[s] || 0 %></span></a><% }) %>
+  <a href="/admin/sourcing?status=all<%= mq %>" class="<%= status === 'all' ? 'on' : '' %>">All</a>
 </div>
 <div class="card">
-  <form class="row tight" method="get"><input type="hidden" name="status" value="<%= status %>"><input name="q" value="<%= query.q || '' %>" placeholder="Search title or ref…"><button class="btn">Search</button></form>
+  <form class="row tight" method="get"><input type="hidden" name="status" value="<%= status %>"><% if (mine) { %><input type="hidden" name="mine" value="1"><% } %><input name="q" value="<%= query.q || '' %>" placeholder="Search title or ref…"><button class="btn">Search</button></form>
   <table class="tbl">
     <thead><tr><th>Ref</th><th>Request</th><th>Client</th><th>Qty</th><th>Target</th><th>Needed by</th><th>Quotes</th><th>Owner</th><th>Status</th></tr></thead>
     <tbody>
