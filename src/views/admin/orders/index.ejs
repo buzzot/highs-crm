@@ -5,7 +5,7 @@
 </div>
 <div class="tabs">
   <a href="/admin/orders?status=open" class="<%= status === 'open' ? 'on' : '' %>">Open</a>
-  <% statuses.forEach(s => { %><a href="/admin/orders?status=<%= s %>" class="<%= status === s ? 'on' : '' %>"><%= fmt.status(s) %> <span><%= byStatus[s] || 0 %></span></a><% }) %>
+  <% statuses.filter(s => (byStatus[s] || 0) > 0 || status === s).forEach(s => { %><a href="/admin/orders?status=<%= s %>" class="<%= status === s ? 'on' : '' %>"><%= fmt.status(s) %> <span><%= byStatus[s] || 0 %></span></a><% }) %>
   <a href="/admin/orders?status=all" class="<%= status === 'all' ? 'on' : '' %>">All</a>
 </div>
 <div class="card">
