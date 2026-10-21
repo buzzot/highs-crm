@@ -5,7 +5,7 @@
   <% if (error) { %><div class="alert err"><%= error %></div><% } %>
   <form method="post" action="<%= s.id ? '/admin/logistics/shipments/' + s.id : '/admin/logistics/shipments' %>">
     <div class="row">
-      <label class="grow2">Order (shipped with this shipment) <select name="order_id" required><option value="">—</option><% orders.forEach(o => { %><option value="<%= o.id %>" <%= s.order_id === o.id ? 'selected' : '' %>><%= o.order_no %> · <%= o.organizations?.name %><%= o.part ? ' · ' + o.part + ' shipment' + (o.part > 1 ? 's' : '') + ' so far' : '' %></option><% }) %></select></label>
+      <label class="grow2">Order (shipped with this shipment) <select data-picker="Order" name="order_id" required><option value="">—</option><% orders.forEach(o => { %><option value="<%= o.id %>" <%= s.order_id === o.id ? 'selected' : '' %>><%= o.order_no %> · <%= o.organizations?.name %><%= o.part ? ' · ' + o.part + ' shipment' + (o.part > 1 ? 's' : '') + ' so far' : '' %></option><% }) %></select></label>
       <label class="grow2">Forwarder <select name="forwarder_id"><option value="">—</option><% forwarders.forEach(f => { %><option value="<%= f.id %>" <%= s.forwarder_id === f.id ? 'selected' : '' %>><%= f.name %></option><% }) %></select></label>
     </div>
     <label class="check"><input type="checkbox" name="partial" <%= s.partial === true || s.partial === 'on' ? 'checked' : '' %>> Partial shipment — only part of the order goes on this one; the rest follows on another shipment (order stays open)</label>

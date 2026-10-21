@@ -18,7 +18,7 @@
             <input type="hidden" name="line[<%= i %>][sku]" value="<%= x.sku %>"><input type="hidden" name="line[<%= i %>][unit]" value="<%= x.unit %>"></td>
           <td><input name="line[<%= i %>][description]" value="<%= x.description %>"><% if (x.sku) { %><div class="muted small"><%= x.sku %></div><% } %></td>
           <td class="right"><input type="number" min="1" name="line[<%= i %>][quantity]" value="<%= x.quantity %>"></td>
-          <td><select name="line[<%= i %>][supplier_id]"><option value="">— choose —</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= s.id === x.supplier_id ? 'selected' : '' %>><%= s.name %></option><% }) %></select></td>
+          <td><select data-picker="Supplier" name="line[<%= i %>][supplier_id]"><option value="">— choose —</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= s.id === x.supplier_id ? 'selected' : '' %>><%= s.name %></option><% }) %></select></td>
           <td class="right"><input type="number" step="0.0001" min="0" name="line[<%= i %>][unit_price]" value="<%= x.unit_price %>"></td>
           <td><select name="line[<%= i %>][currency]"><% currencies.forEach(c => { %><option <%= c === x.currency ? 'selected' : '' %>><%= c %></option><% }) %></select></td>
         </tr>

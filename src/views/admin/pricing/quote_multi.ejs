@@ -9,7 +9,7 @@
       <label class="grow2">Client <span class="muted small">a new internal request (IRQ-…) is created</span>
         <select data-picker name="org_id" id="m_org"><option value="">— choose a client —</option><% orgs.forEach(o => { %><option value="<%= o.id %>"><%= o.name %></option><% }) %></select></label>
       <label class="grow2">…or add to an existing request
-        <select name="request_id" id="m_req"><option value="">— new internal request —</option><% requests.forEach(r => { %><option value="<%= r.id %>"><%= r.ref %> · <%= r.title %> · <%= r.organizations?.name || '' %></option><% }) %></select></label>
+        <select data-picker="Client request" name="request_id" id="m_req"><option value="">— new internal request —</option><% requests.forEach(r => { %><option value="<%= r.id %>"><%= r.ref %> · <%= r.title %> · <%= r.organizations?.name || '' %></option><% }) %></select></label>
       <label class="grow2">Request title <span class="muted small">optional</span><input name="title" placeholder="defaults to the first product"></label>
     </div>
     <div class="row">

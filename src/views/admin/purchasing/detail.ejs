@@ -15,7 +15,7 @@
 <% if (!order) { %>
 <div class="linkbox"><strong>Not linked to an order yet.</strong> <span class="muted">When the client order is confirmed, link this PO to it — the supplier's documents then appear on the order.</span>
   <form method="post" action="/admin/purchasing/<%= po.id %>/link">
-    <select name="order_id" required><option value="">— choose the order —</option><% openOrders.forEach(o => { %><option value="<%= o.id %>"><%= o.order_no %> · <%= o.organizations?.name || '' %> · <%= fmt.status(o.status) %></option><% }) %></select>
+    <select data-picker="Order" name="order_id" required><option value="">— choose the order —</option><% openOrders.forEach(o => { %><option value="<%= o.id %>"><%= o.order_no %> · <%= o.organizations?.name || '' %> · <%= fmt.status(o.status) %></option><% }) %></select>
     <button class="btn small primary">Link to order</button>
   </form></div>
 <% } else { %>

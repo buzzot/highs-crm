@@ -29,7 +29,7 @@
       <label>Currency <select name="currency" id="m_cur"><% currencies.forEach(c => { %><option <%= c === 'CNY' ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
       <label>Required by <input type="date" name="required_date"></label>
       <label class="grow2">Link to an order <span class="muted small">optional — can be done later</span>
-        <select name="order_id"><option value="">— not linked yet —</option><% orders.forEach(o => { %><option value="<%= o.id %>"><%= o.order_no %> · <%= o.organizations?.name || '' %></option><% }) %></select></label>
+        <select data-picker="Order" name="order_id"><option value="">— not linked yet —</option><% orders.forEach(o => { %><option value="<%= o.id %>"><%= o.order_no %> · <%= o.organizations?.name || '' %></option><% }) %></select></label>
     </div>
   </div>
   <div class="card">
