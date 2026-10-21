@@ -1246,3 +1246,4 @@ label:has(> .picker-native) { position: relative; }
 
 .btn.bad-text { color: var(--bad); border-color: #f1c9c4; }
 .btn.bad-text:hover { background: #fdf1ef; }
+.row.tight > .picker-btn { margin: 0; width: auto; flex: 1 1 180px; max-width: 320px; }
