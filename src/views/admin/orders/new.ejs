@@ -24,8 +24,12 @@
       <div class="actions"><button type="button" class="btn small primary" id="nc_save">Add client</button><button type="button" class="btn small" id="nc_cancel">Cancel</button></div>
     </div>
     <div class="row">
-      <label class="grow2">Supplier <select data-picker name="supplier_id" id="o_sup"><option value="">—</option><% suppliers.forEach(s => { %><option value="<%= s.id %>"><%= s.name %></option><% }) %><option value="__new">+ Add new supplier…</option></select></label>
       <label>Expected ship date <input type="date" name="expected_ship_date"></label>
+    </div>
+    <label>Note for client <textarea name="client_notes" rows="2"></textarea></label>
+    <label>Internal notes <textarea name="internal_notes" rows="2"></textarea></label>
+    <div class="row">
+      <label class="grow2">Factory / supplier <span class="muted small">(internal, optional — you can pick one per purchase order later)</span> <select data-picker="Factory / supplier" name="supplier_id" id="o_sup"><option value="">— not decided yet</option><% suppliers.forEach(s => { %><option value="<%= s.id %>"><%= s.name %></option><% }) %><option value="__new">+ Add new supplier…</option></select></label>
     </div>
     <div class="newsup" id="newSup" hidden>
       <strong>New supplier</strong> <span class="muted small">— just the basics; complete the rest later on the supplier page</span>
@@ -42,8 +46,6 @@
       <div class="aiscan-msg err" id="ns_err" hidden></div>
       <div class="actions"><button type="button" class="btn small primary" id="ns_save">Add supplier</button><button type="button" class="btn small" id="ns_cancel">Cancel</button></div>
     </div>
-    <label>Note for client <textarea name="client_notes" rows="2"></textarea></label>
-    <label>Internal notes <textarea name="internal_notes" rows="2"></textarea></label>
     <div class="actions"><button class="btn primary">Create order</button></div>
   </form>
 </div>
