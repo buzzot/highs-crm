@@ -260,6 +260,16 @@ r.get('/shipments/:id', async (req, res) => {
 });
 
 // ---- shipping documents generated from the order's data (commercial invoice, packing list) ----
+// a shipment keeps one number per document type: its first version allocates the next sequential one, later versions are (002), (003)…
+async function docNumber(shipmentId, kind, label, prefix, fallback) {
+  const { data: docs } = await admin.from('documents').select('title').eq('entity_type', 'shipment').eq('entity_id', shipmentId).eq('kind', kind);
+  const re = new RegExp(`^${label} (${prefix}-\\d{4}-\\d{4}) \\(\\d{3}\\)$`);
+  for (const d of docs || []) { const m = d.title.match(re); if (m) return m[1]; }
+  const { data, error } = await admin.rpc('next_doc_no', { p: prefix });
+  if (error || !data) { console.error(`[numbering] ${error?.message || 'no number'} — run supabase/migrations/0027_sequential_numbers.sql`); return fallback; }
+  return data;
+}
+
 async function storeGenerated(req, shipmentId, { kind, title, filename, build, orderId }) {
   // every new version gets the next serial number: "<title> (001)", "(002)", …  (earlier versions are kept)
   const { data: same } = await admin.from('documents').select('title').eq('entity_type', 'shipment').eq('entity_id', shipmentId).eq('kind', kind).like('title', `${title} (%)`);
@@ -283,9 +293,10 @@ r.post('/shipments/:id/docs/commercial-invoice', async (req, res) => {
   if (!pi) return back(res, to, { err: 'This order has no proforma invoice yet — create one first, the commercial invoice is built from it.' });
   try {
     const company = await getCompany(admin);
-    var serial = await storeGenerated(req, s.id, { kind: 'commercial_invoice', title: `Commercial invoice ${ciNo(pi)}`, filename: ciNo(pi), build: () => ciPdf(pi, order, company, { shipment: s, info }), orderId: s.order_id });
+    var no = await docNumber(s.id, 'commercial_invoice', 'Commercial invoice', 'CI', ciNo(pi));
+    var serial = await storeGenerated(req, s.id, { kind: 'commercial_invoice', title: `Commercial invoice ${no}`, filename: no, build: () => ciPdf(pi, order, company, { shipment: s, info, no }), orderId: s.order_id });
   } catch (e) { return back(res, to, { err: `Could not create the commercial invoice: ${e.message}` }); }
-  back(res, to, { msg: `Commercial invoice ${ciNo(pi)} (${serial}) created from ${pi.pi_no}.` });
+  back(res, to, { msg: `Commercial invoice ${no} (${serial}) created from ${pi.pi_no}.` });
 });
 
 r.post('/shipments/:id/docs/packing-list', async (req, res) => {
@@ -297,9 +308,10 @@ r.post('/shipments/:id/docs/packing-list', async (req, res) => {
   if (!rows.length) return back(res, to, { err: 'The order has no packing lines yet — add them on the packing list page first.' });
   try {
     const company = await getCompany(admin);
-    var serial = await storeGenerated(req, s.id, { kind: 'packing_list', title: `Packing list ${order.order_no}`, filename: `packing-list-${order.order_no}`, build: () => packingListPdf({ company, order, info, rows, t }), orderId: s.order_id });
+    var no = await docNumber(s.id, 'packing_list', 'Packing list', 'PL', order.order_no);
+    var serial = await storeGenerated(req, s.id, { kind: 'packing_list', title: `Packing list ${no}`, filename: `packing-list-${no}`, build: () => packingListPdf({ company, order, info, rows, t, no }), orderId: s.order_id });
   } catch (e) { return back(res, to, { err: `Could not create the packing list: ${e.message}` }); }
-  back(res, to, { msg: `Packing list (${serial}) created from the current packing lines.` });
+  back(res, to, { msg: `Packing list ${no} (${serial}) created from the current packing lines.` });
 });
 
 r.get('/shipments/:id/edit', async (req, res) => {

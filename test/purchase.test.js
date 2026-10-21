@@ -75,3 +75,13 @@ test('packing list PDF: landscape A4 with the embedded font', () => {
   assert.match(s, /MediaBox \[0 0 841\.89 595\.28\]/);
   assert.ok(s.includes('PACKING LIST') && s.includes('FontFile2'));
 });
+
+test('commercial invoice and packing list carry their own sequential number when one is given', () => {
+  const d = ciDocument(_pi, { order_no: 'LT-2610-0001' }, { name: 'Lumi Trade' }, { no: 'CI-2610-0007' });
+  assert.equal(d.no, 'CI-2610-0007');
+  assert.match(d.footer, /CI-2610-0007/);
+  assert.equal(ciDocument(_pi, { order_no: 'x' }, { name: 'L' }, {}).no, 'CI-2610-1259'); // no number allocated yet → old derived one
+  const rows = [{ carton_no: '1', cartons: 1, description: 'Lamp', quantity: 1 }];
+  const pdf = packingListPdf({ company: { name: 'Lumi Trade' }, order: { order_no: 'LT-2610-0001' }, info: {}, rows, t: packTotals(rows), no: 'PL-2610-0003' }).toString('latin1');
+  assert.ok(pdf.includes('PL-2610-0003'));
+});

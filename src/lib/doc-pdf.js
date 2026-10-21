@@ -129,7 +129,7 @@ export function renderPackingList(d) {
 
   pdf.text(d.seller?.name || 'Lumi Trade', PM, y, { size: 15, bold: true, color: BRAND });
   pdf.text('PACKING LIST', PM, y + 26, { size: 20, bold: true });
-  const meta = [['Order', d.orderNo], ['Date', d.date], ['Mode', info.mode], ['Port of loading', info.pol], ['Destination', info.pod], ['Incoterm', info.incoterm], ['Cargo ready', info.ready_date]].filter(([, v]) => v);
+  const meta = [['No.', d.no], ['Order', d.orderNo], ['Date', d.date], ['Mode', info.mode], ['Port of loading', info.pol], ['Destination', info.pod], ['Incoterm', info.incoterm], ['Cargo ready', info.ready_date]].filter(([, v]) => v);
   let my = y;
   for (const [k, v] of meta) { pdf.text(k, PM + PW - 190, my, { size: 9, color: MUTED }); pdf.text(String(v), PM + PW, my, { size: 9, align: 'right' }); my += 13; }
   y = Math.max(y + 56, my) + 8;
@@ -192,9 +192,9 @@ export function renderPackingList(d) {
   all.forEach((ops, i) => {
     pdf.pages = [ops];
     pdf.line(PM, pdf.h - 34, PM + PW, pdf.h - 34, { color: LINE });
-    pdf.text(`Packing list · ${d.orderNo}`, PM, pdf.h - 28, { size: 8, color: MUTED });
+    pdf.text(`${d.no ? 'Packing list ' + d.no : 'Packing list'} · ${d.orderNo}`, PM, pdf.h - 28, { size: 8, color: MUTED });
     pdf.text(`Page ${i + 1} of ${n}`, PM + PW, pdf.h - 28, { size: 8, color: MUTED, align: 'right' });
   });
   pdf.pages = all;
-  return pdf.toBuffer({ title: `Packing list ${d.orderNo}` });
+  return pdf.toBuffer({ title: `Packing list ${d.no || d.orderNo}` });
 }

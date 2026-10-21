@@ -73,23 +73,24 @@ export function piDocument(pi, order, company) {
 
 /** Commercial invoice for a shipment: the goods and amounts of the proforma invoice, invoice total only (no payment status). */
 export const ciNo = pi => String(pi.pi_no || '').replace(/^PI/i, 'CI');
-export function ciDocument(pi, order, company, { shipment, info } = {}) {
+export function ciDocument(pi, order, company, { shipment, info, no } = {}) {
+  const docNo = no || ciNo(pi);
   const d = pi.data || {};
   const b = d.buyer || {};
   const MODE = { sea_fcl: 'Sea FCL', sea_lcl: 'Sea LCL', air: 'Air', rail: 'Rail', truck: 'Truck', express: 'Express' };
   const mode = MODE[shipment?.mode] || info?.mode;
   return {
-    title: 'COMMERCIAL INVOICE', no: ciNo(pi), date: day(),
+    title: 'COMMERCIAL INVOICE', no: docNo, date: day(),
     seller: companyBlock(company),
     partyLabel: 'Bill to', party: { name: b.company || '—', lines: clientLines(b) },
     meta: [['Order', order?.order_no], ['Proforma invoice', pi.pi_no], ['Client PO ref', d.po_ref], ['Incoterm', d.incoterm], ['Shipment mode', mode], ['Port of loading', info?.pol], ['Destination', info?.pod], ['Currency', d.currency]],
     currency: d.currency, lines: piLines(d),
     sections: [{ heading: 'Payment terms', text: d.payment_terms }],
-    footer: `${ciNo(pi)} · ${company.name}`,
+    footer: `${docNo} · ${company.name}`,
   };
 }
 export const ciPdf = (pi, order, company, opts) => renderDocument(ciDocument(pi, order, company, opts));
-export const packingListPdf = ({ company, order, info, rows, t }) => renderPackingList({ seller: { name: company.name }, orderNo: order.order_no, date: day(), info, rows, t });
+export const packingListPdf = ({ company, order, info, rows, t, no }) => renderPackingList({ seller: { name: company.name }, no, orderNo: order.order_no, date: day(), info, rows, t });
 
 export const poPdf = (po, company, opts) => renderDocument(poDocument(po, company, opts));
 export const piPdf = (pi, order, company) => renderDocument(piDocument(pi, order, company));
