@@ -1,5 +1,5 @@
 import { Router } from '../../lib/router.js';
-import multer from 'multer';
+import multer from '../../lib/multer-utf8.js';
 import { admin } from '../../lib/supabase.js';
 import { uploadDocument, signedUrl, deleteDocument, downloadDocument } from '../../lib/storage.js';
 import { sendEmail } from '../../lib/mailer.js';

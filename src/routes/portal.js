@@ -1,5 +1,5 @@
 import { Router } from '../lib/router.js';
-import multer from 'multer';
+import multer from '../lib/multer-utf8.js';
 import { requireClient } from '../middleware/auth.js';
 import { admin } from '../lib/supabase.js';
 import { log } from '../lib/activity.js';

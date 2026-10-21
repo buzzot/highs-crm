@@ -2,7 +2,7 @@
 //   POST /hooks/inbound-email?key=INBOUND_EMAIL_SECRET   body: the email as JSON or form data (Mailgun Routes → forward()).
 //   Accepted when ?key= / x-inbound-secret matches INBOUND_EMAIL_SECRET, or the Mailgun signature matches MAILGUN_WEBHOOK_SIGNING_KEY.
 import express from 'express';
-import multer from 'multer';
+import multer from '../lib/multer-utf8.js';
 import { Router } from '../lib/router.js';
 import { admin } from '../lib/supabase.js';
 import { normalizeInbound, matchKeys, mailgunSignatureOk } from '../lib/freight.js';

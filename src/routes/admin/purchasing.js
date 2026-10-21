@@ -1,5 +1,5 @@
 // Purchasing: purchase orders to suppliers, generated from a client order, sent by email, answered by email.
-import multer from 'multer';
+import multer from '../../lib/multer-utf8.js';
 import { Router } from '../../lib/router.js';
 import { admin } from '../../lib/supabase.js';
 import { sendEmail } from '../../lib/mailer.js';

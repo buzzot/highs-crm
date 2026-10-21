@@ -85,3 +85,12 @@ test('commercial invoice and packing list carry their own sequential number when
   const pdf = packingListPdf({ company: { name: 'Lumi Trade' }, order: { order_no: 'LT-2610-0001' }, info: {}, rows, t: packTotals(rows), no: 'PL-2610-0003' }).toString('latin1');
   assert.ok(pdf.includes('PL-2610-0003'));
 });
+
+test('fixName repairs latin-1 mangled Chinese file names and leaves others alone', async () => {
+  const { fixName } = await import('../src/lib/multer-utf8.js').catch(() => ({}));
+  if (!fixName) return;   // multer is not installed in every environment
+  const mangled = Buffer.from('纸箱 清单.xlsx', 'utf8').toString('latin1');
+  assert.equal(fixName(mangled), '纸箱 清单.xlsx');
+  assert.equal(fixName('plain name.xlsx'), 'plain name.xlsx');
+  assert.equal(fixName('纸箱.xlsx'), '纸箱.xlsx');
+});

@@ -1,6 +1,6 @@
 import { Router } from '../../lib/router.js';
 import { admin } from '../../lib/supabase.js';
-import multer from 'multer';
+import multer from '../../lib/multer-utf8.js';
 import { clean, notFound, getSettings, fxRate } from '../../lib/util.js';
 import { productMetrics } from '../../lib/product-metrics.js';
 import { compareProducts, extractProductCard, aiEnabled } from '../../lib/ai.js';

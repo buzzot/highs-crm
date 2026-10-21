@@ -1,7 +1,7 @@
 // Product import: upload → automatic extraction → admin review & confirmation → save.
 // Nothing is written to suppliers/products until the admin presses "Import".
 import { randomUUID } from 'node:crypto';
-import multer from 'multer';
+import multer from '../../lib/multer-utf8.js';
 import { Router } from '../../lib/router.js';
 import { admin } from '../../lib/supabase.js';
 import { log } from '../../lib/activity.js';

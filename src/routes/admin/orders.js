@@ -4,7 +4,7 @@ import { log } from '../../lib/activity.js';
 import { clean, bool, back, notFound, getSettings, ORDER_STATUSES, CURRENCIES, INTERNAL_KINDS } from '../../lib/util.js';
 import { landed } from '../../lib/landed.js';
 import { defaultCurrency, sumIn } from '../../lib/currency.js';
-import multer from 'multer';
+import multer from '../../lib/multer-utf8.js';
 import { readXlsx, workbookToText } from '../../lib/xlsx-read.js';
 import { readCsv } from './imports.js';
 import { normalizeRows, rowsFromSheet, totals as packTotals, packingText, packingSheet } from '../../lib/packing.js';

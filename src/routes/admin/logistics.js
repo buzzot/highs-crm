@@ -6,7 +6,7 @@ import { clean, bool, back, notFound, getSettings, fxRate, SHIPMENT_STATUSES, SH
 import { landed } from '../../lib/landed.js';
 import { defaultCurrency, sumIn } from '../../lib/currency.js';
 import { saveResponse } from '../../lib/freight-store.js';
-import multer from 'multer';
+import multer from '../../lib/multer-utf8.js';
 import { uploadDocument, deleteDocument } from '../../lib/storage.js';
 import { getCompany, ciPdf, ciNo, packingListPdf } from '../../lib/purchase.js';
 import { packingData } from '../../lib/packing-store.js';
