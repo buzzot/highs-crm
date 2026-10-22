@@ -14,7 +14,8 @@ import { extractPacking, aiEnabled } from '../../lib/ai.js';
 import { uploadDocument } from '../../lib/storage.js';
 import { sendEmail } from '../../lib/mailer.js';
 import { paymentDecidedEmail } from '../../lib/email-templates.js';
-import { recalcOrder } from '../../lib/payments-db.js';
+import { recalcOrder, confirmedReceived } from '../../lib/payments-db.js';
+import { cashProfit } from '../../lib/payments.js';
 const appUrl = () => (process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
 import { rfqEmail } from '../../lib/email-templates.js';
 import { replyAddress, subjectTag } from '../../lib/freight.js';
@@ -112,7 +113,7 @@ r.get('/:id', async (req, res) => {
     freePos: freePos || [], spos: spos || [], pay: pay || {}, payments: payRows || [],
     pis: pis || [], pos: pos || [], title: order.order_no, order, items: items || [], shipments: shipments || [], packing: packing || [], events: events || [],
     docs: docs || [], suppliers: suppliers || [], products: products || [], statuses: ORDER_STATUSES,
-    land: landed(order, items), msg: req.query.msg, err: req.query.err,
+    land: landed(order, items), cash: cashProfit({ received: await confirmedReceived(id, order.currency), cost: order.cost_total, freight: order.freight_total, due: pay?.amount_due }), msg: req.query.msg, err: req.query.err,
   });
 });
 

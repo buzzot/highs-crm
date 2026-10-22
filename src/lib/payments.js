@@ -37,3 +37,13 @@ export function nextInstalment(schedule, paid) {
   }
   return null;
 }
+
+/** Profit on money actually received: confirmed payments − product cost − actual logistics.
+ *  `share` is how much of the amount due has arrived (null when no amount is due), so the page can call it provisional. */
+export function cashProfit({ received = 0, cost = 0, freight = 0, due = 0 } = {}) {
+  const r = Math.round(Number(received || 0) * 100) / 100;
+  const profit = Math.round((r - Number(cost || 0) - Number(freight || 0)) * 100) / 100;
+  const d = Number(due || 0);
+  const share = d > 0 ? Math.min(1, r / d) : null;
+  return { received: r, profit, share, provisional: share != null && share < 0.9999 };
+}

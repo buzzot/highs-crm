@@ -6,7 +6,8 @@
   const unpaid = costs.filter(c => !c.paid).reduce((t, c) => t + Number(c.amount) * Number(c.fx_to_order || 1), 0);
   const orderFreight = Number(order.freight_total || 0);
   const goods = Number(order.subtotal || 0), cost = Number(order.cost_total || 0);
-  const profitAfter = goods - cost - orderFreight;
+  const useCash = goods <= 0 && cash.received > 0;   // logistics-only order: income is the money received
+  const profitAfter = useCash ? cash.profit : goods - cost - orderFreight;
   const logisticsPct = cost > 0 ? orderFreight / cost * 100 : null;
 %>
 <div class="pagehead">
@@ -43,7 +44,7 @@
   <div class="kpi <%= unpaid > 0 ? 'bad' : 'good' %>"><span class="n"><%= unpaid > 0 ? fmt.money(unpaid, cur, 0) : (costs.length ? 'All paid' : '—') %></span><span class="l">Owed to forwarder</span><span class="s"><%= costs.filter(c => !c.paid).length %> unpaid invoice<%= costs.filter(c => !c.paid).length === 1 ? '' : 's' %></span></div>
   <div class="kpi"><span class="n"><%= fmt.money(land.freightPerUnit, cur, land.freightPerUnit >= 100 ? 0 : 2) %></span><span class="l">Logistics per unit</span><span class="s">over <%= land.qty %> units on the order</span></div>
   <div class="kpi <%= logisticsPct != null && logisticsPct > 30 ? 'warn' : '' %>"><span class="n"><%= pctOrX(logisticsPct) %></span><span class="l">Logistics vs product cost</span><span class="s"><%= logisticsPct == null ? 'no product cost yet' : logisticsPct > 30 ? 'high — check freight or quantity' : 'within normal range' %></span></div>
-  <div class="kpi <%= profitAfter < 0 ? 'bad' : 'good' %>"><span class="n"><%= fmt.money(profitAfter, cur, 0) %></span><span class="l">Order profit after logistics</span><span class="s"><%= profitAfter < 0 ? 'loss — logistics exceeds margin' : 'goods − cost − logistics' %></span></div>
+  <div class="kpi <%= profitAfter < 0 ? 'bad' : 'good' %>"><span class="n"><%= fmt.money(profitAfter, cur, 0) %></span><span class="l">Order profit after logistics</span><span class="s"><%= profitAfter < 0 ? 'loss — logistics exceeds income' : (useCash ? (cash.provisional ? 'provisional — ' + Math.round(cash.share * 100) + '% received' : 'received − cost − logistics') : 'goods − cost − logistics') %></span></div>
 </div>
 
 <div class="grid2">

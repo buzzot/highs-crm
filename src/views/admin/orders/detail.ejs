@@ -25,6 +25,8 @@
   <div class="kpi <%= order.margin_pct != null && order.margin_pct < 20 ? 'bad' : '' %>"><span class="n"><%= fmt.pct(order.margin_pct) %></span><span class="l">Margin on cost (min 20%)</span></div>
   <div class="kpi"><span class="n"><%= fmt.money(order.freight_total, cur) %></span><span class="l">Logistics (actual)</span></div>
   <div class="kpi"><span class="n"><%= fmt.money(order.gross_profit, cur) %></span><span class="l">Gross profit after logistics</span></div>
+  <div class="kpi"><span class="n"><%= fmt.money(cash.received, cur) %></span><span class="l">Received (confirmed payments)</span></div>
+  <div class="kpi <%= cash.profit < 0 ? 'bad' : '' %>"><span class="n"><%= fmt.money(cash.profit, cur) %></span><span class="l">Profit on money received</span><span class="s"><%= cash.provisional ? 'provisional — ' + Math.round(cash.share * 100) + '% of the amount due received' : 'received − product cost − logistics' %></span></div>
 </div>
 
 <div class="grid2">
@@ -212,7 +214,7 @@
         <form method="post" action="/admin/orders/<%= order.id %>/payments" class="row">
           <label>Amount (<%= order.currency %>) <input name="amount" type="number" step="0.01" min="0.01" required></label>
           <label>Date <input name="paid_on" type="date" value="<%= new Date().toISOString().slice(0, 10) %>"></label>
-          <label>Instalment <input name="label" placeholder="Deposit / Balance"></label>
+          <label>Instalment <input name="label" placeholder="Deposit / Balance" autocomplete="off"></label>
           <label>Reference <input name="reference"></label>
           <button class="btn">Record</button>
         </form>

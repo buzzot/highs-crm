@@ -30,3 +30,13 @@ test('PI pdf text lists the schedule', () => {
   const t = scheduleText({ currency: 'USD', lines: [{ quantity: 10, unit_price: 100 }], schedule: [{ label: 'Deposit', percent: 30, due: '2026-11-01' }] });
   assert.match(t, /Deposit 30% · USD 300\.00 · due 01 Nov 2026/);
 });
+
+test('cashProfit: received money minus product cost and logistics, provisional until fully paid', async () => {
+  const { cashProfit } = await import('../src/lib/payments.js');
+  const full = cashProfit({ received: 6750, cost: 0, freight: 4920, due: 6750 });
+  assert.equal(full.profit, 1830); assert.equal(full.provisional, false);
+  const part = cashProfit({ received: 3000, cost: 0, freight: 4920, due: 6750 });
+  assert.equal(part.profit, -1920); assert.equal(part.provisional, true); assert.equal(Math.round(part.share * 100), 44);
+  assert.equal(cashProfit({ received: 100, cost: 40, freight: 10 }).share, null);
+  assert.equal(cashProfit().profit, 0);
+});

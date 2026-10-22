@@ -6,6 +6,8 @@ import { clean, bool, back, notFound, getSettings, fxRate, SHIPMENT_STATUSES, SH
 import { landed } from '../../lib/landed.js';
 import { defaultCurrency, sumIn } from '../../lib/currency.js';
 import { saveResponse } from '../../lib/freight-store.js';
+import { confirmedReceived } from '../../lib/payments-db.js';
+import { cashProfit } from '../../lib/payments.js';
 import multer from '../../lib/multer-utf8.js';
 import { uploadDocument, deleteDocument } from '../../lib/storage.js';
 import { getCompany, ciPdf, ciNo, packingListPdf } from '../../lib/purchase.js';
@@ -253,6 +255,7 @@ r.get('/shipments/:id', async (req, res) => {
   res.render('admin/logistics/shipment', {
     title: `Shipment · ${s.orders?.order_no}`, s, costs: costs || [], docs: docs || [], sends, clientEmails, totalCost, byType,
     land: landed(order || {}, items || []), order: order || {},
+    cash: cashProfit({ received: await confirmedReceived(s.order_id, order?.currency), cost: order?.cost_total, freight: order?.freight_total, due: order?.amount_due }),
     freightTypes: FREIGHT_TYPES, statuses: SHIPMENT_STATUSES, currencies: CURRENCIES,
     defaultFx: c => fxRate(settings, c, s.orders?.currency || 'USD'),
     fxTable: settings.fx, msg: req.query.msg, err: req.query.err,
