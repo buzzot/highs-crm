@@ -22,11 +22,9 @@
 <div class="kpis five">
   <div class="kpi"><span class="n"><%= fmt.money(order.subtotal, cur) %></span><span class="l">Goods (client)</span></div>
   <div class="kpi"><span class="n"><%= fmt.money(order.cost_total, cur) %></span><span class="l">Product cost</span></div>
-  <div class="kpi <%= order.margin_pct != null && order.margin_pct < 20 ? 'bad' : '' %>"><span class="n"><%= fmt.pct(order.margin_pct) %></span><span class="l">Margin on cost (min 20%)</span></div>
   <div class="kpi"><span class="n"><%= fmt.money(order.freight_total, cur) %></span><span class="l">Logistics (actual)</span></div>
-  <div class="kpi"><span class="n"><%= fmt.money(order.gross_profit, cur) %></span><span class="l">Gross profit after logistics</span></div>
-  <div class="kpi"><span class="n"><%= fmt.money(cash.received, cur) %></span><span class="l">Received (confirmed payments)</span></div>
-  <div class="kpi <%= cash.profit < 0 ? 'bad' : '' %>"><span class="n"><%= fmt.money(cash.profit, cur) %></span><span class="l">Profit on money received</span><span class="s"><%= cash.provisional ? 'provisional — ' + Math.round(cash.share * 100) + '% of the amount due received' : 'received − product cost − logistics' %></span></div>
+  <div class="kpi"><span class="n"><%= fmt.money(cash.received, cur) %></span><span class="l">Received</span></div>
+  <div class="kpi <%= cash.profit < 0 ? 'bad' : 'good' %>"><span class="n"><%= fmt.money(cash.profit, cur) %></span><span class="l">Profit</span><span class="s"><%= cash.provisional ? 'provisional — ' + Math.round(cash.share * 100) + '% of the amount due received' : 'received − product cost − logistics' %></span></div>
 </div>
 
 <div class="grid2">

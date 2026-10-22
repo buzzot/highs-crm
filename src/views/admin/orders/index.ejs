@@ -29,7 +29,7 @@
         <td class="right muted"><%= fmt.money(o.cost_total, o.currency, 0) %></td>
         <td class="right muted"><%= fmt.money(o.freight_total, o.currency, 0) %></td>
         <td class="right <%= o.margin_pct != null && o.margin_pct < 20 ? 'bad' : '' %>"><%= fmt.pct(o.margin_pct) %></td>
-        <td class="right"><%= fmt.money(o.gross_profit, o.currency, 0) %></td>
+        <td class="right" <%- o.profit_on_received ? 'title="Profit on money received (confirmed payments − cost − logistics)"' : '' %>><%= fmt.money(o.gross_profit, o.currency, 0) %></td>
         <td class="small"><%= o.latest_eta ? 'ETA ' + fmt.date(o.latest_eta) : (o.expected_ship_date ? 'ship ' + fmt.date(o.expected_ship_date) : '—') %></td>
       </tr>
     <% }) %>
