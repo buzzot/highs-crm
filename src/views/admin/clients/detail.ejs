@@ -61,7 +61,7 @@
       </div>
       <div class="row">
         <label>Website <input name="website" value="<%= v('website') %>"></label>
-        <% if (org.language !== undefined) { %><label>Language <select name="language"><option value="en" <%= org.language !== 'ru' ? 'selected' : '' %>>English</option><option value="ru" <%= org.language === 'ru' ? 'selected' : '' %>>Русский</option></select> <span class="muted small">portal &amp; emails; invitations use it</span></label><% } %>
+        <label>Language <select name="language"><option value="en" <%= org.language !== 'ru' ? 'selected' : '' %>>English</option><option value="ru" <%= org.language === 'ru' ? 'selected' : '' %>>Русский</option></select> <span class="muted small">portal &amp; emails; invitations use it</span></label>
         <label>Currency <select name="default_currency"><% ['USD','EUR','GBP','CNY'].forEach(c => { %><option <%= cur === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
       </div>
       <label>Notes <span class="muted small">— internal, never shown to the client</span><textarea name="notes" rows="3"><%= v('notes') %></textarea></label>
@@ -78,14 +78,14 @@
     <div class="card">
       <h2>Requests <span class="count"><%= requests.length %></span></h2>
       <% if (!requests.length) { %><p class="muted">No requests yet — the client sends them from the portal.</p><% } else { %>
-      <table class="tbl">
-        <thead><tr><th>Request</th><th class="right">Products</th><th>Quotes</th><th>Status</th></tr></thead>
+      <table class="tbl reqtbl">
+        <thead><tr><th>Request</th><th class="right">Items</th><th class="right">Quotes</th><th>Status</th></tr></thead>
         <tbody>
         <% requests.forEach(q => { const n = q.request_items?.[0]?.count; const sent = (q.quotes || []).filter(x => x.status === 'sent').length; %>
           <tr>
             <td><a href="/admin/sourcing/<%= q.id %>"><%= q.title %></a><div class="muted small"><%= q.ref %> · <%= fmt.date(q.created_at) %><%= q.needed_by ? ' · needed ' + fmt.date(q.needed_by) : '' %></div></td>
             <td class="right"><%= n || 1 %></td>
-            <td><%= (q.quotes || []).length %><% if (sent) { %> <span class="muted small">(<%= sent %> sent)</span><% } %></td>
+            <td class="right"><%= (q.quotes || []).length %><% if (sent) { %> <span class="muted small">(<%= sent %> sent)</span><% } %></td>
             <td><span class="pill <%= q.status %>"><%= fmt.status(q.status) %></span></td>
           </tr>
         <% }) %>

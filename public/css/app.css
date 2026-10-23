@@ -1359,3 +1359,10 @@ html[lang=ru] .pill::first-letter, html[lang=ru] .badge::first-letter { text-tra
 
 .authpanel { position: relative; }
 .authlang { position: absolute; top: 16px; right: 16px; margin-left: 0; }
+
+.reqtbl { table-layout: fixed; width: 100%; }
+.reqtbl th:nth-child(2), .reqtbl td:nth-child(2) { width: 64px; }
+.reqtbl th:nth-child(3), .reqtbl td:nth-child(3) { width: 72px; }
+.reqtbl th:nth-child(4), .reqtbl td:nth-child(4) { width: 92px; }
+.reqtbl td:first-child { overflow-wrap: anywhere; }
+.reqtbl td:first-child > a { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-weight: 600; }

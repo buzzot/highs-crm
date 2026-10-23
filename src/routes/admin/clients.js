@@ -85,8 +85,14 @@ r.post('/:id/details', async (req, res) => {
   patch.default_currency ||= res.locals.defCur || 'CNY';
   patch.active = req.body.active === 'on';
   if ('language' in req.body) patch.language = normLang(req.body.language);
-  const { error } = await admin.from('organizations').update(patch).eq('id', req.params.id);
-  res.redirect(`/admin/clients/${req.params.id}?` + (error ? 'err=' + encodeURIComponent(error.message) : 'msg=' + encodeURIComponent('Details saved.')));
+  let { error } = await admin.from('organizations').update(patch).eq('id', req.params.id);
+  let note = 'Details saved.';
+  if (error && /language/i.test(error.message) && 'language' in patch) {   // migration 0032 not run yet: save everything else
+    delete patch.language;
+    ({ error } = await admin.from('organizations').update(patch).eq('id', req.params.id));
+    note = 'Details saved, but the language was not — run migration 0032_language.sql in Supabase first.';
+  }
+  res.redirect(`/admin/clients/${req.params.id}?` + (error ? 'err=' + encodeURIComponent(error.message) : 'msg=' + encodeURIComponent(note)));
 });
 
 r.get('/:id/edit', async (req, res) => {
