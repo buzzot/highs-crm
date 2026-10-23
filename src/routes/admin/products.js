@@ -204,13 +204,12 @@ r.post('/quick', async (req, res) => {
 // ---------- products submitted by suppliers (supplier portal "Add product") ----------
 const SUB_TABS = [['submitted', 'To review'], ['edit_requested', 'Edit requests'], ['updated', 'Updated'], ['unlocked', 'Open for editing'], ['returned', 'Sent back'], ['draft', 'Drafts'], ['approved', 'Approved']];
 r.get('/submissions', async (req, res) => {
-  const status = SUB_TABS.some(t => t[0] === req.query.status) ? req.query.status : 'submitted';
-  const [{ data: rows }, { data: all }] = await Promise.all([
-    admin.from('supplier_products').select('id, status, data, submitted_at, updated_at, product_id, suppliers(id, name)').eq('status', status).order('updated_at', { ascending: false }),
-    admin.from('supplier_products').select('status'),
-  ]);
-  const counts = {}; (all || []).forEach(x => { counts[x.status] = (counts[x.status] || 0) + 1; });
-  res.render('admin/products/submissions', { title: 'Supplier products', rows: rows || [], status, counts, tabs: SUB_TABS, miss: x => subMissing(x.data, (x.data.photo_ids || []).length) });
+  const status = req.query.status === 'all' || SUB_TABS.some(t => t[0] === req.query.status) ? req.query.status : 'submitted';
+  let rq = admin.from('supplier_products').select('id, status, data, submitted_at, updated_at, product_id, suppliers(id, name)').order('updated_at', { ascending: false });
+  if (status !== 'all') rq = rq.eq('status', status);
+  const [{ data: rows }, { data: all }] = await Promise.all([rq, admin.from('supplier_products').select('status')]);
+  const counts = { all: (all || []).length }; (all || []).forEach(x => { counts[x.status] = (counts[x.status] || 0) + 1; });
+  res.render('admin/products/submissions', { title: 'Supplier products', rows: rows || [], status, counts, tabs: [['all', 'All'], ...SUB_TABS], labels: Object.fromEntries(SUB_TABS), miss: x => subMissing(x.data, (x.data.photo_ids || []).length) });
 });
 
 r.get('/submissions/:id', async (req, res) => {
