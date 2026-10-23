@@ -220,7 +220,7 @@ r.get('/submissions/:id', async (req, res) => {
   const ids = (d.photo_ids || []).filter(Boolean);
   const { data: docs } = ids.length ? await admin.from('documents').select('id, title').in('id', ids) : { data: [] };
   // same supplier SKU already on file?
-  const dup = d.sku ? (await admin.from('products').select('id, name').eq('supplier_id', sub.supplier_id).ilike('supplier_sku', d.sku.replace(/[%_]/g, c => '\\' + c)).limit(1)).data?.[0] || null : null;
+  const dup = d.sku && !sub.product_id ? (await admin.from('products').select('id, name').eq('supplier_id', sub.supplier_id).ilike('supplier_sku', d.sku.replace(/[%_]/g, c => '\\' + c)).limit(1)).data?.[0] || null : null;
   let prod = null, diff = [];
   if (sub.product_id) {
     prod = (await admin.from('products').select('*').eq('id', sub.product_id).maybeSingle()).data;
