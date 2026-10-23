@@ -1351,3 +1351,8 @@ label:has(> .picker-native) { position: relative; }
 .tabdot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #d93025; margin-left: 6px; vertical-align: middle; }
 tr.needrow td { background: #fff8e6; }
 tr.needrow td:first-child { box-shadow: inset 4px 0 0 #e8a100; }
+.langsw { margin-left: auto; display: inline-flex; padding: 3px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
+.langsw a { padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--muted); text-decoration: none; }
+.langsw a.on { background: var(--bg, #f4f5f7); color: var(--ink); box-shadow: 0 1px 2px rgba(15,30,50,.12); }
+html[lang=ru] .pill, html[lang=ru] .badge { text-transform: none; }
+html[lang=ru] .pill::first-letter, html[lang=ru] .badge::first-letter { text-transform: uppercase; }

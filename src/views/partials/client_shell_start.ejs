@@ -49,5 +49,6 @@
     <header class="crumbbar">
       <button class="sidetoggle" aria-label="Menu" onclick="document.getElementById('shell').classList.toggle('open')"><%- icon('menu') %></button>
       <span class="crumbs"><a href="<%= homeHref %>"><%= org.name || 'Lumi Trade' %></a><%- icon('chevron', 'sep') %><strong><%= pageCrumb %></strong></span>
+      <% if (!isSupplier) { %><span class="langsw" role="group" aria-label="Language"><a href="/lang/en?to=<%= encodeURIComponent(here) %>" class="<%= lang === 'en' ? 'on' : '' %>">EN</a><a href="/lang/ru?to=<%= encodeURIComponent(here) %>" class="<%= lang === 'ru' ? 'on' : '' %>">РУ</a></span><% } %>
     </header>
     <main class="page cpage">

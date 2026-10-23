@@ -1,4 +1,5 @@
 // Small progressive enhancements, no framework.
+const RU = document.documentElement.lang === 'ru';   // Russian client portal: the few texts built in the browser
 (function () {
   // table quick filter: <input data-filter="#tableId">
   document.querySelectorAll('input[data-filter]').forEach(inp => {
@@ -54,16 +55,16 @@
         }
         const meta = document.createElement('span'); meta.className = 'fmeta';
         const nm = document.createElement('span'); nm.className = 'fname'; nm.textContent = f.name;
-        const sz = document.createElement('span'); sz.className = 'fsize'; sz.textContent = big ? `Too large (max ${maxMb} MB) — will not upload` : kb(f.size);
+        const sz = document.createElement('span'); sz.className = 'fsize'; sz.textContent = big ? (RU ? `Слишком большой (макс. ${maxMb} МБ) — не загрузится` : `Too large (max ${maxMb} MB) — will not upload`) : kb(f.size);
         meta.append(nm, sz); item.appendChild(meta);
-        const del = document.createElement('button'); del.type = 'button'; del.className = 'fdel'; del.setAttribute('aria-label', 'Remove ' + f.name); del.textContent = '×';
+        const del = document.createElement('button'); del.type = 'button'; del.className = 'fdel'; del.setAttribute('aria-label', (RU ? 'Удалить ' : 'Remove ') + f.name); del.textContent = '×';
         del.onclick = () => { files.splice(i, 1); render(); };
         item.appendChild(del);
         list.appendChild(item);
       });
       zone.classList.toggle('has', files.length > 0);
       const c = zone.querySelector('[data-drop-count]');
-      if (c) { if (files.length) c.textContent = `${files.length} file${files.length > 1 ? 's' : ''} added · drop more or click to add`; else c.innerHTML = c.dataset.empty; }
+      if (c) { if (files.length) c.textContent = RU ? `Файлов: ${files.length} · перетащите ещё или нажмите` : `${files.length} file${files.length > 1 ? 's' : ''} added · drop more or click to add`; else c.innerHTML = c.dataset.empty; }
     };
     const add = incoming => {
       for (const f of incoming) {
@@ -137,7 +138,7 @@ document.querySelectorAll('time.localtime').forEach(function (t) { var d = new D
       li.className = kind + (o.value === sel.value ? ' sel' : '');
       const name = o.text.replace(/^\+\s*/, '');
       li.innerHTML = kind === 'new' ? '<span class="pk-plus">+</span><span class="pk-name"></span>' : '<span class="pk-av"></span><span class="pk-name"></span><span class="pk-check">✓</span>';
-      li.querySelector('.pk-name').textContent = kind === 'new' ? name : (o.value === '' ? 'No selection' : name);
+      li.querySelector('.pk-name').textContent = kind === 'new' ? name : (o.value === '' ? (RU ? 'Не выбрано' : 'No selection') : name);
       if (kind !== 'new') li.querySelector('.pk-av').textContent = o.value === '' ? '–' : initials(name);
       list.appendChild(li); items.push(li);
     };
@@ -145,7 +146,7 @@ document.querySelectorAll('time.localtime').forEach(function (t) { var d = new D
     opts.filter(o => o.value === '' && !sel.required && !needle).forEach(o => add(o, 'none'));
     opts.filter(o => o.value !== '' && !o.value.startsWith('__') && (!needle || o.text.toLowerCase().includes(needle))).forEach(o => add(o, 'opt'));
     opts.filter(o => o.value.startsWith('__') && !o.disabled).forEach(o => add(o, 'new'));
-    if (!items.some(li => li.classList.contains('opt'))) { const e = document.createElement('li'); e.className = 'empty'; e.textContent = 'Nothing found'; list.insertBefore(e, list.firstChild); }
+    if (!items.some(li => li.classList.contains('opt'))) { const e = document.createElement('li'); e.className = 'empty'; e.textContent = RU ? 'Ничего не найдено' : 'Nothing found'; list.insertBefore(e, list.firstChild); }
     active = items.findIndex(li => li.classList.contains('sel')); if (needle) active = Math.max(0, items.findIndex(li => li.classList.contains('opt')));
     items.forEach((li, i) => li.classList.toggle('on', i === active));
     search.hidden = opts.length < 8;
@@ -166,7 +167,7 @@ document.querySelectorAll('time.localtime').forEach(function (t) { var d = new D
     sel.parentNode.insertBefore(btn, sel); sel.classList.add('picker-native'); sel.tabIndex = -1;
     const sync = () => {
       const o = sel.selectedOptions[0], text = o && o.value !== '' ? o.text : '', ph = [...sel.options].find(x => x.value === '');
-      const t = btn.querySelector('.pb-text'); t.textContent = text || (ph ? ph.text.replace(/^—\s*$/, 'Select…') : 'Select…'); t.classList.toggle('ph', !text);
+      const t = btn.querySelector('.pb-text'); t.textContent = text || (ph ? ph.text.replace(/^—\s*$/, (RU ? 'Выбрать…' : 'Select…')) : (RU ? 'Выбрать…' : 'Select…')); t.classList.toggle('ph', !text);
       btn.disabled = sel.disabled;
     };
     Object.defineProperty(sel, 'value', { get() { return valueDesc.get.call(sel); }, set(v) { valueDesc.set.call(sel, v); sync(); }, configurable: true });

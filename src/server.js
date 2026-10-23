@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cookieParser from 'cookie-parser';
+import { toRussian, pickLang, LANG_COOKIE } from './lib/i18n.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadUser } from './middleware/auth.js';
@@ -57,6 +58,19 @@ app.use((req, res, next) => {
   next();
 });
 app.use(loadUser);
+// interface language: clients can switch to Russian; the page is translated once, only when they chose it
+app.get('/lang/:code', (req, res) => {
+  const to = String(req.query.to || '');
+  res.cookie(LANG_COOKIE, pickLang(req.params.code), { maxAge: 365 * 864e5, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', path: '/' });
+  res.redirect(/^\/(?!\/)/.test(to) ? to : '/');
+});
+app.use((req, res, next) => {
+  const ru = req.user?.role === 'client' && pickLang(req.cookies?.[LANG_COOKIE]) === 'ru';
+  res.locals.lang = ru ? 'ru' : 'en';
+  res.locals.here = req.originalUrl;
+  if (ru) { const send = res.send.bind(res); res.send = body => send(typeof body === 'string' && /html/.test(res.get('Content-Type') || 'html') ? toRussian(body) : body); }
+  next();
+});
 // AI calls made while handling this request are attributed to the signed-in person; views get aiLine(usage)
 app.use(async (req, res, next) => {
   if (req.user && ['admin', 'staff'].includes(req.user.role)) {
