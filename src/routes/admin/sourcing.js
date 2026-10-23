@@ -35,17 +35,6 @@ r.get('/', async (req, res) => {
   (counts || []).forEach(x => { byStatus[x.status] = (byStatus[x.status] || 0) + 1; if (waiting.includes(x.id)) waitBy[x.status] = (waitBy[x.status] || 0) + 1; });
   res.render('admin/sourcing/index', { title: 'Sourcing', requests: data || [], pendingIds, poIds, waiting: waiting.length, waitBy, byStatus, statuses: REQUEST_STATUSES, status });
 });
-  const status = req.query.status;
-  if (status === 'open' || !status) q = q.in('status', ['new', 'reviewing', 'quoted']);
-  else if (status !== 'all') q = q.eq('status', status);
-  if (req.query.mine) q = q.eq('assigned_to', req.user.id);
-  const s = like(req.query.q);
-  if (s) q = q.or(`title.ilike.%${s}%,ref.ilike.%${s}%`);
-  const [{ data }, { data: counts }, { data: pend }, { data: poPend }] = await Promise.all([q, admin.from('requests').select('status'), admin.from('request_revisions').select('request_id').eq('status', 'pending'), admin.from('purchase_orders').select('request_id').eq('status', 'submitted')]);
-  const byStatus = {};
-  (counts || []).forEach(x => { byStatus[x.status] = (byStatus[x.status] || 0) + 1; });
-  res.render('admin/sourcing/index', { title: 'Sourcing', requests: data || [], pendingIds: (pend || []).map(x => x.request_id), poIds: (poPend || []).map(x => x.request_id), byStatus, statuses: REQUEST_STATUSES, status: status || 'open' });
-});
 
 // Staff enter a request that reached them outside the system (client email, WeChat): pick the client, list the products
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 40 } });
