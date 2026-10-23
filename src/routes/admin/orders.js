@@ -52,7 +52,8 @@ r.get('/', async (req, res) => {
   // totals are shown in the company's default currency (orders may be in different currencies)
   const defCur = await defaultCurrency(admin), settings = await getSettings(admin), list = data || [];
   // orders with no goods items (logistics only): gross profit is what was actually received minus costs
-  const noGoods = list.filter(o => !(Number(o.subtotal) > 0));
+  const live = list.filter(o => o.status !== 'cancelled');   // cancelled orders earn nothing: no margin, no profit, not in the totals
+  const noGoods = live.filter(o => !(Number(o.subtotal) > 0));
   if (noGoods.length) {
     const { data: pays } = await admin.from('order_payments').select('order_id, amount, currency').eq('status', 'confirmed').in('order_id', noGoods.map(o => o.id));
     noGoods.forEach(o => {
@@ -60,7 +61,7 @@ r.get('/', async (req, res) => {
       if (got > 0) { o.gross_profit = cashProfit({ received: got, cost: o.cost_total, freight: o.freight_total }).profit; o.profit_on_received = true; }
     });
   }
-  const totals = { goods: sumIn(settings, defCur, list.map(o => [o.subtotal, o.currency])), profit: sumIn(settings, defCur, list.map(o => [o.gross_profit, o.currency])), mixed: list.some(o => o.currency !== defCur) };
+  const totals = { goods: sumIn(settings, defCur, live.map(o => [o.subtotal, o.currency])), profit: sumIn(settings, defCur, live.map(o => [o.gross_profit, o.currency])), mixed: live.some(o => o.currency !== defCur) };
   res.render('admin/orders/index', { title: 'Orders', totals, orders: list, byStatus, statuses: ORDER_STATUSES, status, clients: clients || [] });
 });
 

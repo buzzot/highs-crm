@@ -42,7 +42,7 @@ r.get('/', async (req, res) => {
   const open = all.filter(o => !['delivered', 'closed', 'cancelled'].includes(o.status));
   const byStatus = {};
   open.forEach(o => { byStatus[o.status] = (byStatus[o.status] || 0) + 1; });
-  const recent = all.filter(o => o.created_at >= since30);
+  const recent = all.filter(o => o.created_at >= since30 && o.status !== 'cancelled');
   const kpi = {
     clients: clientsCount.count || 0,
     openRequests: (reqs.data || []).filter(q => ['new', 'reviewing'].includes(q.status)).length,
