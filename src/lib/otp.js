@@ -5,6 +5,8 @@ import { admin } from './supabase.js';
 import { hashSecret } from './signed.js';
 import { sendEmail } from './mailer.js';
 import { codeEmail, inviteEmail, resetEmail } from './email-templates.js';
+import { localizeEmail } from './i18n.js';
+import { emailLang } from './lang.js';
 
 export const CODE_TTL_MIN = 15;     // sign-in codes
 export const RESET_TTL_MIN = 30;    // password-reset links
@@ -39,18 +41,18 @@ export async function sendCode(email, purpose = 'login', linkPath = '/login/veri
   const code = newCode();
   const ttl = purpose === 'invite' ? INVITE_CODE_DAYS * 864e5 : CODE_TTL_MIN * 60e3;
   await store(email, purpose, code, ttl);
-  const msg = codeEmail({ url: `${appUrl()}${linkPath}`, code, minutes: purpose === 'invite' ? null : CODE_TTL_MIN, purpose });
+  const msg = localizeEmail(codeEmail({ url: `${appUrl()}${linkPath}`, code, minutes: purpose === 'invite' ? null : CODE_TTL_MIN, purpose }), await emailLang(email));
   await sendEmail({ to: lc(email), ...msg });
 }
 
 /** Invitation email: link to the invitation page + confirmation code. */
-export async function sendInvite({ email, token, orgName, inviterName, days, kind = 'client', mail = true }) {
+export async function sendInvite({ email, token, orgName, inviterName, days, kind = 'client', mail = true, lang = 'en' }) {
   const code = newCode();
   await store(email, 'invite', code, days * 864e5);
   const url = `${appUrl()}/invite/${token}`;
   let mailError = null;
   if (mail) {
-    try { await sendEmail({ to: lc(email), ...inviteEmail({ url, code, orgName, inviterName, days, kind }) }); }
+    try { await sendEmail({ to: lc(email), ...localizeEmail(inviteEmail({ url, code, orgName, inviterName, days, kind }), lang) }); }
     catch (e) { mailError = e.message || 'The email could not be sent.'; }
   }
   // url + code let staff hand the invitation over by chat when the supplier cannot receive email
@@ -61,7 +63,7 @@ export async function sendInvite({ email, token, orgName, inviterName, days, kin
 export async function sendReset(email) {
   const token = randomBytes(32).toString('base64url');
   await store(email, 'reset', token, RESET_TTL_MIN * 60e3);
-  await sendEmail({ to: lc(email), ...resetEmail({ url: `${appUrl()}/reset/${encodeURIComponent(lc(email))}/${token}`, email: lc(email), minutes: RESET_TTL_MIN }) });
+  await sendEmail({ to: lc(email), ...localizeEmail(resetEmail({ url: `${appUrl()}/reset/${encodeURIComponent(lc(email))}/${token}`, email: lc(email), minutes: RESET_TTL_MIN }), await emailLang(email)) });
 }
 
 /**

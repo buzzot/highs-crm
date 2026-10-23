@@ -5,6 +5,8 @@ import { snapshot, diff } from './request-revisions.js';
 import { changeSubmittedEmail, changeDecidedEmail } from './email-templates.js';
 import { sendEmail } from './mailer.js';
 import { log } from './activity.js';
+import { localizeEmail } from './i18n.js';
+import { requestLang } from './lang.js';
 
 const appUrl = () => (process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
 
@@ -126,5 +128,5 @@ export async function notifyStaffOfChange(req0, user) {
 
 export async function notifyClientOfDecision(request, rev, approved, note) {
   const { data: p } = rev.created_by ? await admin.from('profiles').select('email').eq('id', rev.created_by).maybeSingle() : { data: null };
-  if (p?.email) await mail([p.email], changeDecidedEmail({ request, approved, note, url: `${appUrl()}/portal/requests/${request.id}` }));
+  if (p?.email) await mail([p.email], localizeEmail(changeDecidedEmail({ request, approved, note, url: `${appUrl()}/portal/requests/${request.id}` }), await requestLang(request.id)));
 }

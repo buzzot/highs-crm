@@ -1,6 +1,23 @@
 // Russian texts for the client portal. English text (exactly as the page prints it) → Russian.
 // Kept short on purpose so the interface stays tidy. Anything not listed simply stays in English.
 export const RU = {
+  // sign-in & invitation pages
+  '8+ characters, letters and a number': '8+ символов, буквы и цифра', 'Access is by invitation only · © 2026 Lumi Trade': 'Доступ только по приглашению · © 2026 Lumi Trade',
+  'Asked more than once? Use the newest email.': 'Запрашивали несколько раз? Используйте самое новое письмо.', 'Back to sign in': 'Назад ко входу',
+  'Can\'t find it? Check spam. Each code works once.': 'Не нашли? Проверьте спам. Каждый код действует один раз.', 'Check your inbox': 'Проверьте почту',
+  'Check your inbox · Lumi Trade': 'Проверьте почту · Lumi Trade', 'Confirm email': 'Подтвердите email', 'Continue': 'Продолжить', 'Create my account': 'Создать аккаунт',
+  'Didn\'t get it?': 'Не пришло?', 'Each time you sign in we\'ll also email you a one-time code.': 'При каждом входе мы также отправим вам одноразовый код.',
+  'Email': 'Email', 'Email confirmed ✓ — tell us who you are and choose a password.': 'Email подтверждён ✓ — укажите имя и задайте пароль.', 'Enter your code': 'Введите код',
+  'Enter your code · Lumi Trade': 'Введите код · Lumi Trade', 'Follow production and shipping step by step': 'Следите за производством и доставкой', 'Forgot password?': 'Забыли пароль?',
+  'Next, we\'ll email you a one-time code to finish signing in.': 'Далее мы отправим одноразовый код для завершения входа.', 'Not there after a minute? Look in spam or promotions.': 'Нет письма больше минуты? Загляните в спам или «Промоакции».',
+  'Password': 'Пароль', 'Product photos, packing lists and shipping documents': 'Фото товаров, упаковочные листы и документы на груз', 'Repeat password': 'Повторите пароль',
+  'Save password & sign in': 'Сохранить пароль и войти', 'Send a new code': 'Отправить новый код', 'Send sourcing requests and approve quotes': 'Отправляйте запросы и утверждайте предложения',
+  'Send the link again': 'Отправить ссылку снова', 'Set up your account': 'Настройка аккаунта', 'Show': 'Показать', 'Show password': 'Показать пароль',
+  'Sign in to your Lumi Trade account.': 'Войдите в аккаунт Lumi Trade.', 'Sign in · Lumi Trade': 'Вход · Lumi Trade', 'Sourcing, orders and shipments — in one place.': 'Закупки, заказы и доставка — в одном месте.',
+  'Use a different account': 'Войти под другим аккаунтом', 'Use at least 8 characters with letters and a number.': 'Не менее 8 символов, с буквами и цифрой.', 'Verify & sign in': 'Подтвердить и войти',
+  'We sent a 6-digit code to': 'Мы отправили 6-значный код на', 'Welcome back': 'С возвращением', 'Your name': 'Ваше имя', 'Your profile & password': 'Профиль и пароль',
+  'and only once.': 'и только один раз.', 'has an account, we\'ve sent a link to choose a new password.': 'есть аккаунт, мы отправили ссылку для нового пароля.',
+  'Code from the email': 'Код из письма', 'e.g. Purchasing manager': 'напр. менеджер по закупкам', '🔒 Protected sign-in · one-time code by email': '🔒 Защищённый вход · одноразовый код на email',
   // shell & navigation
   'Overview': 'Обзор', 'My requests': 'Мои запросы', 'New request': 'Новый запрос', 'My orders': 'Мои заказы', 'Company': 'Компания', 'Account': 'Аккаунт',
   'Client portal': 'Кабинет клиента', 'Company account': 'Аккаунт компании', 'Sign out': 'Выйти', 'My account': 'Мой аккаунт', 'Menu': 'Меню', 'Your company': 'Ваша компания',

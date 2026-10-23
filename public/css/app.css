@@ -1356,3 +1356,6 @@ tr.needrow td:first-child { box-shadow: inset 4px 0 0 #e8a100; }
 .langsw a.on { background: var(--bg, #f4f5f7); color: var(--ink); box-shadow: 0 1px 2px rgba(15,30,50,.12); }
 html[lang=ru] .pill, html[lang=ru] .badge { text-transform: none; }
 html[lang=ru] .pill::first-letter, html[lang=ru] .badge::first-letter { text-transform: uppercase; }
+
+.authpanel { position: relative; }
+.authlang { position: absolute; top: 16px; right: 16px; margin-left: 0; }

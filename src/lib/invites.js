@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { admin } from './supabase.js';
 import { sendInvite } from './otp.js';
 import { seal, unseal } from './signed.js';
+import { orgLang } from './lang.js';
 
 import { INVITE_DAYS } from './members.js';
 export { INVITE_DAYS, memberRows, wantsLinkOnly } from './members.js';
@@ -55,7 +56,8 @@ export async function inviteUser({ email, role = 'client', orgId = null, supplie
     supplierId ? admin.from('suppliers').select('name, details_completed_at').eq('id', supplierId).single() : { data: null },
     invitedBy ? admin.from('profiles').select('full_name').eq('id', invitedBy).single() : { data: null },
   ]);
-  const sent = await sendInvite({ mail, email, token, orgName: org?.name || (sup?.details_completed_at ? sup.name : null), inviterName: inviter?.full_name || null, days: INVITE_DAYS, kind: role === 'supplier' ? 'supplier' : 'client' });
+  const lang = role === 'client' ? await orgLang(orgId) : 'en';   // invitations always use the company's language
+  const sent = await sendInvite({ mail, lang, email, token, orgName: org?.name || (sup?.details_completed_at ? sup.name : null), inviterName: inviter?.full_name || null, days: INVITE_DAYS, kind: role === 'supplier' ? 'supplier' : 'client' });
   return { resent: !!existing, expiresAt, link: sent.url, code: sent.code, mailError: sent.mailError, mailed: mail && !sent.mailError };
 }
 

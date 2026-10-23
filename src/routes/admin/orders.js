@@ -20,6 +20,8 @@ import { applyCashProfit } from '../../lib/order-profit.js';
 const appUrl = () => (process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
 import { rfqEmail } from '../../lib/email-templates.js';
 import { replyAddress, subjectTag } from '../../lib/freight.js';
+import { localizeEmail } from '../../lib/i18n.js';
+import { orgLang } from '../../lib/lang.js';
 
 const packUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 const IMG = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif' };
@@ -140,7 +142,7 @@ r.post('/:id/payments/:pid', async (req, res) => {
   try {
     const { data: users } = await admin.from('profiles').select('email').eq('org_id', pay.org_id).eq('role', 'client').eq('active', true);
     const to = pay.created_by ? [(await admin.from('profiles').select('email').eq('id', pay.created_by).maybeSingle()).data?.email].filter(Boolean) : (users || []).map(u => u.email);
-    if (to.length) { await sendEmail({ to, ...paymentDecidedEmail({ order: pay.orders, amount: pay.amount, confirmed: confirm, note, url: `${appUrl()}/portal/orders/${id}#pay` }) }); sent = ` The client was emailed (${to.join(', ')}).`; }
+    if (to.length) { await sendEmail({ to, ...localizeEmail(paymentDecidedEmail({ order: pay.orders, amount: pay.amount, confirmed: confirm, note, url: `${appUrl()}/portal/orders/${id}#pay` }), await orgLang(pay.org_id)) }); sent = ` The client was emailed (${to.join(', ')}).`; }
   } catch (e) { console.error(`[payment] email to client failed: ${e.message}`); }
   back(res, `/admin/orders/${id}`, { msg: (confirm ? 'Payment confirmed.' : 'Payment rejected.') + sent });
 });

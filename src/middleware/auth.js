@@ -68,7 +68,11 @@ export async function loadUser(req, res, next) {
 
   let { data: profile, error: pErr } = await loadProfile(user.id, async () => {
     let { data: profile, error: pErr } = await admin.from('profiles')
-      .select('*, organizations!profiles_org_id_fkey(id, name, country, details_completed_at)').eq('id', user.id).single();
+      .select('*, organizations!profiles_org_id_fkey(id, name, country, details_completed_at, language)').eq('id', user.id).single();
+    if (pErr && /language/i.test(pErr.message || '')) {   // migration 0032 (language) not applied yet: carry on in English
+      ({ data: profile, error: pErr } = await admin.from('profiles')
+        .select('*, organizations!profiles_org_id_fkey(id, name, country, details_completed_at)').eq('id', user.id).single());
+    }
     if (pErr && /details_completed_at|column/i.test(pErr.message || '')) {
       // migration 0008 not applied yet: still let people in, skip the company-details gate
       console.error(`[session] ${pErr.message} — run supabase/migrations/0008_company_details.sql`);

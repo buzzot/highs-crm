@@ -7,6 +7,8 @@ import { documentsEmail } from '../../lib/email-templates.js';
 import { getCompany } from '../../lib/purchase.js';
 import { log } from '../../lib/activity.js';
 import { bool, back, DOC_KINDS, INTERNAL_KINDS } from '../../lib/util.js';
+import { localizeEmail } from '../../lib/i18n.js';
+import { orderLang } from '../../lib/lang.js';
 
 const r = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -66,7 +68,7 @@ r.post('/send', async (req, res) => {
   } catch (e) { return back(res, to, { err: `Could not read a file: ${e.message}` }); }
   if (total > MAX_ATTACH) return back(res, to, { err: `The files add up to ${(total / 1048576).toFixed(1)} MB — send fewer at once (limit ${MAX_ATTACH / 1048576} MB).` });
   const company = await getCompany(admin);
-  try { await sendEmail({ to: emails, ...documentsEmail({ order, docs, company, message: String(message || '').trim().slice(0, 1500) }), attachments }); }
+  try { await sendEmail({ to: emails, ...localizeEmail(documentsEmail({ order, docs, company, message: String(message || '').trim().slice(0, 1500) }), await orderLang(order.id)), attachments }); }
   catch (e) { return back(res, to, { err: e.message }); }
   const { error: hErr } = await admin.from('document_sends').insert(docs.map(d => ({ document_id: d.id, sent_by: req.user.id, to_emails: emails, message: String(message || '').trim().slice(0, 1500) || null })));
   await log({ entityType: entity_type, entityId: entity_id, action: 'documents_sent', actorId: req.user.id, clientVisible: false, detail: { note: `${docs.length} document(s) → ${emails.join(', ')}` } });

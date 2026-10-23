@@ -27,5 +27,7 @@
     <p class="ab-foot">🔒 Protected sign-in · one-time code by email</p>
   </aside>
   <section class="authpanel">
+    <% const _l = typeof lang === 'undefined' ? 'en' : lang, _h = encodeURIComponent(typeof here === 'undefined' ? '/login' : here); %>
+    <span class="langsw authlang" role="group" aria-label="Language"><a href="/lang/en?to=<%= _h %>" class="<%= _l === 'en' ? 'on' : '' %>">EN</a><a href="/lang/ru?to=<%= _h %>" class="<%= _l === 'ru' ? 'on' : '' %>">РУ</a></span>
     <%- morph('mobile') %>
     <div class="authcard">

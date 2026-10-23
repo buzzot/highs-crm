@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import { toRussian, pickLang, LANG_COOKIE } from './lib/i18n.js';
+import { inviteLang } from './lib/lang.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadUser } from './middleware/auth.js';
@@ -58,17 +59,22 @@ app.use((req, res, next) => {
   next();
 });
 app.use(loadUser);
-// interface language: clients can switch to Russian; the page is translated once, only when they chose it
-app.get('/lang/:code', (req, res) => {
-  const to = String(req.query.to || '');
-  res.cookie(LANG_COOKIE, pickLang(req.params.code), { maxAge: 365 * 864e5, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', path: '/' });
+// interface language. A client sees their own choice, else their company's; people who are not signed in follow the cookie
+// (set from the invitation or the switch). Only Russian is translated, and only then does a page get touched.
+app.get('/lang/:code', async (req, res) => {
+  const code = pickLang(req.params.code), to = String(req.query.to || '');
+  res.cookie(LANG_COOKIE, code, { maxAge: 365 * 864e5, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', path: '/' });
+  if (req.user?.role === 'client') await admin.from('profiles').update({ language: code }).eq('id', req.user.id);   // remembered for next time (needs migration 0032)
   res.redirect(/^\/(?!\/)/.test(to) ? to : '/');
 });
-app.use((req, res, next) => {
-  const ru = req.user?.role === 'client' && pickLang(req.cookies?.[LANG_COOKIE]) === 'ru';
-  res.locals.lang = ru ? 'ru' : 'en';
+app.use(async (req, res, next) => {
+  const u = req.user;
+  let lang = u ? (u.role === 'client' ? pickLang(u.language || (!('language' in u) && req.cookies?.[LANG_COOKIE]) || u.organizations?.language) : 'en') : pickLang(req.cookies?.[LANG_COOKIE]);
+  const inv = !u && /^\/invite\/([^/]+)/.exec(req.path);
+  if (inv) { const il = await inviteLang(inv[1]); if (il) { lang = il; if (il !== req.cookies?.[LANG_COOKIE]) res.cookie(LANG_COOKIE, il, { maxAge: 365 * 864e5, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', path: '/' }); } }   // an invitation always speaks the company's language
+  res.locals.lang = lang;
   res.locals.here = req.originalUrl;
-  if (ru) { const send = res.send.bind(res); res.send = body => send(typeof body === 'string' && /html/.test(res.get('Content-Type') || 'html') ? toRussian(body) : body); }
+  if (lang === 'ru') { const send = res.send.bind(res); res.send = body => send(typeof body === 'string' && /html/.test(res.get('Content-Type') || 'html') ? toRussian(body) : body); }
   next();
 });
 // AI calls made while handling this request are attributed to the signed-in person; views get aiLine(usage)

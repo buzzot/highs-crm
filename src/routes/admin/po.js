@@ -10,6 +10,8 @@ import { DEFAULT_SCHEDULE, parseSchedule, withAmounts } from '../../lib/payments
 import { recalcOrder } from '../../lib/payments-db.js';
 import { piLines, PI_FREIGHT_MODES } from '../../lib/freight-mode.js';
 import { getCompany, poPdf, piPdf, piDocument, totalOf, parseLines, text } from '../../lib/purchase.js';
+import { localizeEmail } from '../../lib/i18n.js';
+import { orderLang, requestLang } from '../../lib/lang.js';
 
 const appUrl = () => (process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
 const s = (v, n = 300) => String(v ?? '').trim().slice(0, n);
@@ -108,7 +110,7 @@ po.post('/:id/reject', async (req, res) => {
   let sent = '';
   try {
     const to = p.client?.email;
-    if (to) { await sendEmail({ to, ...poRejectedEmail({ po: p, note, url: `${appUrl()}/portal/requests/${p.request_id}` }) }); sent = ` The client was emailed (${to}).`; }
+    if (to) { await sendEmail({ to, ...localizeEmail(poRejectedEmail({ po: p, note, url: `${appUrl()}/portal/requests/${p.request_id}` }), await requestLang(p.request_id)) }); sent = ` The client was emailed (${to}).`; }
   } catch (e) { console.error(`[po] reject email: ${e.message}`); }
   back(res, `/admin/po/${p.id}`, { msg: 'PO sent back to the client.' + sent });
 });
@@ -192,7 +194,7 @@ pi.post('/:id/send', async (req, res) => {
   const company = await getCompany(admin);
   const pdf = piPdf(row, p.orders, company);
   try {
-    await sendEmail({ to, ...piEmail({ pi: row, order: p.orders, company, total: totalOf(piLines(data)), currency: data.currency, schedule: withAmounts(data.schedule, totalOf(piLines(data))), message: s(req.body.message, 1500), url: `${appUrl()}/portal/orders/${p.orders.id}` }),
+    await sendEmail({ to, ...localizeEmail(piEmail({ pi: row, order: p.orders, company, total: totalOf(piLines(data)), currency: data.currency, schedule: withAmounts(data.schedule, totalOf(piLines(data))), message: s(req.body.message, 1500), url: `${appUrl()}/portal/orders/${p.orders.id}` }), await orderLang(p.orders.id)),
       attachments: [{ filename: `${p.pi_no}.pdf`, content: pdf.toString('base64') }] });
   } catch (e) { await admin.from('proforma_invoices').update({ data }).eq('id', p.id); return back(res, `/admin/pi/${p.id}`, { err: `Email failed: ${e.message}` }); }
   try {

@@ -2,6 +2,7 @@ import { Router } from '../../lib/router.js';
 import { admin } from '../../lib/supabase.js';
 import { inviteUser, memberRows, stashInvite, takeInvite, wantsLinkOnly } from '../../lib/invites.js';
 import { requireAdmin } from '../../middleware/auth.js';
+import { normLang } from '../../lib/lang.js';
 import { log } from '../../lib/activity.js';
 import { usageSummary, setCompanyAi } from '../../lib/ai-access.js';
 import { getPrices } from '../../lib/ai-usage.js';
@@ -10,6 +11,7 @@ import { ACTIVITY_TYPES, readActivity, withLastLogin } from '../../lib/crm.js';
 const ORG_FIELDS = ['name', 'registration_no', 'tax_id', 'address', 'postal_code', 'city', 'country', 'delivery_address', 'phone', 'email', 'website', 'default_currency', 'notes'];
 
 const r = Router();
+const withLang = b => ('language' in b ? { ...b, language: normLang(b.language) } : b);
 const clean = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, v === '' ? null : v]));
 
 // staff management (admin only) lives here too (declared before /:id so it isn't shadowed)
@@ -37,7 +39,7 @@ r.get('/', async (req, res) => {
 
 r.get('/new', (req, res) => res.render('admin/clients/form', { title: 'New client', org: {}, error: null }));
 r.post('/', async (req, res) => {
-  const { data, error } = await admin.from('organizations').insert(clean(req.body)).select().single();
+  const { data, error } = await admin.from('organizations').insert(clean(withLang(req.body))).select().single();
   if (error) return res.render('admin/clients/form', { title: 'New client', org: req.body, error: error.message });
   res.redirect(`/admin/clients/${data.id}`);
 });
@@ -98,7 +100,7 @@ r.post('/:id/ai', requireAdmin, async (req, res) => {
   res.redirect(`/admin/clients/${req.params.id}?msg=` + encodeURIComponent(`AI ${on ? 'switched on' : 'switched off'} for this client.`));
 });
 r.post('/:id', async (req, res) => {
-  const { error } = await admin.from('organizations').update(clean(req.body)).eq('id', req.params.id);
+  const { error } = await admin.from('organizations').update(clean(withLang(req.body))).eq('id', req.params.id);
   if (error) return res.render('admin/clients/form', { title: 'Edit client', org: { ...req.body, id: req.params.id }, error: error.message });
   res.redirect(`/admin/clients/${req.params.id}`);
 });

@@ -13,6 +13,8 @@ import { requireAdmin } from '../../middleware/auth.js';
 import { cargoLine, cargoTotals, AIR_KG_PER_CBM } from '../../lib/cargo.js';
 import { CONTAINER_DEFAULTS } from '../../lib/product-metrics.js';
 import { clean, bool, back, notFound, getSettings, clearSettingsCache, fxRate, INCOTERMS, CURRENCIES } from '../../lib/util.js';
+import { localizeEmail } from '../../lib/i18n.js';
+import { orgLang } from '../../lib/lang.js';
 
 const r = Router();
 const QUOTE_FIELDS = ['request_id', 'request_item_id', 'product_id', 'supplier_id', 'quantity', 'unit_cost', 'cost_currency', 'fx_rate', 'margin_pct', 'sell_currency',
@@ -246,7 +248,7 @@ r.post('/requests/:rid/send-all', async (req, res) => {
       const x = await loadCombined(rid, ['sent', 'accepted']), c = x.combined;
       let attachments;
       try { attachments = [{ filename: `${rq.ref}-quotation.pdf`, content: Buffer.from(quotationPdf({ request: x.request, combined: c, org: x.org, company: await getCompany(admin) })) }]; } catch (e) { console.error(`[quote] pdf failed: ${e.message}`); }
-      await sendEmail({ to: sentTo, attachments, ...quoteSentEmail({ request: rq, validUntil: c.valid_until, leadTimeDays: c.lead_time_days, count: c.count, total: c.mixed ? null : c.shown.grandTotal, currency: c.currency, attached: !!attachments, notes: noteOf(x.quotes), url: `${(process.env.APP_URL || '').replace(/\/+$/, '')}/portal/requests/${rq.id}` }) });
+      await sendEmail({ to: sentTo, attachments, ...localizeEmail(quoteSentEmail({ request: rq, validUntil: c.valid_until, leadTimeDays: c.lead_time_days, count: c.count, total: c.mixed ? null : c.shown.grandTotal, currency: c.currency, attached: !!attachments, notes: noteOf(x.quotes), url: `${(process.env.APP_URL || '').replace(/\/+$/, '')}/portal/requests/${rq.id}` }), await orgLang(rq.org_id)) });
     }
   } catch (e) { console.error(`[quote] email to client failed: ${e.message}`); return back(res, to, { msg: `${drafts.length} quotes sent — the client can see them in the portal, but the email notification failed.` }); }
   back(res, to, { msg: `${drafts.length} quotes sent${sentTo.length ? ` and the client was notified (${sentTo.join(', ')}).` : ' — the client can see them in the portal (no active client user to email).'}` });
@@ -421,7 +423,7 @@ r.post('/quotes/:id/send', async (req, res) => {
         const l0 = c.lines[0]; line = { quantity: l0.quantity, unit_price: l0.shown.unit_price, goods: l0.shown.goods, logistics: l0.shown.logistics, total: l0.shown.total };
         attachments = [{ filename: `${rq.ref}-quotation.pdf`, content: Buffer.from(quotationPdf({ request: x.request, combined: c, org: x.org, company: await getCompany(admin) })) }];
       } catch (e) { console.error(`[quote] pdf failed: ${e.message}`); }
-      await sendEmail({ to: sentTo, attachments, ...quoteSentEmail({ request: rq, validUntil: q.valid_until, leadTimeDays: q.lead_time_days, count: 1, currency: q.sell_currency, line, attached: !!attachments, notes: q.notes, url: `${(process.env.APP_URL || '').replace(/\/+$/, '')}/portal/requests/${rq.id}` }) });
+      await sendEmail({ to: sentTo, attachments, ...localizeEmail(quoteSentEmail({ request: rq, validUntil: q.valid_until, leadTimeDays: q.lead_time_days, count: 1, currency: q.sell_currency, line, attached: !!attachments, notes: q.notes, url: `${(process.env.APP_URL || '').replace(/\/+$/, '')}/portal/requests/${rq.id}` }), await orgLang(rq.org_id)) });
     }
   } catch (e) { console.error(`[quote] email to client failed: ${e.message}`); return back(res, `/admin/pricing/quotes/${q.id}`, { msg: 'Quote sent — the client can see it in their portal, but the email notification failed.' }); }
   back(res, `/admin/pricing/quotes/${q.id}`, { msg: `Quote sent — the client can see it in their portal${sentTo.length ? ` and was notified by email (${sentTo.join(', ')}).` : '.'}` });
