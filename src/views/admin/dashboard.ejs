@@ -36,7 +36,7 @@
   </div>
   <div class="card">
     <h2>Revenue & gross profit · 6 months</h2>
-    <% const maxR = Math.max(1, ...months.map(m => m.revenue)); %>
+    <% const maxR = Math.max(1, ...months.map(m => Math.max(m.revenue, m.profit))); %>
     <div class="cols">
       <% months.forEach(m => { %>
         <div class="col" title="<%= m.label %>: revenue <%= fmt.money(m.revenue, defCur, 0) %>, profit <%= fmt.money(m.profit, defCur, 0) %>">
