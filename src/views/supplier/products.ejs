@@ -1,16 +1,16 @@
 <%- include('../partials/head') %>
 <%
-  const tabs = [['', 'All', counts.all], ['draft', 'Drafts', counts.draft], ['submitted', 'Submitted', counts.submitted], ['returned', 'Sent back', counts.returned], ['selected', 'In catalog', counts.selected]].filter(t => t[0] === '' || t[2] > 0 || status === t[0]);
+  const tabs = [['', 'All', counts.all], ['draft', 'Drafts', counts.draft], ['submitted', 'Submitted', counts.submitted], ['returned', 'Sent back', counts.returned], ['edit_requested', 'Edit requested', counts.edit_requested], ['unlocked', 'Open for editing', counts.unlocked], ['updated', 'Updated', counts.updated], ['selected', 'In catalog', counts.selected]].filter(t => t[0] === '' || t[2] > 0 || status === t[0]);
   const href = st => '/supplier/products?' + new URLSearchParams(Object.entries({ status: st, q, cat }).filter(([, v]) => v)).toString();
-  const pill = { draft: 'new', submitted: 'quoted', returned: 'bad', selected: 'delivered' };
+  const pill = { draft: 'new', submitted: 'quoted', returned: 'bad', selected: 'delivered', edit_requested: 'reviewing', unlocked: 'new', updated: 'quoted' };
 %>
 <div class="pagehead"><div><p class="eyebrow">Product catalog</p><h1>My products</h1><p class="muted">Submit your products and prices to Lumi Trade.</p></div>
   <div class="row"><a class="btn" href="/supplier/products/bulk"><%- icon('upload') %> Bulk upload</a><a class="btn primary" href="/supplier/products/new"><%- icon('plus') %> Add product</a></div></div>
 <div class="kpis">
   <div class="kpi"><span class="n"><%= counts.all %></span><span class="l">Total products</span></div>
   <div class="kpi"><span class="n"><%= counts.draft %></span><span class="l">Drafts</span></div>
-  <div class="kpi"><span class="n"><%= counts.submitted + counts.returned %></span><span class="l">Submitted / in review</span></div>
-  <div class="kpi"><span class="n"><%= counts.selected %></span><span class="l">In the Lumi Trade catalog</span></div>
+  <div class="kpi"><span class="n"><%= counts.submitted + counts.returned + counts.updated %></span><span class="l">Submitted / in review</span></div>
+  <div class="kpi"><span class="n"><%= counts.catalog %></span><span class="l">In the Lumi Trade catalog</span></div>
 </div>
 <div class="card">
   <div class="tabs">
@@ -39,8 +39,17 @@
         <td><span class="pill <%= pill[x.status] %>"><%= labels[x.status] %></span></td>
         <td><div class="pbar"><i style="width:<%= x.pct %>%"></i></div><span class="small muted"><%= x.pct %>%</span></td>
         <td class="small muted nowrap"><%= fmt.date(x.updated) %></td>
-        <td class="right nowrap"><% if (x.status === 'draft' || x.status === 'returned') { %><a class="btn small" href="/supplier/products/<%= x.id %>/edit"><%= x.status === 'returned' ? 'Fix and resubmit' : 'Continue' %></a>
-          <form method="post" action="/supplier/products/<%= x.id %>/delete" class="inline" onsubmit="return confirm('Delete this draft?')"><button class="link small danger">Delete</button></form><% } %></td>
+        <td class="right nowrap">
+          <% if (x.status === 'draft' || x.status === 'returned') { %><a class="btn small" href="/supplier/products/<%= x.id %>/edit"><%= x.status === 'returned' ? 'Fix and resubmit' : 'Continue' %></a>
+            <form method="post" action="/supplier/products/<%= x.id %>/delete" class="inline" onsubmit="return confirm('Delete this draft?')"><button class="link small danger">Delete</button></form>
+          <% } else if (x.status === 'submitted') { %><a class="btn small" href="/supplier/products/<%= x.id %>/edit">Edit</a>
+          <% } else if (x.status === 'unlocked' || x.status === 'updated') { %><a class="btn small <%= x.status === 'unlocked' ? 'primary' : '' %>" href="/supplier/products/<%= x.subId %>/edit">Edit</a>
+          <% } else if (x.status === 'edit_requested') { %><span class="muted small">Waiting for Lumi Trade</span>
+          <% } else if (x.status === 'selected') { %>
+            <details class="reqedit"><summary class="btn small">Request edit</summary>
+              <form method="post" action="/supplier/products/<%= x.id %>/request-edit"><label>What do you want to change?<textarea name="reason" rows="3" required placeholder="e.g. new price from 1 Nov, new carton size"></textarea></label><button class="btn primary small">Send request</button></form>
+            </details>
+          <% } %></td>
       </tr>
     <% }) %>
     </tbody>

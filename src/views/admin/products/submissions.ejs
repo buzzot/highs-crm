@@ -7,7 +7,7 @@
 <div class="card">
   <% if (!rows.length) { %><p class="muted">Nothing here.</p><% } else { %>
   <table class="tbl">
-    <thead><tr><th>Product</th><th>Supplier</th><th class="right">Price</th><th>MOQ</th><th>Complete?</th><th><%= status === 'submitted' ? 'Submitted' : 'Updated' %></th></tr></thead>
+    <thead><tr><th>Product</th><th>Supplier</th><th class="right">Price</th><th>MOQ</th><th>Complete?</th><th><%= ['submitted', 'edit_requested'].includes(status) ? 'Requested' : 'Updated' %></th></tr></thead>
     <tbody>
     <% rows.forEach(x => { const d = x.data || {}; const m = miss(x); %>
       <tr>
@@ -16,7 +16,7 @@
         <td class="right"><%= d.unit_price > 0 ? fmt.money(d.unit_price, d.currency || 'USD', 2) : '—' %></td>
         <td><%= d.moq ?? '—' %></td>
         <td><% if (!m.length) { %><span class="ok">Complete</span><% } else { %><span class="muted small">Missing <%= m.length %></span><% } %></td>
-        <td class="small muted"><%= fmt.date(status === 'submitted' ? x.submitted_at : x.updated_at) %></td>
+        <td class="small muted"><%= fmt.date(['submitted', 'edit_requested'].includes(status) ? (x.submitted_at || x.updated_at) : x.updated_at) %></td>
       </tr>
     <% }) %>
     </tbody>

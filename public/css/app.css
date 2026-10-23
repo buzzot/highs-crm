@@ -1339,3 +1339,8 @@ label:has(> .picker-native) { position: relative; }
 .invshow-code { max-width: 140px; letter-spacing: .25em; font-size: 16px; font-weight: 650; }
 .inviteform .chk { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted, #6b7785); }
 .inviteform .chk input { width: auto; flex: none; margin: 0; }
+.reqedit { display: inline-block; text-align: left; position: relative; }
+.reqedit summary { list-style: none; cursor: pointer; display: inline-block; }
+.reqedit summary::-webkit-details-marker { display: none; }
+.reqedit[open] form { position: absolute; right: 0; top: 36px; z-index: 5; width: 300px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; box-shadow: 0 12px 30px rgba(15,30,50,.18); display: grid; gap: 8px; }
+.reqedit textarea { width: 100%; }

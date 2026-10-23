@@ -8,6 +8,9 @@
 %>
 <div class="pagehead">
   <div><p class="eyebrow">New catalog entry</p><h1><%= sub.id ? 'Edit product' : 'Add product' %></h1>
+  <% const reopen = ['unlocked', 'updated'].includes(sub.status); %>
+  <% if (reopen) { %><p class="alert ok">Lumi Trade released this product for editing. Change what you need, then send the changes — the catalog is updated after they approve.<% if (sub.review_note) { %> <strong>Note from Lumi Trade: <%= sub.review_note %></strong><% } %></p><% } %>
+  <% if (sub.status === 'submitted') { %><p class="alert">This product is waiting for Lumi Trade's review. You can still change it — save when you're done.</p><% } %>
   <% if (sub.status === 'returned' && sub.review_note) { %><p class="alert warn">Lumi Trade sent this back: <%= sub.review_note %></p><% } %></div>
   <a class="btn" href="/supplier/products">Close</a>
 </div>
@@ -116,11 +119,11 @@
   </section>
 
   <footer class="spnav">
-    <button type="submit" class="btn" id="sp_draft">Save draft</button>
+    <button type="submit" class="btn" id="sp_draft" <%- sub.status === 'draft' || sub.status === 'returned' || !sub.id ? '' : 'hidden' %>>Save draft</button>
     <span class="spacer"></span>
     <button type="button" class="btn" id="sp_back" hidden>‹ Back</button>
     <button type="button" class="btn primary" id="sp_next">Continue ›</button>
-    <button type="submit" class="btn primary" id="sp_submit" hidden>Submit for review</button>
+    <button type="submit" class="btn primary" id="sp_submit" hidden><%= reopen ? 'Send changes' : sub.status === 'submitted' ? 'Save changes' : 'Submit for review' %></button>
   </footer>
 </form>
 <script src="/js/supplier-product.js" defer></script>

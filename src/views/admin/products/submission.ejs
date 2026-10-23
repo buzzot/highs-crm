@@ -2,7 +2,7 @@
 <%
   const money = (v, c) => v > 0 ? fmt.money(v, c || 'USD', 2) : '—';
   const row = (k, val) => (val === null || val === undefined || val === '') ? '' : `<dt>${k}</dt><dd>${String(val).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))}</dd>`;
-  const label = { submitted: 'Waiting for your review', returned: 'Sent back to the supplier', draft: 'Draft (not submitted)', approved: 'Approved' }[sub.status];
+  const label = { submitted: 'Waiting for your review', returned: 'Sent back to the supplier', draft: 'Draft (not submitted)', approved: 'Approved', edit_requested: 'Supplier asks to edit', unlocked: 'Released — supplier is editing', updated: 'Supplier sent changes' }[sub.status];
 %>
 <div class="pagehead">
   <div><a class="back" href="/admin/products/submissions?status=<%= sub.status %>">← Supplier products</a>
@@ -11,6 +11,11 @@
   <% if (sub.status === 'approved' && sub.product_id) { %><a class="btn" href="/admin/products/<%= sub.product_id %>">Open product</a><% } %>
 </div>
 <% if (sameSku) { %><div class="alert warn">This supplier already has a product with the same SKU: <a href="/admin/products/<%= sameSku.id %>"><%= sameSku.name %></a>. Approving creates a new, separate product.</div><% } %>
+<% if (sub.status === 'edit_requested') { %><div class="alert warn"><strong>Edit request:</strong> <%= sub.edit_reason %></div><% } %>
+<% if (diff.length && sub.status !== 'edit_requested') { %><div class="card"><h2>What changed <span class="count"><%= diff.length %></span></h2>
+  <table class="tbl"><thead><tr><th>Field</th><th>Now in the catalog</th><th>Supplier's new value</th></tr></thead><tbody><% diff.forEach(c => { %><tr><td><%= c.label %></td><td class="muted"><%= c.from %></td><td><strong><%= c.to %></strong></td></tr><% }) %></tbody></table>
+  <% if (sub.status === 'updated') { %><p class="muted small">Photo changes are not listed — check the photos below.</p><% } %></div>
+<% } else if (sub.status === 'updated') { %><div class="alert">No field changed (only photos may differ).</div><% } %>
 <% if (sub.review_note && sub.status === 'returned') { %><div class="alert warn">Sent back: <%= sub.review_note %></div><% } %>
 <div class="grid2">
   <div>
@@ -37,6 +42,25 @@
       <% if (fit) { %><p class="muted small">Calculated: 1 carton = <%= fit.cartonCbm %> m³ · about <%= fit.gp20 %> in a 20GP · <%= fit.gp40 %> in a 40GP · <%= fit.hq40 %> in a 40HQ</p><% } %></div>
     <% if (d.factory_notes) { %><div class="card"><h2>Factory notes</h2><p class="pre"><%= d.factory_notes %></p></div><% } %>
     <% if (miss.length) { %><div class="card"><h2>Missing</h2><ul class="spmiss"><% miss.forEach(m => { %><li><%= m.label %></li><% }) %></ul></div><% } %>
+    <% if (sub.status === 'edit_requested' || sub.status === 'unlocked') { %>
+    <div class="card">
+      <% if (sub.status === 'edit_requested') { %><form method="post" action="/admin/products/submissions/<%= sub.id %>/release"><button class="btn primary">Release for editing</button></form>
+      <% } else { %><p class="muted">The supplier can edit this product now. Their changes come back here as “Updated”.</p><% } %>
+      <form method="post" action="/admin/products/submissions/<%= sub.id %>/decline" class="sub">
+        <label><%= sub.status === 'unlocked' ? 'Lock it again' : 'Decline the request' %> — optional note for the supplier <input name="note" maxlength="500"></label>
+        <button class="btn"><%= sub.status === 'unlocked' ? 'Lock again' : 'Decline' %></button>
+      </form>
+    </div>
+    <% } %>
+    <% if (sub.status === 'updated') { %>
+    <div class="card">
+      <form method="post" action="/admin/products/submissions/<%= sub.id %>/apply"><button class="btn primary">Apply changes to the product</button></form>
+      <form method="post" action="/admin/products/submissions/<%= sub.id %>/return" class="sub">
+        <label>Send back to the supplier with a note <textarea name="note" rows="3" required placeholder="What should they fix?"></textarea></label>
+        <button class="btn">Send back</button>
+      </form>
+    </div>
+    <% } %>
     <% if (sub.status === 'submitted') { %>
     <div class="card">
       <form method="post" action="/admin/products/submissions/<%= sub.id %>/approve"><button class="btn primary">Approve — add to products</button></form>

@@ -3,7 +3,7 @@ import { admin } from '../../lib/supabase.js';
 import multer from '../../lib/multer-utf8.js';
 import { clean, notFound, getSettings, fxRate, back } from '../../lib/util.js';
 import { log } from '../../lib/activity.js';
-import { clean as cleanSub, missing as subMissing, toProduct, containerFit } from '../../lib/supplier-product.js';
+import { clean as cleanSub, missing as subMissing, toProduct, containerFit, changes, fromProduct } from '../../lib/supplier-product.js';
 import { productMetrics } from '../../lib/product-metrics.js';
 import { compareProducts, extractProductCard, aiEnabled } from '../../lib/ai.js';
 import { uploadDocument, deleteDocument } from '../../lib/storage.js';
@@ -99,7 +99,7 @@ async function firstPhotos(ids) {
 r.get('/', async (req, res) => {
   const { rows, total, categories, suppliers, settings, sort } = await listProducts(req.query);
   const photos = await firstPhotos(rows.map(p => p.id));
-  const { count: pendingSubs } = await admin.from('supplier_products').select('id', { count: 'exact', head: true }).eq('status', 'submitted'); // null before migration 0028
+  const { count: pendingSubs } = await admin.from('supplier_products').select('id', { count: 'exact', head: true }).in('status', ['submitted', 'edit_requested', 'updated']); // null before migration 0028
   res.render('admin/products/index', { pendingSubs: pendingSubs || 0,
     title: 'Products', products: rows, total, categories, suppliers, thumb: photos.first || {}, photoCount: photos.count || {},
     sorts: Object.fromEntries(Object.entries(SORTS).map(([k, [label]]) => [k, label])), sort, container: settings.container,
@@ -202,7 +202,7 @@ r.post('/quick', async (req, res) => {
 });
 
 // ---------- products submitted by suppliers (supplier portal "Add product") ----------
-const SUB_TABS = [['submitted', 'To review'], ['returned', 'Sent back'], ['draft', 'Drafts'], ['approved', 'Approved']];
+const SUB_TABS = [['submitted', 'To review'], ['edit_requested', 'Edit requests'], ['updated', 'Updated'], ['unlocked', 'Open for editing'], ['returned', 'Sent back'], ['draft', 'Drafts'], ['approved', 'Approved']];
 r.get('/submissions', async (req, res) => {
   const status = SUB_TABS.some(t => t[0] === req.query.status) ? req.query.status : 'submitted';
   const [{ data: rows }, { data: all }] = await Promise.all([
@@ -221,7 +221,12 @@ r.get('/submissions/:id', async (req, res) => {
   const { data: docs } = ids.length ? await admin.from('documents').select('id, title').in('id', ids) : { data: [] };
   // same supplier SKU already on file?
   const dup = d.sku ? (await admin.from('products').select('id, name').eq('supplier_id', sub.supplier_id).ilike('supplier_sku', d.sku.replace(/[%_]/g, c => '\\' + c)).limit(1)).data?.[0] || null : null;
-  res.render('admin/products/submission', { title: d.name || 'Submission', sub, d, photos: docs || [], miss: subMissing(d, (docs || []).length), fit: containerFit(d), sameSku: dup, msg: req.query.msg, err: req.query.err });
+  let prod = null, diff = [];
+  if (sub.product_id) {
+    prod = (await admin.from('products').select('*').eq('id', sub.product_id).maybeSingle()).data;
+    if (prod && ['updated', 'edit_requested', 'unlocked'].includes(sub.status)) diff = changes(fromProduct(prod), d);
+  }
+  res.render('admin/products/submission', { title: d.name || 'Submission', sub, d, prod, diff, photos: docs || [], miss: subMissing(d, (docs || []).length), fit: containerFit(d), sameSku: dup, msg: req.query.msg, err: req.query.err });
 });
 
 r.post('/submissions/:id/approve', async (req, res) => {
@@ -245,10 +250,49 @@ r.post('/submissions/:id/return', async (req, res) => {
   if (!sub) return notFound(res, 'Submission');
   const note = String(req.body.note || '').trim().slice(0, 1000);
   if (!note) return back(res, `/admin/products/submissions/${sub.id}`, { err: 'Write what the supplier should fix.' });
-  if (sub.status !== 'submitted') return back(res, `/admin/products/submissions/${sub.id}`, { err: 'Only submitted products can be sent back.' });
-  await admin.from('supplier_products').update({ status: 'returned', review_note: note, decided_at: new Date().toISOString(), decided_by: req.user.id, updated_at: new Date().toISOString() }).eq('id', sub.id);
+  if (!['submitted', 'updated'].includes(sub.status)) return back(res, `/admin/products/submissions/${sub.id}`, { err: 'Only submitted products can be sent back.' });
+  await admin.from('supplier_products').update({ status: sub.status === 'updated' ? 'unlocked' : 'returned', review_note: note, decided_at: new Date().toISOString(), decided_by: req.user.id, updated_at: new Date().toISOString() }).eq('id', sub.id);
   await log({ entityType: 'supplier', entityId: sub.supplier_id, action: 'product_returned', actorId: req.user.id, detail: { note: `${sub.data?.name || 'product'}: ${note}` } });
   res.redirect('/admin/products/submissions?msg=' + encodeURIComponent('Sent back to the supplier.'));
+});
+
+// ---- changing a product that is already in the catalog: supplier asks → staff release → supplier edits ("updated") → staff apply ----
+const subRow = async id => (await admin.from('supplier_products').select('*').eq('id', id).maybeSingle()).data;
+const setSub = (id, patch) => admin.from('supplier_products').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id);
+r.post('/submissions/:id/release', async (req, res) => {
+  const sub = await subRow(req.params.id);
+  if (!sub) return notFound(res, 'Submission');
+  if (sub.status !== 'edit_requested') return back(res, `/admin/products/submissions/${sub.id}`, { err: 'Nothing to release.' });
+  await setSub(sub.id, { status: 'unlocked', review_note: null, decided_at: new Date().toISOString(), decided_by: req.user.id });
+  await log({ entityType: 'supplier', entityId: sub.supplier_id, action: 'product_edit_released', actorId: req.user.id, detail: { note: sub.data?.name } });
+  res.redirect(`/admin/products/submissions/${sub.id}?msg=` + encodeURIComponent('Released — the supplier can edit this product now.'));
+});
+r.post('/submissions/:id/decline', async (req, res) => {
+  const sub = await subRow(req.params.id);
+  if (!sub) return notFound(res, 'Submission');
+  if (!['edit_requested', 'unlocked'].includes(sub.status)) return back(res, `/admin/products/submissions/${sub.id}`, { err: 'Nothing to decline.' });
+  const note = String(req.body.note || '').trim().slice(0, 500);
+  await setSub(sub.id, { status: 'approved', edit_reason: null, review_note: note || null, decided_at: new Date().toISOString(), decided_by: req.user.id });
+  await log({ entityType: 'supplier', entityId: sub.supplier_id, action: 'product_edit_declined', actorId: req.user.id, detail: { note: sub.data?.name } });
+  res.redirect('/admin/products/submissions?msg=' + encodeURIComponent(sub.status === 'unlocked' ? 'Locked again.' : 'Request declined.'));
+});
+r.post('/submissions/:id/apply', async (req, res) => {
+  const sub = await subRow(req.params.id);
+  if (!sub) return notFound(res, 'Submission');
+  if (sub.status !== 'updated' || !sub.product_id) return back(res, `/admin/products/submissions/${sub.id}`, { err: 'Only updated products can be applied.' });
+  const d = { ...cleanSub({}), ...sub.data };
+  const { supplier_id, ...fields } = toProduct(d, sub.supplier_id);
+  const { error } = await admin.from('products').update(fields).eq('id', sub.product_id);
+  if (error) return back(res, `/admin/products/submissions/${sub.id}`, { err: error.message });
+  // photos: the supplier's list is the truth — new ones join the product, removed ones are deleted
+  const keep = (d.photo_ids || []).filter(Boolean);
+  const { data: have } = await admin.from('documents').select('id').eq('entity_type', 'product').eq('entity_id', sub.product_id).eq('kind', 'product_photo');
+  for (const x of have || []) if (!keep.includes(x.id)) await deleteDocument(x.id);
+  const fresh = keep.filter(id => !(have || []).some(x => x.id === id));
+  if (fresh.length) await admin.from('documents').update({ entity_type: 'product', entity_id: sub.product_id, client_visible: true }).in('id', fresh);
+  await setSub(sub.id, { status: 'approved', edit_reason: null, review_note: null, decided_at: new Date().toISOString(), decided_by: req.user.id });
+  await log({ entityType: 'supplier', entityId: sub.supplier_id, action: 'product_update_applied', actorId: req.user.id, detail: { note: d.name } });
+  res.redirect(`/admin/products/${sub.product_id}?msg=` + encodeURIComponent('Changes applied to the product.'));
 });
 
 r.get('/:id', async (req, res) => {

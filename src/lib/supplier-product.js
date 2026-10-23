@@ -78,24 +78,67 @@ export function completeness(d = {}, photos = 0) {
   return Math.round(checks.filter(Boolean).length / checks.length * 100);
 }
 
+/** Field labels (for the "what changed" list). */
+export const LABELS = { name: 'Name', sku: 'SKU', category: 'Category', subcategory: 'Subcategory', materials: 'Materials', size: 'Product size (cm)', packaging_type: 'Packaging type',
+  certifications: 'Certifications', hs_code: 'HS code', origin: 'Country of origin', brand: 'Brand', battery: 'Battery / magnet / liquid', currency: 'Currency', incoterm: 'Incoterm',
+  fob_port: 'FOB port', payment_terms: 'Payment terms', valid_until: 'Quote valid until', description: 'Description', factory_notes: 'Factory notes', unit_weight_kg: 'Unit net weight (kg)',
+  unit_price: 'Unit price', moq: 'MOQ', sample_days: 'Sample lead time (days)', lead_days: 'Production lead time (days)', inner_pack: 'Inner pack', carton_qty: 'Units per carton',
+  carton_l: 'Carton length', carton_w: 'Carton width', carton_h: 'Carton height', net_kg: 'Carton net weight', gross_kg: 'Carton gross weight', u20gp: 'Units per 20GP', u40gp: 'Units per 40GP', u40hq: 'Units per 40HQ' };
+
+/** Fields whose value differs between two wizard data objects → [{ label, from, to }]. */
+export function changes(before = {}, after = {}) {
+  const out = [];
+  for (const k of Object.keys(LABELS)) {
+    const a = before[k] ?? '', b = after[k] ?? '';
+    if (String(a).trim() !== String(b).trim()) out.push({ key: k, label: LABELS[k], from: a === '' ? '—' : a, to: b === '' ? '—' : b });
+  }
+  return out;
+}
+
+/** The wizard data of a catalog product (so a supplier can edit it): reverse of toProduct. */
+export function fromProduct(p = {}, photoIds = []) {
+  const sp = p.spec || {};
+  const size = [p.unit_length_cm, p.unit_width_cm, p.unit_height_cm].every(v => v > 0) ? [p.unit_length_cm, p.unit_width_cm, p.unit_height_cm].join('×') : (sp['Product size (cm)'] || '');
+  return { ...clean({
+    name: p.name, sku: p.supplier_sku, category: p.category, subcategory: sp.Subcategory, materials: sp.Materials, size, packaging_type: sp['Packaging type'],
+    certifications: sp.Certifications, hs_code: p.hs_code, origin: sp['Country of origin'], brand: sp.Brand, battery: sp['Battery / magnet / liquid'], currency: p.cost_currency,
+    incoterm: sp.Incoterm, fob_port: sp['FOB port / delivery point'], payment_terms: sp['Payment terms'], valid_until: sp['Quote valid until'], photo_link: sp['Photo link'],
+    description: p.description, factory_notes: sp['Factory notes'], unit_weight_kg: p.unit_weight_kg, unit_price: p.unit_cost, moq: p.moq,
+    sample_days: sp['Sample lead time (days)'], lead_days: sp['Production lead time (days)'], inner_pack: sp['Inner pack (pcs)'], carton_qty: p.carton_qty,
+    carton_l: p.carton_length_cm, carton_w: p.carton_width_cm, carton_h: p.carton_height_cm, net_kg: sp['Carton net weight (kg)'], gross_kg: p.carton_weight_kg,
+    u20gp: sp['Units per 20GP'], u40gp: sp['Units per 40GP'], u40hq: sp['Units per 40HQ'] }), photo_ids: photoIds };
+}
+
+/** Statuses in which the supplier may change the details. */
+export const EDITABLE = ['draft', 'returned', 'submitted', 'unlocked', 'updated'];
+/** Statuses of a request to change an already approved product. */
+export const EDIT_FLOW = ['edit_requested', 'unlocked', 'updated'];
+
 /**
  * One list for the "My products" page: the supplier's drafts / submissions plus the products already in the catalog.
- * status: draft | submitted | returned | selected (= in the Lumi Trade catalog).
+ * status: draft | submitted | returned | selected (= in the Lumi Trade catalog) | edit_requested | unlocked | updated (a catalog product being changed).
  */
 export function catalogItems({ products = [], photoOf = {}, subs = [] } = {}) {
-  const fromSubs = subs.filter(s => s.status !== 'approved').map(s => {
+  const flow = {};
+  subs.filter(s => s.product_id && EDIT_FLOW.includes(s.status)).forEach(s => { flow[s.product_id] = s; });
+  const declined = {};
+  subs.filter(s => s.product_id && s.status === 'approved' && s.review_note).forEach(s => { declined[s.product_id] = s; });
+  const fromSubs = subs.filter(s => s.status !== 'approved' && !(s.product_id && EDIT_FLOW.includes(s.status))).map(s => {
     const d = s.data || {};
     const photos = (d.photo_ids || []).length;
     return { kind: 'submission', id: s.id, status: s.status, name: d.name || '(no name)', sku: d.sku || '', category: d.category || '', price: d.unit_price ?? null, currency: d.currency || 'USD',
       moq: d.moq ?? null, photo: (d.photo_ids || [])[0] || null, pct: completeness(d, photos), updated: s.updated_at, note: s.review_note || null };
   });
   const fromProducts = products.map(p => {
-    const d = { name: p.name, sku: p.supplier_sku, category: p.category, description: p.description || p.name, unit_price: p.unit_cost, moq: p.moq, carton_qty: p.carton_qty,
+    const f = flow[p.id];
+    const d = f ? { ...(f.data || {}) } : { name: p.name, sku: p.supplier_sku, category: p.category, description: p.description || p.name, unit_price: p.unit_cost, moq: p.moq, carton_qty: p.carton_qty,
       carton_l: p.carton_length_cm, carton_w: p.carton_width_cm, carton_h: p.carton_height_cm, gross_kg: p.carton_weight_kg, unit_weight_kg: p.unit_weight_kg, hs_code: p.hs_code };
-    return { kind: 'product', id: p.id, status: 'selected', name: p.name, sku: p.supplier_sku || '', category: p.category || '', price: p.unit_cost ?? null, currency: p.cost_currency || 'CNY',
-      moq: p.moq ?? null, photo: photoOf[p.id] || null, pct: completeness(d, photoOf[p.id] ? 1 : 0), updated: p.created_at, note: null };
+    const show = f && f.status === 'updated';   // while staff have not applied the change, the supplier sees what they sent
+    return { kind: 'product', id: p.id, subId: f?.id || null, status: f ? f.status : 'selected', name: show ? d.name || p.name : p.name, sku: (show ? d.sku : p.supplier_sku) || '', category: (show ? d.category : p.category) || '',
+      price: (show ? d.unit_price : p.unit_cost) ?? null, currency: (show ? d.currency : p.cost_currency) || 'CNY', moq: (show ? d.moq : p.moq) ?? null, photo: photoOf[p.id] || null,
+      pct: completeness(d, photoOf[p.id] ? 1 : 0), updated: f ? f.updated_at : (declined[p.id]?.updated_at || p.created_at), note: f ? (f.status === 'unlocked' ? f.review_note : null) : (declined[p.id]?.review_note ? 'Edit request declined: ' + declined[p.id].review_note : null) };
   });
   return [...fromSubs, ...fromProducts].sort((a, b) => String(b.updated || '').localeCompare(String(a.updated || '')));
 }
 
-export const STATUS_LABEL = { draft: 'Draft', submitted: 'Submitted', returned: 'Sent back', selected: 'In catalog' };
+export const STATUS_LABEL = { draft: 'Draft', submitted: 'Submitted', returned: 'Sent back', selected: 'In catalog', edit_requested: 'Edit requested', unlocked: 'Open for editing', updated: 'Updated' };

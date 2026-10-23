@@ -6,7 +6,7 @@ import { requireSupplier } from '../middleware/auth.js';
 import { log } from '../lib/activity.js';
 import { signedUrl, uploadDocument, deleteDocument } from '../lib/storage.js';
 import multer from '../lib/multer-utf8.js';
-import { catalogItems, STATUS_LABEL } from '../lib/supplier-product.js';
+import { catalogItems, STATUS_LABEL, EDITABLE, fromProduct } from '../lib/supplier-product.js';
 import { clean as cleanProduct, missing, containerFit, CURRENCIES, INCOTERMS, CATEGORIES } from '../lib/supplier-product.js';
 import { cleanResponse, RS_LABEL } from '../lib/rfq.js';
 import { parseQuotation, gaps, MAX_PRODUCTS } from '../lib/supplier-bulk.js';
@@ -62,11 +62,11 @@ r.get('/products', async (req, res) => {
     : { data: [] };
   const photoOf = {};
   (photos || []).forEach(d => { photoOf[d.entity_id] ||= d.id; });
-  const { data: subs } = await admin.from('supplier_products').select('id, status, data, review_note, submitted_at, updated_at').eq('supplier_id', sid).neq('status', 'approved').order('updated_at', { ascending: false }); // empty before migration 0028
+  const { data: subs } = await admin.from('supplier_products').select('id, status, data, review_note, edit_reason, product_id, submitted_at, updated_at').eq('supplier_id', sid).neq('status', 'approved').order('updated_at', { ascending: false }); // empty before migration 0028
   const all = catalogItems({ products: products || [], photoOf, subs: subs || [] });
   const q = String(req.query.q || '').trim().toLowerCase(), cat = String(req.query.cat || ''), status = String(req.query.status || '');
   const items = all.filter(i => (!status || i.status === status) && (!cat || i.category === cat) && (!q || (i.name + ' ' + i.sku).toLowerCase().includes(q)));
-  const counts = { all: all.length }; for (const k of Object.keys(STATUS_LABEL)) counts[k] = all.filter(i => i.status === k).length;
+  const counts = { all: all.length, catalog: all.filter(i => i.kind === 'product').length }; for (const k of Object.keys(STATUS_LABEL)) counts[k] = all.filter(i => i.status === k).length;
   const cats = [...new Set(all.map(i => i.category).filter(Boolean))].sort();
   const avg = all.length ? Math.round(all.reduce((t, i) => t + i.pct, 0) / all.length) : null;
   res.render('supplier/products', { title: 'My products', items, counts, cats, avg, q, cat, status, labels: STATUS_LABEL, msg: req.query.msg });
@@ -209,7 +209,7 @@ r.get('/products/new', async (req, res) => renderForm(res, req, { sub: null, dat
 r.get('/products/:id/edit', async (req, res) => {
   const sub = await ownSubmission(req, req.params.id);
   if (!sub) return res.status(404).send('Not found');
-  if (sub.status === 'approved' || sub.status === 'submitted') return res.redirect('/supplier/products');
+  if (!EDITABLE.includes(sub.status)) return res.redirect('/supplier/products');
   renderForm(res, req, { sub, data: { ...cleanProduct({}), ...sub.data }, step: Number(req.query.step) || 0 });
 });
 
@@ -218,7 +218,7 @@ r.post('/products/save', withUpload, async (req, res) => {
   const sid = req.user.supplier_id;
   let sub = req.body.id ? await ownSubmission(req, req.body.id) : null;
   if (req.body.id && !sub) return res.status(404).send('Not found');
-  if (sub && !['draft', 'returned'].includes(sub.status)) return res.redirect('/supplier/products');
+  if (sub && !EDITABLE.includes(sub.status)) return res.redirect('/supplier/products');
   const data = { ...cleanProduct(req.body), photo_ids: [...(sub?.data?.photo_ids || [])] };
   const submit = req.body.intent === 'submit';
   const fail = (msg, step = 1, key = 'name') => renderForm(res, req, { sub, data, errors: { [key]: msg }, status: 400, step });
@@ -235,22 +235,47 @@ r.post('/products/save', withUpload, async (req, res) => {
     const doc = await uploadDocument({ file, entityType: 'supplier', entityId: sid, kind: 'product_photo', title: file.originalname, clientVisible: false, uploadedBy: req.user.id });
     data.photo_ids.push(doc.id);
   }
-  if (submit) Object.assign(row, { status: 'submitted', submitted_at: new Date().toISOString(), review_note: null });
+  const reopened = sub.status === 'unlocked' || sub.status === 'updated';   // an approved product that staff released for editing
+  const live = sub.status === 'submitted';                                    // still waiting for review: edits just replace the content
+  if (reopened) Object.assign(row, { status: 'updated', submitted_at: new Date().toISOString(), review_note: null });
+  else if (submit) Object.assign(row, { status: 'submitted', submitted_at: new Date().toISOString(), review_note: null });
   const { error } = await admin.from('supplier_products').update(row).eq('id', sub.id);
   if (error) return fail(error.message, 0, '_');
-  await log({ entityType: 'supplier', entityId: sid, action: submit ? 'product_submitted' : 'product_draft_saved', actorId: req.user.id, detail: { note: data.name } });
+  await log({ entityType: 'supplier', entityId: sid, action: reopened ? 'product_updated' : submit ? 'product_submitted' : 'product_draft_saved', actorId: req.user.id, detail: { note: data.name } });
+  if (reopened) return res.redirect('/supplier/products?msg=' + encodeURIComponent('Thank you — your changes to "' + data.name + '" were sent to Lumi Trade. The catalog is updated once they approve them.'));
+  if (live) return res.redirect('/supplier/products?msg=' + encodeURIComponent('Changes saved — "' + data.name + '" is still waiting for Lumi Trade to review it.'));
   res.redirect('/supplier/products?msg=' + encodeURIComponent(submit ? 'Thank you — "' + data.name + '" was sent to Lumi Trade for review.' : 'Draft saved.'));
 });
 
 r.post('/products/:id/photos/:doc/delete', async (req, res) => {
   const sub = await ownSubmission(req, req.params.id);
-  if (!sub || !['draft', 'returned'].includes(sub.status)) return res.status(404).send('Not found');
+  if (!sub || !EDITABLE.includes(sub.status)) return res.status(404).send('Not found');
   const ids = (sub.data.photo_ids || []);
   if (ids.includes(req.params.doc)) {
-    await deleteDocument(req.params.doc);
+    if (!sub.product_id) await deleteDocument(req.params.doc);   // a live product's photo stays until staff apply the change
     await admin.from('supplier_products').update({ data: { ...sub.data, photo_ids: ids.filter(i => i !== req.params.doc) }, updated_at: new Date().toISOString() }).eq('id', sub.id);
   }
   res.redirect(`/supplier/products/${sub.id}/edit`);
+});
+
+// ask to change a product that is already in the catalog; staff release it for editing
+r.post('/products/:id/request-edit', async (req, res) => {
+  const sid = req.user.supplier_id;
+  const { data: p } = await admin.from('products').select('*').eq('id', req.params.id).eq('supplier_id', sid).maybeSingle();
+  if (!p) return res.status(404).send('Not found');
+  const reason = String(req.body.reason || '').trim().slice(0, 1000);
+  if (!reason) return res.redirect('/supplier/products?msg=' + encodeURIComponent('Please say what you want to change.'));
+  const { data: cur } = await admin.from('supplier_products').select('id, status').eq('product_id', p.id).eq('supplier_id', sid).order('created_at', { ascending: false }).limit(1).maybeSingle();
+  if (cur && ['edit_requested', 'unlocked', 'updated'].includes(cur.status)) return res.redirect('/supplier/products');
+  const now = new Date().toISOString();
+  if (cur) await admin.from('supplier_products').update({ status: 'edit_requested', edit_reason: reason, review_note: null, updated_at: now }).eq('id', cur.id);
+  else {
+    const { data: photos } = await admin.from('documents').select('id').eq('entity_type', 'product').eq('entity_id', p.id).eq('kind', 'product_photo').order('created_at');
+    const { error } = await admin.from('supplier_products').insert({ supplier_id: sid, created_by: req.user.id, status: 'edit_requested', edit_reason: reason, product_id: p.id, data: fromProduct(p, (photos || []).map(d => d.id)), submitted_at: now });
+    if (error) return res.redirect('/supplier/products?msg=' + encodeURIComponent(error.message));
+  }
+  await log({ entityType: 'supplier', entityId: sid, action: 'product_edit_requested', actorId: req.user.id, detail: { note: `${p.name}: ${reason}` } });
+  res.redirect('/supplier/products?msg=' + encodeURIComponent('Request sent. Lumi Trade will release "' + p.name + '" for editing.'));
 });
 
 r.post('/products/:id/delete', async (req, res) => {
