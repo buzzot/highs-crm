@@ -1365,4 +1365,4 @@ html[lang=ru] .pill::first-letter, html[lang=ru] .badge::first-letter { text-tra
 .reqtbl th:nth-child(3), .reqtbl td:nth-child(3) { width: 72px; }
 .reqtbl th:nth-child(4), .reqtbl td:nth-child(4) { width: 92px; }
 .reqtbl td:first-child { overflow-wrap: anywhere; }
-.reqtbl td:first-child > a { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-weight: 600; }
+.reqtbl td:first-child > a { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-weight: 600; }
