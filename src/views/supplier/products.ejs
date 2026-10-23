@@ -1,5 +1,26 @@
 <%- include('../partials/head') %>
-<div class="pagehead"><div><h1>My products</h1><p class="muted">Products Lumi Trade buys from you, as we have them on file. Something wrong or outdated? Send us your latest price list.</p></div></div>
+<div class="pagehead"><div><h1>My products</h1><p class="muted">Products Lumi Trade buys from you, as we have them on file. Add new ones yourself, or send us your latest price list for changes.</p></div>
+  <a class="btn primary" href="/supplier/products/new"><%- icon('plus') %> Add product</a></div>
+<% if (subs && subs.length) { %>
+<div class="card">
+  <h2>Your submissions <span class="count"><%= subs.length %></span></h2>
+  <table class="tbl">
+    <thead><tr><th></th><th>Product</th><th>Status</th><th>Updated</th><th></th></tr></thead>
+    <tbody>
+    <% subs.forEach(x => { const ph = (x.data && x.data.photo_ids || [])[0]; const label = { draft: 'Draft', submitted: 'With Lumi Trade for review', returned: 'Sent back to you' }[x.status] || x.status; %>
+      <tr>
+        <td class="thumbcell"><% if (ph) { %><img class="pthumbsm" src="/supplier/photos/<%= ph %>" alt="" loading="lazy"><% } %></td>
+        <td><strong><%= x.data && x.data.name || '(no name)' %></strong><% if (x.status === 'returned' && x.review_note) { %><div class="small bad"><%= x.review_note %></div><% } %></td>
+        <td><span class="pill <%= x.status === 'returned' ? 'bad' : x.status === 'submitted' ? 'quoted' : 'new' %>"><%= label %></span></td>
+        <td class="small muted"><%= fmt.date(x.updated_at) %></td>
+        <td class="right nowrap"><% if (x.status === 'draft' || x.status === 'returned') { %><a class="btn small" href="/supplier/products/<%= x.id %>/edit"><%= x.status === 'returned' ? 'Fix and resubmit' : 'Continue' %></a>
+          <form method="post" action="/supplier/products/<%= x.id %>/delete" class="inline" onsubmit="return confirm('Delete this draft?')"><button class="link small danger">Delete</button></form><% } %></td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table>
+</div>
+<% } %>
 <div class="card">
   <% if (!products.length) { %><p class="muted">No products on file yet.</p><% } else { %>
   <table class="tbl">

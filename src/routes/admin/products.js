@@ -1,7 +1,9 @@
 import { Router } from '../../lib/router.js';
 import { admin } from '../../lib/supabase.js';
 import multer from '../../lib/multer-utf8.js';
-import { clean, notFound, getSettings, fxRate } from '../../lib/util.js';
+import { clean, notFound, getSettings, fxRate, back } from '../../lib/util.js';
+import { log } from '../../lib/activity.js';
+import { clean as cleanSub, missing as subMissing, toProduct, containerFit } from '../../lib/supplier-product.js';
 import { productMetrics } from '../../lib/product-metrics.js';
 import { compareProducts, extractProductCard, aiEnabled } from '../../lib/ai.js';
 import { uploadDocument, deleteDocument } from '../../lib/storage.js';
@@ -97,7 +99,8 @@ async function firstPhotos(ids) {
 r.get('/', async (req, res) => {
   const { rows, total, categories, suppliers, settings, sort } = await listProducts(req.query);
   const photos = await firstPhotos(rows.map(p => p.id));
-  res.render('admin/products/index', {
+  const { count: pendingSubs } = await admin.from('supplier_products').select('id', { count: 'exact', head: true }).eq('status', 'submitted'); // null before migration 0028
+  res.render('admin/products/index', { pendingSubs: pendingSubs || 0,
     title: 'Products', products: rows, total, categories, suppliers, thumb: photos.first || {}, photoCount: photos.count || {},
     sorts: Object.fromEntries(Object.entries(SORTS).map(([k, [label]]) => [k, label])), sort, container: settings.container,
   });
@@ -196,6 +199,56 @@ r.post('/quick', async (req, res) => {
     .select('id, name, sku, supplier_id, unit_cost, cost_currency, moq, hs_code, unit_weight_kg, carton_qty, carton_cbm').single();
   if (error) return res.status(400).json({ error: error.message });
   res.json(data);
+});
+
+// ---------- products submitted by suppliers (supplier portal "Add product") ----------
+const SUB_TABS = [['submitted', 'To review'], ['returned', 'Sent back'], ['draft', 'Drafts'], ['approved', 'Approved']];
+r.get('/submissions', async (req, res) => {
+  const status = SUB_TABS.some(t => t[0] === req.query.status) ? req.query.status : 'submitted';
+  const [{ data: rows }, { data: all }] = await Promise.all([
+    admin.from('supplier_products').select('id, status, data, submitted_at, updated_at, product_id, suppliers(id, name)').eq('status', status).order('updated_at', { ascending: false }),
+    admin.from('supplier_products').select('status'),
+  ]);
+  const counts = {}; (all || []).forEach(x => { counts[x.status] = (counts[x.status] || 0) + 1; });
+  res.render('admin/products/submissions', { title: 'Supplier products', rows: rows || [], status, counts, tabs: SUB_TABS, miss: x => subMissing(x.data, (x.data.photo_ids || []).length) });
+});
+
+r.get('/submissions/:id', async (req, res) => {
+  const { data: sub } = await admin.from('supplier_products').select('*, suppliers(id, name, city, country, contact_name, email)').eq('id', req.params.id).maybeSingle();
+  if (!sub) return notFound(res, 'Submission');
+  const d = { ...cleanSub({}), ...sub.data };
+  const ids = (d.photo_ids || []).filter(Boolean);
+  const { data: docs } = ids.length ? await admin.from('documents').select('id, title').in('id', ids) : { data: [] };
+  // same supplier SKU already on file?
+  const dup = d.sku ? (await admin.from('products').select('id, name').eq('supplier_id', sub.supplier_id).ilike('supplier_sku', d.sku.replace(/[%_]/g, c => '\\' + c)).limit(1)).data?.[0] || null : null;
+  res.render('admin/products/submission', { title: d.name || 'Submission', sub, d, photos: docs || [], miss: subMissing(d, (docs || []).length), fit: containerFit(d), sameSku: dup, msg: req.query.msg, err: req.query.err });
+});
+
+r.post('/submissions/:id/approve', async (req, res) => {
+  const { data: sub } = await admin.from('supplier_products').select('*').eq('id', req.params.id).maybeSingle();
+  if (!sub) return notFound(res, 'Submission');
+  if (sub.status === 'approved' && sub.product_id) return res.redirect(`/admin/products/${sub.product_id}`);
+  if (sub.status !== 'submitted') return back(res, `/admin/products/submissions/${sub.id}`, { err: 'Only submitted products can be approved.' });
+  const d = { ...cleanSub({}), ...sub.data };
+  const { data: prod, error } = await admin.from('products').insert(toProduct(d, sub.supplier_id)).select('id').single();
+  if (error) return back(res, `/admin/products/submissions/${sub.id}`, { err: error.message });
+  // the supplier's photos become the product's photos
+  const ids = (d.photo_ids || []).filter(Boolean);
+  if (ids.length) await admin.from('documents').update({ entity_type: 'product', entity_id: prod.id, client_visible: true }).in('id', ids);
+  await admin.from('supplier_products').update({ status: 'approved', product_id: prod.id, decided_at: new Date().toISOString(), decided_by: req.user.id, review_note: null, updated_at: new Date().toISOString() }).eq('id', sub.id);
+  await log({ entityType: 'supplier', entityId: sub.supplier_id, action: 'product_approved', actorId: req.user.id, detail: { note: d.name } });
+  res.redirect(`/admin/products/${prod.id}?msg=` + encodeURIComponent('Approved — the product is now in your list.'));
+});
+
+r.post('/submissions/:id/return', async (req, res) => {
+  const { data: sub } = await admin.from('supplier_products').select('id, supplier_id, status, data').eq('id', req.params.id).maybeSingle();
+  if (!sub) return notFound(res, 'Submission');
+  const note = String(req.body.note || '').trim().slice(0, 1000);
+  if (!note) return back(res, `/admin/products/submissions/${sub.id}`, { err: 'Write what the supplier should fix.' });
+  if (sub.status !== 'submitted') return back(res, `/admin/products/submissions/${sub.id}`, { err: 'Only submitted products can be sent back.' });
+  await admin.from('supplier_products').update({ status: 'returned', review_note: note, decided_at: new Date().toISOString(), decided_by: req.user.id, updated_at: new Date().toISOString() }).eq('id', sub.id);
+  await log({ entityType: 'supplier', entityId: sub.supplier_id, action: 'product_returned', actorId: req.user.id, detail: { note: `${sub.data?.name || 'product'}: ${note}` } });
+  res.redirect('/admin/products/submissions?msg=' + encodeURIComponent('Sent back to the supplier.'));
 });
 
 r.get('/:id', async (req, res) => {

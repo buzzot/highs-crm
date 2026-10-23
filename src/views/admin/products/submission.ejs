@@ -1,0 +1,51 @@
+<%- include('../../partials/head') %>
+<%
+  const money = (v, c) => v > 0 ? fmt.money(v, c || 'USD', 2) : '—';
+  const row = (k, val) => (val === null || val === undefined || val === '') ? '' : `<dt>${k}</dt><dd>${String(val).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))}</dd>`;
+  const label = { submitted: 'Waiting for your review', returned: 'Sent back to the supplier', draft: 'Draft (not submitted)', approved: 'Approved' }[sub.status];
+%>
+<div class="pagehead">
+  <div><a class="back" href="/admin/products/submissions?status=<%= sub.status %>">← Supplier products</a>
+    <h1><%= d.name || '(no name)' %></h1>
+    <p class="muted"><a href="/admin/suppliers/<%= sub.suppliers?.id %>"><%= sub.suppliers?.name %></a><% if (sub.suppliers?.city) { %> · <%= sub.suppliers.city %><% } %> · <%= label %></p></div>
+  <% if (sub.status === 'approved' && sub.product_id) { %><a class="btn" href="/admin/products/<%= sub.product_id %>">Open product</a><% } %>
+</div>
+<% if (sameSku) { %><div class="alert warn">This supplier already has a product with the same SKU: <a href="/admin/products/<%= sameSku.id %>"><%= sameSku.name %></a>. Approving creates a new, separate product.</div><% } %>
+<% if (sub.review_note && sub.status === 'returned') { %><div class="alert warn">Sent back: <%= sub.review_note %></div><% } %>
+<div class="grid2">
+  <div>
+    <div class="card">
+      <h2>Photos <span class="count"><%= photos.length %></span></h2>
+      <% if (photos.length) { %><div class="spthumbs"><% photos.forEach(p => { %><figure><a href="/admin/documents/<%= p.id %>/download" target="_blank"><img src="/admin/documents/<%= p.id %>/download" alt="" loading="lazy"></a></figure><% }) %></div><% } %>
+      <% if (d.photo_link) { %><p>Photo link: <a href="<%= d.photo_link %>" target="_blank" rel="noopener"><%= d.photo_link %></a></p><% } %>
+      <% if (!photos.length && !d.photo_link) { %><p class="muted">No photos.</p><% } %>
+    </div>
+    <div class="card"><h2>Product</h2><dl class="dl">
+      <%- row('SKU', d.sku) %><%- row('Category', [d.category, d.subcategory].filter(Boolean).join(' › ')) %><%- row('Description', d.description) %><%- row('Materials', d.materials) %>
+      <%- row('Size (cm)', d.size) %><%- row('Unit net weight', d.unit_weight_kg ? d.unit_weight_kg + ' kg' : '') %><%- row('Packaging', d.packaging_type) %><%- row('Certifications', d.certifications) %>
+      <%- row('HS code', d.hs_code) %><%- row('Origin', d.origin) %><%- row('Brand', d.brand) %><%- row('Battery / magnet / liquid', d.battery) %></dl></div>
+  </div>
+  <div>
+    <div class="card"><h2>Pricing &amp; terms</h2><dl class="dl">
+      <dt>Unit price</dt><dd><%= money(d.unit_price, d.currency) %></dd>
+      <%- row('Incoterm', [d.incoterm, d.fob_port].filter(Boolean).join(' · ')) %><%- row('Payment terms', d.payment_terms) %><%- row('MOQ', d.moq) %>
+      <%- row('Sample lead time', d.sample_days ? d.sample_days + ' days' : '') %><%- row('Production lead time', d.lead_days ? d.lead_days + ' days' : '') %><%- row('Quote valid until', d.valid_until) %></dl></div>
+    <div class="card"><h2>Packing &amp; carton</h2><dl class="dl">
+      <%- row('Inner pack', d.inner_pack ? d.inner_pack + ' pcs' : '') %><%- row('Master carton', d.carton_qty ? d.carton_qty + ' pcs' : '') %>
+      <%- row('Carton size', d.carton_l ? [d.carton_l, d.carton_w, d.carton_h].join(' × ') + ' cm' : '') %><%- row('Net / gross weight', (d.net_kg || d.gross_kg) ? [d.net_kg || '—', d.gross_kg || '—'].join(' / ') + ' kg' : '') %>
+      <%- row('Units per container', [d.u20gp && '20GP ' + d.u20gp, d.u40gp && '40GP ' + d.u40gp, d.u40hq && '40HQ ' + d.u40hq].filter(Boolean).join(' · ')) %></dl>
+      <% if (fit) { %><p class="muted small">Calculated: 1 carton = <%= fit.cartonCbm %> m³ · about <%= fit.gp20 %> in a 20GP · <%= fit.gp40 %> in a 40GP · <%= fit.hq40 %> in a 40HQ</p><% } %></div>
+    <% if (d.factory_notes) { %><div class="card"><h2>Factory notes</h2><p class="pre"><%= d.factory_notes %></p></div><% } %>
+    <% if (miss.length) { %><div class="card"><h2>Missing</h2><ul class="spmiss"><% miss.forEach(m => { %><li><%= m.label %></li><% }) %></ul></div><% } %>
+    <% if (sub.status === 'submitted') { %>
+    <div class="card">
+      <form method="post" action="/admin/products/submissions/<%= sub.id %>/approve"><button class="btn primary">Approve — add to products</button></form>
+      <form method="post" action="/admin/products/submissions/<%= sub.id %>/return" class="sub">
+        <label>Send back to the supplier with a note <textarea name="note" rows="3" required placeholder="What should they fix or add?"></textarea></label>
+        <button class="btn">Send back</button>
+      </form>
+    </div>
+    <% } %>
+  </div>
+</div>
+<%- include('../../partials/foot') %>

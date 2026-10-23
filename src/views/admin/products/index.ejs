@@ -5,6 +5,7 @@
   const usd = (v, d = 2) => v == null ? '—' : '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
   const cnt = typeof photoCount !== 'undefined' ? photoCount : {};
 %>
+<% if (typeof pendingSubs !== 'undefined' && pendingSubs > 0) { %><div class="alert warn"><strong><%= pendingSubs %></strong> product<%= pendingSubs === 1 ? '' : 's' %> from suppliers waiting for your review. <a href="/admin/products/submissions">Review →</a></div><% } %>
 <div class="pagehead">
   <div><h1>Products</h1><p class="muted"><%= products.length %> of <%= total %> · landed = factory price + 40HQ sea freight ($<%= container.freight_40hq_usd %>) per unit · wholesale @<%= container.wholesale_markup_pct %>%</p></div>
   <div class="actions">

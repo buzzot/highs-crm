@@ -1,0 +1,127 @@
+<%- include('../partials/head') %>
+<%
+  const v = k => (d[k] === null || d[k] === undefined) ? '' : d[k];
+  const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const err = k => errors[k] ? `<div class="aiscan-msg err">${esc(errors[k])}</div>` : '';
+  const steps = [['Photos', 'upload'], ['Product', 'package'], ['Pricing & terms', 'quote'], ['Packing & carton', 'truck'], ['Review', 'check']];
+  const photoCount = photos.length;
+%>
+<div class="pagehead">
+  <div><p class="eyebrow">New catalog entry</p><h1><%= sub.id ? 'Edit product' : 'Add product' %></h1>
+  <% if (sub.status === 'returned' && sub.review_note) { %><p class="alert warn">Lumi Trade sent this back: <%= sub.review_note %></p><% } %></div>
+  <a class="btn" href="/supplier/products">Close</a>
+</div>
+<form method="post" action="/supplier/products/save" enctype="multipart/form-data" class="card spwiz" id="spwiz" data-step="<%= step %>" novalidate>
+  <input type="hidden" name="id" value="<%= sub.id || '' %>">
+  <input type="hidden" name="intent" value="draft" id="sp_intent">
+  <nav class="spsteps" aria-label="Steps">
+    <% steps.forEach((s, i) => { %><button type="button" class="spstep" data-go="<%= i %>"><span class="spi"><%- icon(s[1]) %></span><span class="spl"><%= s[0] %></span></button><% }) %>
+  </nav>
+
+  <section class="sppanel" data-step="0">
+    <%- err('photos') %>
+    <% if (photos.length) { %>
+      <div class="spthumbs">
+        <% photos.forEach(p => { %><figure><img src="/supplier/photos/<%= p.id %>" alt="" loading="lazy"><% if (sub.id) { %><button type="button" class="spx" title="Remove photo" data-del="/supplier/products/<%= sub.id %>/photos/<%= p.id %>/delete">×</button><% } %></figure><% }) %>
+      </div>
+    <% } %>
+    <label class="spdrop" id="sp_drop" for="sp_files">
+      <span class="spdi"><%- icon('upload') %></span>
+      <strong>Drag &amp; drop photos here, or <u>choose files</u></strong>
+      <span class="muted small">JPG, PNG or WebP · up to <%= Math.max(0, 12 - photoCount) %> more · max 20 MB each · you can also paste (Ctrl/⌘+V)</span>
+    </label>
+    <input type="file" name="photos" id="sp_files" accept="image/jpeg,image/png,image/webp" multiple style="display:none">
+    <div class="spthumbs" id="sp_new"></div>
+    <div class="splink">
+      <label>No photos to upload? Add a link instead
+        <input name="photo_link" value="<%= v('photo_link') %>" placeholder="www.example.com" autocomplete="off"></label>
+      <span class="muted small">Google Drive, Dropbox, Alibaba product page, WeTransfer…</span>
+    </div>
+  </section>
+
+  <section class="sppanel" data-step="1" hidden>
+    <h3>Product</h3>
+    <%- err('name') %>
+    <div class="spgrid">
+      <label class="<%= errors.name ? 'has-error' : '' %>">Product name <b class="req">*</b><input name="name" value="<%= v('name') %>" maxlength="200" autocomplete="off"></label>
+      <label>Item no. / SKU<input name="sku" value="<%= v('sku') %>" autocomplete="off"></label>
+      <label>Category<input name="category" value="<%= v('category') %>" list="sp_cats" autocomplete="off"><datalist id="sp_cats"><% categories.forEach(c => { %><option value="<%= c %>"><% }) %></datalist></label>
+      <label>Subcategory<input name="subcategory" value="<%= v('subcategory') %>" autocomplete="off"></label>
+    </div>
+    <label>Description<textarea name="description" rows="4"><%= v('description') %></textarea></label>
+    <div class="spgrid">
+      <label>Materials<input name="materials" value="<%= v('materials') %>" autocomplete="off"></label>
+      <label>Product size L×W×H (cm)<input name="size" value="<%= v('size') %>" placeholder="e.g. 18×6.5×6.5" autocomplete="off"></label>
+      <label>Unit net weight (kg)<input name="unit_weight_kg" type="number" step="any" min="0" value="<%= v('unit_weight_kg') %>"></label>
+      <label>Packaging type<input name="packaging_type" value="<%= v('packaging_type') %>" placeholder="e.g. colour box, blister" autocomplete="off"></label>
+      <label>Certifications<input name="certifications" value="<%= v('certifications') %>" placeholder="CE, RoHS…" autocomplete="off"></label>
+      <label>HS code<input name="hs_code" value="<%= v('hs_code') %>" autocomplete="off"></label>
+      <label>Country of origin<input name="origin" value="<%= v('origin') %>" autocomplete="off"></label>
+      <label>Brand (optional)<input name="brand" value="<%= v('brand') %>" autocomplete="off"></label>
+    </div>
+    <label class="spnarrow">Contains battery / magnet / liquid<input name="battery" value="<%= v('battery') %>" autocomplete="off"><span class="muted small">No, or describe</span></label>
+  </section>
+
+  <section class="sppanel" data-step="2" hidden>
+    <h3>Pricing &amp; terms</h3>
+    <div class="spgrid">
+      <label>Currency<select name="currency"><% currencies.forEach(c => { %><option <%= v('currency') === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+      <label>Unit price<input name="unit_price" type="number" step="any" min="0" value="<%= v('unit_price') %>"></label>
+      <label>Incoterm<select name="incoterm"><option value="">—</option><% incoterms.forEach(c => { %><option <%= v('incoterm') === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+      <label>FOB port / delivery point<input name="fob_port" value="<%= v('fob_port') %>" autocomplete="off"></label>
+      <label>Payment terms<input name="payment_terms" value="<%= v('payment_terms') %>" placeholder="e.g. 30% deposit, 70% before shipment" autocomplete="off"></label>
+      <label>MOQ (units)<input name="moq" type="number" step="1" min="0" value="<%= v('moq') %>"></label>
+      <label>Sample lead time (days)<input name="sample_days" type="number" step="1" min="0" value="<%= v('sample_days') %>"></label>
+      <label>Production lead time (days)<input name="lead_days" type="number" step="1" min="0" value="<%= v('lead_days') %>"></label>
+      <label>Quote valid until<input name="valid_until" type="date" value="<%= v('valid_until') %>"></label>
+    </div>
+  </section>
+
+  <section class="sppanel" data-step="3" hidden>
+    <h3>Packing &amp; carton</h3>
+    <div class="sprow"><div class="spk">Quantity per carton</div>
+      <label>Inner pack (pcs)<input name="inner_pack" type="number" step="1" min="0" value="<%= v('inner_pack') %>"></label>
+      <label>Master carton (pcs)<input name="carton_qty" type="number" step="1" min="0" value="<%= v('carton_qty') %>" data-fit></label></div>
+    <div class="sprow"><div class="spk">Master carton size (cm)</div>
+      <label>Length (cm)<input name="carton_l" type="number" step="any" min="0" value="<%= v('carton_l') %>" data-fit></label>
+      <label>Width (cm)<input name="carton_w" type="number" step="any" min="0" value="<%= v('carton_w') %>" data-fit></label>
+      <label>Height (cm)<input name="carton_h" type="number" step="any" min="0" value="<%= v('carton_h') %>" data-fit></label></div>
+    <div class="sprow"><div class="spk">Master carton weight (kg)</div>
+      <label>Net weight (kg)<input name="net_kg" type="number" step="any" min="0" value="<%= v('net_kg') %>"></label>
+      <label>Gross weight (kg)<input name="gross_kg" type="number" step="any" min="0" value="<%= v('gross_kg') %>"></label></div>
+    <div class="sprow"><div class="spk">Units per container <span class="muted small">(optional)</span></div>
+      <label>20GP (pcs)<input name="u20gp" type="number" step="1" min="0" value="<%= v('u20gp') %>"></label>
+      <label>40GP (pcs)<input name="u40gp" type="number" step="1" min="0" value="<%= v('u40gp') %>"></label>
+      <label>40HQ (pcs)<input name="u40hq" type="number" step="1" min="0" value="<%= v('u40hq') %>"></label></div>
+    <div class="spnote" id="sp_fit"><strong>Container fit (calculated)</strong>
+      <p class="small" id="sp_fit_t"><% if (fit) { %>1 carton = <%= fit.cartonCbm %> m³ · about <%= fit.gp20 %> pcs in a 20GP · <%= fit.gp40 %> in a 40GP · <%= fit.hq40 %> in a 40HQ<% } else { %>Enter the carton size and units per carton to see how many fit.<% } %></p></div>
+  </section>
+
+  <section class="sppanel" data-step="4" hidden>
+    <label>Factory notes<textarea name="factory_notes" rows="4"><%= v('factory_notes') %></textarea></label>
+    <h3>Ready for review?</h3>
+    <div id="sp_missing">
+      <% if (miss.length) { %><p class="muted">Missing (you can still submit, but complete quotes are reviewed first):</p>
+        <ul class="spmiss"><% miss.forEach(m => { %><li><a href="#" data-go="<%= m.step %>"><%= m.label %></a></li><% }) %></ul>
+      <% } else { %><p class="ok">Everything we need is filled in.</p><% } %>
+    </div>
+    <dl class="spsum" id="sp_sum">
+      <div><dt>Product</dt><dd data-sum="name"><%= v('name') || '—' %></dd></div>
+      <div><dt>Category</dt><dd data-sum="category"><%= v('category') || '—' %></dd></div>
+      <div><dt>Price</dt><dd data-sum="price"><%= d.unit_price > 0 ? d.currency + ' ' + d.unit_price : '—' %></dd></div>
+      <div><dt>MOQ</dt><dd data-sum="moq"><%= v('moq') || '—' %></dd></div>
+      <div><dt>Master carton</dt><dd data-sum="carton"><%= d.carton_qty > 0 ? d.carton_qty + ' pcs' : '—' %></dd></div>
+      <div><dt>Photos</dt><dd data-sum="photos" data-existing="<%= photoCount %>"><%= photoCount %></dd></div>
+    </dl>
+  </section>
+
+  <footer class="spnav">
+    <button type="submit" class="btn" id="sp_draft">Save draft</button>
+    <span class="spacer"></span>
+    <button type="button" class="btn" id="sp_back" hidden>‹ Back</button>
+    <button type="button" class="btn primary" id="sp_next">Continue ›</button>
+    <button type="submit" class="btn primary" id="sp_submit" hidden>Submit for review</button>
+  </footer>
+</form>
+<script src="/js/supplier-product.js" defer></script>
+<%- include('../partials/foot') %>

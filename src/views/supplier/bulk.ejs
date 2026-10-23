@@ -1,0 +1,46 @@
+<%- include('../partials/head') %>
+<div class="pagehead"><div><p class="eyebrow">Many products at once</p><h1>Bulk upload</h1>
+  <p class="muted">Send us your whole price list in one Excel file, photos included. Each row becomes a draft you can check before it goes to Lumi Trade.</p></div></div>
+<% if (error) { %><p class="alert warn"><%= error %></p><% } %>
+<% if (result) { %>
+<div class="card">
+  <h2>Upload result <span class="count"><%= result.added.length %></span></h2>
+  <p><strong><%= result.added.length %></strong> product<%= result.added.length === 1 ? '' : 's' %> saved as drafts from <em><%= result.file %></em><% if (result.failed.length) { %>, <strong class="bad"><%= result.failed.length %></strong> could not be read<% } %>.</p>
+  <% if (result.added.length) { %>
+  <table class="tbl">
+    <thead><tr><th>Row</th><th>Product</th><th>Photos</th><th>Still missing</th><th></th></tr></thead>
+    <tbody>
+    <% result.added.forEach(x => { %>
+      <tr><td class="muted"><%= x.row %></td><td><strong><%= x.name %></strong></td><td><%= x.photos %></td>
+        <td class="small"><%= x.gaps.length ? x.gaps.join(', ') : 'Nothing — complete' %></td>
+        <td class="right"><a class="btn small" href="/supplier/products/<%= x.id %>/edit">Open</a></td></tr>
+    <% }) %>
+    </tbody>
+  </table>
+  <form method="post" action="/supplier/products/bulk/submit" class="row gap-top">
+    <% result.added.forEach(x => { %><input type="hidden" name="ids" value="<%= x.id %>"><% }) %>
+    <button class="btn primary">Send all <%= result.added.length %> to Lumi Trade</button>
+    <a class="btn" href="/supplier/products">Review drafts first</a>
+  </form>
+  <% } %>
+  <% if (result.failed.length) { %>
+  <h3 class="gap-top">Not imported</h3>
+  <table class="tbl"><thead><tr><th>Row</th><th>Product</th><th>Why</th></tr></thead><tbody>
+    <% result.failed.forEach(x => { %><tr><td class="muted"><%= x.row %></td><td><%= x.name || '—' %></td><td class="bad small"><%= x.why %></td></tr><% }) %>
+  </tbody></table>
+  <p class="muted small">Fix these rows in your file and upload it again — or add them one by one with <a href="/supplier/products/new">Add product</a>. Rows already saved above will be duplicated if you upload the whole file again, so upload only the fixed rows.</p>
+  <% } %>
+</div>
+<% } %>
+<div class="card">
+  <ol class="steps-list">
+    <li><strong>Download the template</strong> and fill it in: factory details and terms once at the top, then one row per product (Product Name is required). <div class="gap-top"><a class="btn" href="/templates/lumi-trade-supplier-quotation-template.xlsx" download><%- icon('upload') %> Download Excel template</a></div></li>
+    <li><strong>Add photos</strong> in the Photo column of each product's row (Excel: Insert → Pictures → Place in Cell; WPS: paste the picture into the cell). Up to 10 per product. Save as <strong>.xlsx</strong>, not CSV.</li>
+    <li><strong>Upload the file</strong> here. We create a draft for every row; you check them and send them to Lumi Trade.</li>
+  </ol>
+  <form method="post" action="/supplier/products/bulk" enctype="multipart/form-data" class="row gap-top">
+    <input type="file" name="file" accept=".xlsx" required>
+    <button class="btn primary"><%- icon('upload') %> Upload</button>
+  </form>
+</div>
+<%- include('../partials/foot') %>

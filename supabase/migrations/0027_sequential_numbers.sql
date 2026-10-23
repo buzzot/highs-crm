@@ -13,16 +13,16 @@ alter table doc_counters enable row level security;   -- only the functions belo
 create or replace function next_doc_no(p text) returns text
 language plpgsql security definer set search_path = public as $$
 declare
-  ym text := to_char(now(), 'YYMM');
+  v_ym text := to_char(now(), 'YYMM');
   n int;
   cand text;
   taken boolean;
 begin
   loop
-    insert into doc_counters(prefix, ym, last) values (p, ym, 1)
+    insert into doc_counters(prefix, ym, last) values (p, v_ym, 1)
       on conflict (prefix, ym) do update set last = doc_counters.last + 1
-      returning last into n;
-    cand := p || '-' || ym || '-' || lpad(n::text, 4, '0');
+      returning doc_counters.last into n;
+    cand := p || '-' || v_ym || '-' || lpad(n::text, 4, '0');
     -- skip a number that an old random one already uses
     taken := case p
       when 'LT' then exists (select 1 from orders where order_no = cand)
