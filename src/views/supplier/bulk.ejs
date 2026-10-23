@@ -28,7 +28,7 @@
   <table class="tbl"><thead><tr><th>Row</th><th>Product</th><th>Why</th></tr></thead><tbody>
     <% result.failed.forEach(x => { %><tr><td class="muted"><%= x.row %></td><td><%= x.name || '—' %></td><td class="bad small"><%= x.why %></td></tr><% }) %>
   </tbody></table>
-  <p class="muted small">Fix these rows in your file and upload it again — or add them one by one with <a href="/supplier/products/new">Add product</a>. Rows already saved above will be duplicated if you upload the whole file again, so upload only the fixed rows.</p>
+  <p class="muted small">Fix these rows in your file and upload it again — or add them one by one with <a href="/supplier/products/new">Add product</a>. Products whose SKU is already on file are skipped, so uploading the same file twice will not create duplicates.</p>
   <% } %>
 </div>
 <% } %>

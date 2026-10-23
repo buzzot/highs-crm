@@ -109,7 +109,19 @@ r.post('/products/bulk', (req, res, next) => bulkUpload(req, res, err => { req.u
   if (!parsed.rows.length) return bulkPage(res, { status: 400, error: 'No products found. Fill one row per product (Product Name is required) starting under the grey example row.' });
   if (parsed.rows.length > MAX_PRODUCTS) return bulkPage(res, { status: 400, error: `Up to ${MAX_PRODUCTS} products per file. This file has ${parsed.rows.length} — please split it.` });
   const added = [], failed = [];
+  // SKUs this supplier already has (catalog or earlier submissions), plus repeats inside the file
+  const norm = v => String(v || '').trim().toLowerCase();
+  const [{ data: have1 }, { data: have2 }] = await Promise.all([
+    admin.from('products').select('supplier_sku').eq('supplier_id', sid).not('supplier_sku', 'is', null),
+    admin.from('supplier_products').select('data').eq('supplier_id', sid),
+  ]);
+  const seen = new Set([...(have1 || []).map(x => norm(x.supplier_sku)), ...(have2 || []).map(x => norm(x.data && x.data.sku))].filter(Boolean));
   for (const row of parsed.rows) {
+    const k = norm(row.data.sku);
+    if (k && !row.problems.length) {
+      if (seen.has(k)) row.problems.push(`SKU ${row.data.sku} is already on file or repeated in this file`);
+      else seen.add(k);
+    }
     if (row.problems.length) { failed.push({ row: row.row, name: row.data.name, why: row.problems.join('; ') }); continue; }
     try {
       const photo_ids = [];
