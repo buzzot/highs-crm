@@ -504,3 +504,79 @@ Decide whether they confirmed the order, declined, or are asking something. Extr
   const { input, usage } = await forcedTool({ tool: SUPPLIER_REPLY_TOOL, content, system, maxTokens: 3000, feature: 'supplier_reply_read', entity });
   return { ...input, usage };
 }
+
+// ---------------------------------------------------------------------------------------------
+// Staff entering a client's request: read the client's email / message, and read one product's photos or PDF.
+// Nothing is saved by these functions; the staff member checks the suggestion first.
+// ---------------------------------------------------------------------------------------------
+const SPEC_PROPS = {
+  category: { ...strOrNull, description: 'Short generic category in English, e.g. "Lighting", "Kitchenware"' },
+  materials: { ...strOrNull, description: 'Materials only if stated' },
+  size: { ...strOrNull, description: 'Product size L x W x H in cm only if stated, e.g. "20 x 10 x 5"' },
+  certifications: { ...strOrNull, description: 'Required certificates / standards if stated (CE, FCC, RoHS, CPSIA, UL…)' },
+  packaging_type: { ...strOrNull, description: 'Packaging the client asks for, if stated' },
+  incoterm: { type: ['string', 'null'], enum: ['EXW', 'FCA', 'FOB', 'CIF', 'CFR', 'CPT', 'DAP', 'DDP', null], description: 'Only if the client names one' },
+  payment_terms: { ...strOrNull, description: 'Payment terms if stated' },
+  etd: { ...strOrNull, description: 'Date the goods must leave / be ready, YYYY-MM-DD, only if a concrete date is stated' },
+  valid_until: { ...strOrNull, description: 'Date until which the price should be valid, YYYY-MM-DD, only if stated' },
+};
+const REQUEST_ITEM_PROPS = {
+  name: { type: 'string', description: 'Short product name in English (type + key attribute)' },
+  sku: { ...strOrNull, description: 'Model / part number exactly as written, or null' },
+  description: { ...strOrNull, description: 'Main specs as one to five short items (colour, capacity, voltage…). Facts only, no comments.' },
+  quantity: { type: ['integer', 'null'] },
+  unit: { type: ['string', 'null'], enum: ['pcs', 'sets', 'pairs', 'boxes', 'cartons', 'kg', 'm', 'litres', null] },
+  target_unit_price: { ...numOrNull, description: 'Target price per unit as a number, only if the client states one' },
+  spec: { type: 'object', properties: SPEC_PROPS, description: 'Further details that are stated; omit or null what is not' },
+};
+const REQUEST_DRAFT_TOOL = {
+  name: 'record_request',
+  description: 'Record the sourcing request found in the client message.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      title: { type: 'string', description: 'Short request name, e.g. "LED desk lamps for retail" (max 8 words)' },
+      summary: { type: 'string', description: 'Brief for the sourcing team: 3-6 short bullet lines starting with "• " — what is wanted, quantities, deadline, special requirements, open questions to ask the client.' },
+      target_currency: { type: ['string', 'null'], enum: ['USD', 'CNY', 'EUR', 'GBP', null] },
+      destination_country: strOrNull, destination_city: strOrNull,
+      needed_by: { ...strOrNull, description: 'YYYY-MM-DD, only if a concrete date is given' },
+      items: { type: 'array', items: { type: 'object', properties: REQUEST_ITEM_PROPS, required: ['name'] } },
+    },
+    required: ['title', 'summary', 'items'],
+  },
+};
+
+/** Read a client's email / chat message and suggest the request: title, brief, delivery details and the product lines. */
+export async function extractRequestFromText({ text, today = new Date().toISOString().slice(0, 10) }, entity = null) {
+  const system = `You help a China sourcing company enter a client's request into their system. Read the client's message and call record_request.
+Rules: use only what the message says; never invent quantities, prices, dates or certificates. One item per distinct product. Translate to English.
+Today is ${today}; turn relative dates ("end of November") into YYYY-MM-DD only when the day is clear, otherwise leave them out and mention them in the summary.
+The summary is for the team: bullets, no greeting, no advice.`;
+  const { input, usage } = await forcedTool({ tool: REQUEST_DRAFT_TOOL, content: [{ type: 'text', text: `Client message:\n\n${String(text).slice(0, 30000)}\n\nCall record_request.` }], system, maxTokens: 4000, feature: 'request_staff_summary', entity });
+  const s = v => (typeof v === 'string' && v.trim() ? v.trim() : null);
+  return { title: s(input.title), summary: s(input.summary), target_currency: input.target_currency || null, destination_country: s(input.destination_country), destination_city: s(input.destination_city), needed_by: s(input.needed_by),
+    items: (input.items || []).filter(i => s(i.name)).slice(0, 30), usage };
+}
+
+const REQUEST_ITEM_TOOL = {
+  name: 'record_request_item',
+  description: 'Record what the attached files say about ONE product the client wants.',
+  input_schema: { type: 'object', properties: { ...REQUEST_ITEM_PROPS }, required: ['name'] },
+};
+
+/** Read photos / PDFs of ONE product line and suggest name, SKU, details and the extra fields (material, certifications …). */
+export async function extractRequestItem({ files = [], name = '', description = '' }, entity = null) {
+  const system = `You help a sourcing company understand what a client wants to buy. Look at the attached photo(s) / PDF of ONE product (catalogue page, competitor listing, datasheet, screenshot, label).
+Never invent facts that are not visible or printed; use null when unknown. Translate Chinese to English. Do not guess sizes or weights from how the product looks.
+description: only the main specs, at most about five short items; no comments, no "this appears to be". If the staff member already typed a name or details, keep their meaning and complete it.
+Put certificates, materials, packaging and size into the spec object, not into description.`;
+  const content = [];
+  for (const f of files.slice(0, 4)) {
+    if (f.pdf) content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: f.pdf.toString('base64') } });
+    else content.push({ type: 'image', source: { type: 'base64', media_type: f.mediaType, data: f.data.toString('base64') } });
+  }
+  content.push({ type: 'text', text: `Typed so far — name: ${name || '(empty)'}; details: ${description || '(empty)'}.\nCall record_request_item.` });
+  const { input, usage } = await forcedTool({ tool: REQUEST_ITEM_TOOL, content, system, maxTokens: 2000, feature: 'request_staff_item', entity });
+  const s = v => (typeof v === 'string' && v.trim() ? v.trim() : null);
+  return { name: s(input.name), sku: s(input.sku), description: s(input.description), spec: input.spec || {}, usage };
+}

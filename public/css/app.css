@@ -1316,3 +1316,7 @@ label:has(> .picker-native) { position: relative; }
 .rfqgrid .trio input { padding-left: 8px; padding-right: 8px; }
 .stack { display: grid; gap: 16px; }
 @media (max-width: 760px) { .rfqgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.rqmore { margin: 6px 0 12px; }
+.rqmore > summary { cursor: pointer; font-size: 13px; font-weight: 500; color: var(--ink-2); padding: 4px 0 10px; }
+.aifill-row { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; }
+.rqspec { margin: 2px 0 6px; }

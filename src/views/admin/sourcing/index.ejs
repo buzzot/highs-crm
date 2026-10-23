@@ -2,7 +2,8 @@
 <div class="pagehead">
   <h1>Sourcing</h1>
   <% const mine = !!query.mine, mq = mine ? '&mine=1' : ''; %>
-  <a class="btn<%= mine ? ' primary' : '' %>" href="/admin/sourcing?status=<%= status %><%= mine ? '' : '&mine=1' %>" title="<%= mine ? 'Showing only requests assigned to you — click to show all' : 'Show only requests assigned to you' %>"><%= mine ? '✓ Assigned to me' : 'Assigned to me' %></a>
+  <div class="headactions"><a class="btn primary" href="/admin/sourcing/new">+ New request</a>
+  <a class="btn<%= mine ? ' primary' : '' %>" href="/admin/sourcing?status=<%= status %><%= mine ? '' : '&mine=1' %>" title="<%= mine ? 'Showing only requests assigned to you — click to show all' : 'Show only requests assigned to you' %>"><%= mine ? '✓ Assigned to me' : 'Assigned to me' %></a></div>
 </div>
 <div class="tabs">
   <a href="/admin/sourcing?status=open<%= mq %>" class="<%= status === 'open' ? 'on' : '' %>">Open <span><%= (byStatus.new||0)+(byStatus.reviewing||0)+(byStatus.quoted||0) %></span></a>

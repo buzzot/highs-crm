@@ -10,7 +10,8 @@
   <div class="rfqitem">
     <div class="rfqitem-h"><strong><%= it.description %></strong><% if (it.sku) { %> <span class="muted small"><%= it.sku %></span><% } %>
       <span class="muted small"><%= it.quantity ? '· ' + Number(it.quantity).toLocaleString('en-US') + ' ' + (it.unit || 'pcs') : '' %></span>
-      <% if (it.notes) { %><div class="muted small"><%= it.notes %></div><% } %></div>
+      <% if (it.notes) { %><div class="muted small"><%= it.notes %></div><% } %>
+      <% const sf = Object.entries({ Category: it.spec && it.spec.category, Materials: it.spec && it.spec.materials, 'Size (cm)': it.spec && it.spec.size, Certifications: it.spec && it.spec.certifications, Packaging: it.spec && it.spec.packaging_type, Incoterm: it.spec && it.spec.incoterm, 'Payment terms': it.spec && it.spec.payment_terms, 'Needed by (ETD)': it.spec && it.spec.etd, 'Quote valid until': it.spec && it.spec.valid_until }).filter(([, v]) => v); if (sf.length) { %><div class="muted small"><%= sf.map(([k, v]) => k + ': ' + v).join(' · ') %></div><% } %></div>
     <div class="rfqgrid">
       <label>Unit price<input name="<%= n %>[unit_price]" value="<%= v(l.unit_price) %>" inputmode="decimal"></label>
       <label>Currency<select name="<%= n %>[currency]"><% ['USD', 'CNY', 'EUR', 'GBP'].forEach(c => { %><option <%= (l.currency || rfq.currency) === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>

@@ -1,0 +1,46 @@
+<%- include('../../partials/head') %>
+<% const f = form || {}; const cur = f.target_currency || 'USD';
+   const itemList = (typeof items !== 'undefined' && items.length) ? items : [{}]; %>
+<div class="pagehead"><div><a class="back" href="/admin/sourcing">← Sourcing</a><h1>New request</h1>
+  <p class="muted">A client asked you outside the system — by email, WeChat or phone? Enter it here. It appears in Sourcing like a request the client made themselves.</p></div></div>
+<% if (error) { %><div class="alert err"><%= error %></div><p class="muted small">Files are not kept after an error — please add them again.</p><% } %>
+<form method="post" action="/admin/sourcing/new" enctype="multipart/form-data" class="rqform" id="rqForm" data-ai="<%= aiOn ? 1 : 0 %>">
+  <div class="card">
+    <h2>Client and message</h2>
+    <label>Client company<select name="org_id" data-picker="Client" required><option value="">— choose the client —</option><% orgs.forEach(o => { %><option value="<%= o.id %>" <%= f.org_id === o.id ? 'selected' : '' %>><%= o.name %><%= o.country ? ' · ' + o.country : '' %></option><% }) %></select></label>
+    <p class="muted small">Not in the list? <a href="/admin/clients">Add the company under Clients</a> first, then come back.</p>
+    <label>What the client wrote <span class="muted small">— paste their email or message</span><textarea name="description" id="rqText" rows="5"><%= f.description || '' %></textarea></label>
+    <% if (aiOn) { %><div class="aifill-row"><button type="button" class="btn" id="aiSummarize">✨ Summarize with AI and fill the products</button><span class="muted small" id="aiStat" aria-live="polite"></span></div><% } %>
+    <label>Request name <span class="muted small">— optional, taken from the first product if empty</span><input name="title" id="rqTitle" maxlength="200" value="<%= f.title || '' %>"></label>
+    <label>Summary for the team <span class="muted small">— saved in the request's internal notes</span><textarea name="ai_summary" id="rqSummary" rows="4"><%= f.ai_summary || '' %></textarea></label>
+  </div>
+  <div class="card">
+    <h2>Delivery</h2>
+    <div class="row">
+      <label>Price currency<select name="target_currency" id="rqCur"><% ['USD', 'CNY', 'EUR', 'GBP'].forEach(c => { %><option <%= f.target_currency === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+      <label>Destination country<input name="destination_country" value="<%= f.destination_country || '' %>"></label>
+      <label>City / port<input name="destination_city" value="<%= f.destination_city || '' %>"></label>
+      <label>Needed by<input type="date" name="needed_by" value="<%= f.needed_by || '' %>"></label>
+    </div>
+  </div>
+  <div class="rqhead"><h2>Products <span class="count" id="rqCount"><%= itemList.length %></span></h2></div>
+  <div id="rqItems"><% itemList.forEach((it, i) => { %><%- include('_item', { it, i, cur, aiOn, units }) %><% }) %></div>
+  <button type="button" class="rqadd" id="rqAdd"><%- icon('plus') %> Add another product</button>
+  <div class="card">
+    <h2>Files and notes <span class="muted small">— for the whole request</span></h2>
+    <div class="dropwrap">
+      <div class="filedrop" data-dropzone data-max="10" data-max-mb="20" tabindex="0">
+        <input type="file" name="files" multiple accept="image/*,.pdf,.xlsx,.xls,.docx,.doc,.csv" aria-label="General files">
+        <span class="dicon"><%- icon('upload') %></span>
+        <strong data-drop-count>Drag the client's attachments here or <span class="dlink">browse</span></strong>
+        <span class="muted small dsub">e.g. a product list in Excel, a catalogue PDF · up to 10 files, 20 MB each</span>
+      </div>
+      <div class="fgrid" data-drop-list></div>
+    </div>
+    <label>Internal notes <span class="muted small">— not shown to the client</span><textarea name="internal_notes" rows="2"><%= f.internal_notes || '' %></textarea></label>
+    <div class="actions"><button class="btn primary lg">Add request</button> <a class="btn" href="/admin/sourcing">Cancel</a></div>
+  </div>
+</form>
+<template id="rqTemplate"><%- include('_item', { it: {}, i: '__I__', cur, aiOn, units }) %></template>
+<script src="/js/staff-request.js"></script>
+<%- include('../../partials/foot') %>

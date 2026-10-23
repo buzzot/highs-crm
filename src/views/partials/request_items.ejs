@@ -2,6 +2,7 @@
   Products in a sourcing request. locals: request, items, docs, base ('/portal' | '/admin'), quotes, [staff]
   Requests made before multi-product support have no items: the request itself is shown as one product.
 %>
+<% const specFacts = s => Object.entries({ Category: s && s.category, Materials: s && s.materials, 'Size (cm)': s && s.size, Certifications: s && s.certifications, Packaging: s && s.packaging_type, Incoterm: s && s.incoterm, 'Payment terms': s && s.payment_terms, 'Needed by (ETD)': s && s.etd, 'Quote valid until': s && s.valid_until }).filter(([, v]) => v); %>
 <% const isStaff = typeof staff !== 'undefined' && staff;
    const rows = items.length ? items : [{ id: null, name: request.title, description: request.description, quantity: request.quantity, unit: 'pcs', target_unit_price: request.target_unit_price }];
    const own = d => items.length ? d.request_item_id : null;
@@ -17,6 +18,7 @@
           <span>Target <b><%= it.target_unit_price != null ? fmt.money(it.target_unit_price, request.target_currency, 4) : '—' %></b></span>
         </div>
         <% if (it.description) { %><p class="pre"><%= it.description %></p><% } %>
+        <% const sf = specFacts(it.spec); if (sf.length) { %><p class="rqspec small muted"><%= sf.map(([k, v]) => k + ': ' + v).join(' · ') %></p><% } %>
         <% if (files.length) { %>
           <div class="rqthumbs">
             <% files.forEach(d => { const url = base + '/documents/' + d.id + '/download'; %>

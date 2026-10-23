@@ -1,6 +1,7 @@
 // Request for quotation (RFQ): one request sent to many suppliers, answers compared side by side.
 import { layout, esc } from './email-templates.js';
 import { fxRate } from './util.js';
+import { cleanSpec, specFacts } from './request-spec.js';
 
 export const RFQ_STATUS_LABEL = { draft: 'Draft', open: 'Open', closed: 'Closed' };
 export const RS_LABEL = { draft: 'Not sent', sent: 'Waiting', replied: 'Answered', declined: 'Declined' };
@@ -24,7 +25,7 @@ export function cleanItems(body = {}) {
     if (!description) return;
     const quantity = numOrNull(String(x.quantity ?? '').replace(/[,\s]/g, '')); // "2,000" is two thousand
     out.push({ id: txt(x.id, 20) || 'i' + (i + 1) + Math.random().toString(36).slice(2, 5), description, sku: txt(x.sku, 80), quantity: quantity > 0 ? quantity : null, unit: txt(x.unit, 20) || 'pcs',
-      notes: txt(x.notes, 600), product_id: /^[0-9a-f-]{36}$/i.test(x.product_id || '') ? x.product_id : null, request_item_id: /^[0-9a-f-]{36}$/i.test(x.request_item_id || '') ? x.request_item_id : null });
+      notes: txt(x.notes, 600), spec: cleanSpec(x.spec), product_id: /^[0-9a-f-]{36}$/i.test(x.product_id || '') ? x.product_id : null, request_item_id: /^[0-9a-f-]{36}$/i.test(x.request_item_id || '') ? x.request_item_id : null });
   });
   return out;
 }
@@ -91,7 +92,7 @@ export function rfqSupplierEmail({ rfq, supplier, url, message, senderName }) {
   const n = v => (v == null ? '' : Number(v).toLocaleString('en-US'));
   const td = (v, r) => `<td style="padding:7px 8px;border-bottom:1px solid #eef0f3;font-size:13px;color:#16202e;${r ? 'text-align:right;' : ''}">${esc(v ?? '')}</td>`;
   const th = (v, r) => `<th style="padding:7px 8px;border-bottom:2px solid #dfe3e8;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#7a8494;text-align:${r ? 'right' : 'left'};">${esc(v)}</th>`;
-  const table = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:14px 0;"><tr>${th('Product')}${th('SKU')}${th('Qty', 1)}</tr>${rfq.items.map(i => `<tr>${td(i.description + (i.notes ? ' — ' + i.notes : ''))}${td(i.sku)}${td(i.quantity ? n(i.quantity) + ' ' + (i.unit || 'pcs') : '', 1)}</tr>`).join('')}</table>`;
+  const table = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:14px 0;"><tr>${th('Product')}${th('SKU')}${th('Qty', 1)}</tr>${rfq.items.map(i => `<tr>${td(i.description + (i.notes ? ' — ' + i.notes : '') + (specFacts(i.spec).length ? ' (' + specFacts(i.spec).map(([k, v]) => k + ': ' + v).join('; ') + ')' : ''))}${td(i.sku)}${td(i.quantity ? n(i.quantity) + ' ' + (i.unit || 'pcs') : '', 1)}</tr>`).join('')}</table>`;
   const intro = `Dear ${esc(supplier?.contact_name || supplier?.name || 'partner')},<br>we would like your best price for the products below${rfq.deadline ? `. Please answer by <strong>${esc(rfq.deadline)}</strong>` : ''}.`
     + (message ? `<br><br>${esc(message).replace(/\n/g, '<br>')}` : '') + table
     + `<span style="font-size:13px;color:#4a5566;">Please include for each product: unit price and currency, MOQ, production lead time, carton size and weight, and your price validity, incoterm and payment terms.</span>`;

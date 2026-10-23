@@ -30,11 +30,11 @@ r.get('/new', async (req, res) => {
     admin.from('suppliers').select('id, name, email, contact_name, city').order('name'),
     isId(req.query.request) ? Promise.all([
       admin.from('requests').select('id, ref, title, description, quantity, target_currency').eq('id', req.query.request).maybeSingle(),
-      admin.from('request_items').select('id, name, description, quantity, unit').eq('request_id', req.query.request).order('position'),
+      admin.from('request_items').select('id, name, sku, description, quantity, unit, spec').eq('request_id', req.query.request).order('position'),
     ]) : [{ data: null }, { data: [] }],
   ]);
   const request = reqRes[0]?.data || null;
-  let items = (reqRes[1]?.data || []).map(i => ({ id: '', description: i.name, sku: '', quantity: i.quantity, unit: i.unit, notes: i.description || '', request_item_id: i.id }));
+  let items = (reqRes[1]?.data || []).map(i => ({ id: '', description: i.name, sku: i.sku || '', quantity: i.quantity, unit: i.unit, notes: i.description || '', spec: i.spec || {}, request_item_id: i.id }));
   if (request && !items.length) items = [{ id: '', description: request.title, sku: '', quantity: request.quantity, unit: 'pcs', notes: request.description || '', request_item_id: null }];
   if (!items.length) items = [{ id: '', description: '', sku: '', quantity: null, unit: 'pcs', notes: '' }];
   res.render('admin/rfqs/new', { title: 'New RFQ', suppliers: suppliers || [], request, items, currencies: RFQ_CURRENCIES, error: req.query.err || null });

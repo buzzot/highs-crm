@@ -22,7 +22,7 @@
       <tbody>
       <% items.forEach((it, i) => { %>
         <tr>
-          <td><input type="hidden" name="item[<%= i %>][id]" value="<%= it.id %>"><input type="hidden" name="item[<%= i %>][request_item_id]" value="<%= it.request_item_id || '' %>"><input name="item[<%= i %>][description]" value="<%= it.description %>" placeholder="Product name"></td>
+          <td><input type="hidden" name="item[<%= i %>][id]" value="<%= it.id %>"><input type="hidden" name="item[<%= i %>][request_item_id]" value="<%= it.request_item_id || '' %>"><input type="hidden" name="item[<%= i %>][spec]" value="<%= JSON.stringify(it.spec || {}) %>"><input name="item[<%= i %>][description]" value="<%= it.description %>" placeholder="Product name"></td>
           <td><input name="item[<%= i %>][sku]" value="<%= it.sku %>" size="10"></td>
           <td><input name="item[<%= i %>][quantity]" value="<%= it.quantity ?? '' %>" inputmode="numeric" size="7" class="right"></td>
           <td><input name="item[<%= i %>][unit]" value="<%= it.unit || 'pcs' %>" size="5"></td>

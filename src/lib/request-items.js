@@ -1,3 +1,4 @@
+import { cleanSpec } from './request-spec.js';
 // Multi-product sourcing requests: parsing the submitted form and building the request title.
 export const UNITS = ['pcs', 'sets', 'pairs', 'boxes', 'cartons', 'kg', 'm', 'm²', 'litres'];
 export const MAX_ITEMS = 30;
@@ -29,6 +30,7 @@ export function parseItems(body) {
       quantity: quantity != null ? Math.round(quantity) : null,
       unit: UNITS.includes(v.unit) ? v.unit : 'pcs',
       target_unit_price: target,
+      ...(v.spec ? { spec: cleanSpec(v.spec) } : {}),
     });
   }
   return rows.slice(0, MAX_ITEMS);

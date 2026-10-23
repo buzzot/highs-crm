@@ -1,4 +1,9 @@
+import multer from '../../lib/multer-utf8.js';
 import { Router } from '../../lib/router.js';
+import { aiEnabled, extractRequestItem, extractRequestFromText } from '../../lib/ai.js';
+import { cleanSpec } from '../../lib/request-spec.js';
+import { parseItems, validateItems, requestTitle, splitFiles, UNITS } from '../../lib/request-items.js';
+import { uploadDocument } from '../../lib/storage.js';
 import { admin } from '../../lib/supabase.js';
 import { log } from '../../lib/activity.js';
 import { summarizeRequest } from '../../lib/ai.js';
@@ -24,6 +29,72 @@ r.get('/', async (req, res) => {
   const byStatus = {};
   (counts || []).forEach(x => { byStatus[x.status] = (byStatus[x.status] || 0) + 1; });
   res.render('admin/sourcing/index', { title: 'Sourcing', requests: data || [], pendingIds: (pend || []).map(x => x.request_id), poIds: (poPend || []).map(x => x.request_id), byStatus, statuses: REQUEST_STATUSES, status: status || 'open' });
+});
+
+// Staff enter a request that reached them outside the system (client email, WeChat): pick the client, list the products
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 40 } });
+const orgList = async () => (await admin.from('organizations').select('id, name, country').order('name')).data || [];
+const newPage = async (res, extra = {}) => res.status(extra.status || 200).render('admin/sourcing/new', { title: 'New request', orgs: await orgList(), form: {}, items: [{}], units: UNITS, aiOn: aiEnabled(), error: null, ...extra });
+
+r.get('/new', async (req, res) => newPage(res, { form: { org_id: req.query.org || '' }, error: req.query.err || null }));
+
+const IMG = /^image\/(png|jpe?g|gif|webp)$/i;
+const aiFiles = list => (list || []).flatMap(f => (f.mimetype === 'application/pdf' || /\.pdf$/i.test(f.originalname) ? [{ pdf: f.buffer }] : IMG.test(f.mimetype) ? [{ data: f.buffer, mediaType: f.mimetype.replace('jpg', 'jpeg') }] : []));
+
+// AI: read a product's photos / PDF → name, SKU, details and extra fields (nothing is saved)
+r.post('/ai-item', upload.array('files', 4), async (req, res) => {
+  if (!aiEnabled()) return res.status(403).json({ error: 'AI is not switched on (no API key on the server).' });
+  const files = aiFiles(req.files);
+  if (!files.length) return res.status(400).json({ error: 'Add a photo or a PDF of the product first.' });
+  try {
+    const out = await extractRequestItem({ files, name: String(req.body.name || '').slice(0, 300), description: String(req.body.description || '').slice(0, 3000) });
+    res.json({ name: out.name, sku: out.sku, description: out.description, spec: cleanSpec(out.spec) });
+  } catch (e) { res.status(502).json({ error: `AI could not read the files: ${e.message}` }); }
+});
+
+// AI: summarize the client's pasted email / message and propose the products (nothing is saved)
+r.post('/ai-request', async (req, res) => {
+  if (!aiEnabled()) return res.status(403).json({ error: 'AI is not switched on (no API key on the server).' });
+  const text = String(req.body?.text || '').trim();
+  if (text.length < 20) return res.status(400).json({ error: 'Paste the client’s message first.' });
+  try {
+    const out = await extractRequestFromText({ text });
+    res.json({ title: out.title, summary: out.summary, target_currency: out.target_currency, destination_country: out.destination_country, destination_city: out.destination_city,
+      needed_by: /^\d{4}-\d{2}-\d{2}$/.test(out.needed_by || '') ? out.needed_by : null,
+      items: out.items.map(i => ({ name: i.name, sku: i.sku || null, description: i.description || null, quantity: i.quantity ?? null, unit: i.unit || null, target_unit_price: i.target_unit_price ?? null, spec: cleanSpec(i.spec) })) });
+  } catch (e) { res.status(502).json({ error: `AI could not read the message: ${e.message}` }); }
+});
+
+r.post('/new', upload.any(), async (req, res) => {
+  const b = req.body;
+  const items = parseItems(b);
+  const fail = (error, status = 400) => newPage(res, { status, form: b, items: items.length ? items : [{}], error });
+  if (!/^[0-9a-f-]{36}$/i.test(b.org_id || '')) return fail('Choose the client.');
+  const bad = validateItems(items);
+  if (bad) return fail(bad);
+  const single = items.length === 1 ? items[0] : null;
+  const notes = [String(b.ai_summary || '').trim(), String(b.internal_notes || '').trim()].filter(Boolean).join('\n\n').slice(0, 4000) || null;
+  const { data: made, error } = await admin.from('requests').insert({ org_id: b.org_id, created_by: req.user.id, assigned_to: req.user.id, title: requestTitle(b.title, items), description: String(b.description || '').trim().slice(0, 8000) || null,
+    quantity: single?.quantity ?? null, target_unit_price: single?.target_unit_price ?? null, target_currency: ['USD', 'CNY', 'EUR', 'GBP'].includes(b.target_currency) ? b.target_currency : 'USD',
+    destination_country: String(b.destination_country || '').trim().slice(0, 100) || null, destination_city: String(b.destination_city || '').trim().slice(0, 100) || null,
+    needed_by: /^\d{4}-\d{2}-\d{2}$/.test(b.needed_by || '') ? b.needed_by : null, internal_notes: notes }).select('id, ref').single();
+  if (error) return fail(error.message);
+  const rows = items.map((it, i) => ({ request_id: made.id, position: i, name: it.name, sku: it.sku, description: it.description, quantity: it.quantity, unit: it.unit, target_unit_price: it.target_unit_price, spec: it.spec || {} }));
+  let ins = await admin.from('request_items').insert(rows).select('id, position');
+  if (ins.error && /spec/.test(ins.error.message)) ins = await admin.from('request_items').insert(rows.map(({ spec, ...x }) => x)).select('id, position'); // before migration 0030
+  if (ins.error) console.error(`[request] ${made.id}: products not saved: ${ins.error.message}`);
+  const idByKey = {};
+  (ins.data || []).forEach(row => { idByKey[items[row.position].key] = row.id; });
+  const { general, byKey } = splitFiles(req.files);
+  const uploads = [...general.map(file => ({ file, itemId: null })), ...Object.entries(byKey).flatMap(([k, fs]) => fs.map(file => ({ file, itemId: idByKey[k] || null })))];
+  for (const { file, itemId } of uploads) {
+    try {
+      const doc = await uploadDocument({ file, entityType: 'request', entityId: made.id, kind: file.mimetype?.startsWith('image/') ? 'product_photo' : 'other', uploadedBy: req.user.id });
+      if (itemId) await admin.from('documents').update({ request_item_id: itemId }).eq('id', doc.id);
+    } catch (e) { console.error(`[request] ${made.id}: upload ${file.originalname} failed: ${e.message}`); }
+  }
+  await log({ entityType: 'request', entityId: made.id, action: 'request_entered_by_staff', actorId: req.user.id, detail: { note: made.ref } });
+  res.redirect(`/admin/sourcing/${made.id}?msg=${encodeURIComponent('Request added. Next: ask suppliers for a price, or build a quote.')}`);
 });
 
 r.get('/:id', async (req, res) => {

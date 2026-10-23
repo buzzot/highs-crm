@@ -1,0 +1,51 @@
+<%# One product block of the staff "New request" form. locals: it (values), i (block key), cur, aiOn, units %>
+<% const sp = it.spec || {}; const sv = k => sp[k] || ''; %>
+<div class="card rqitem">
+  <div class="rqitemhead">
+    <span class="rqbadge">Product <span class="rqnum"><%= typeof i === 'number' ? i + 1 : '' %></span></span>
+    <button type="button" class="rqdel" aria-label="Remove this product" title="Remove this product">&times;</button>
+  </div>
+  <div class="row rqnamerow">
+    <label class="grow3">Product name <input name="items[<%= i %>][name]" value="<%= it.name || '' %>" placeholder="e.g. LED desk lamp 10W, foldable"></label>
+    <label>SKU / part no. <span class="muted small">optional</span><input name="items[<%= i %>][sku]" maxlength="80" value="<%= it.sku || '' %>"></label>
+  </div>
+  <label>Details <textarea name="items[<%= i %>][description]" rows="2" placeholder="Specifications, colours, capacity, reference links…"><%= it.description || '' %></textarea></label>
+  <div class="row">
+    <label>Quantity <input type="number" min="1" name="items[<%= i %>][quantity]" value="<%= it.quantity ?? '' %>"></label>
+    <label>Unit <select name="items[<%= i %>][unit]"><% units.forEach(u => { %><option <%= (it.unit || 'pcs') === u ? 'selected' : '' %>><%= u %></option><% }) %></select></label>
+    <label>Target unit price <span class="muted small rqcur"><%= cur %></span><input type="number" step="0.0001" min="0" name="items[<%= i %>][target_unit_price]" value="<%= it.target_unit_price ?? '' %>"></label>
+  </div>
+  <details class="rqmore" <%= Object.keys(sp).length ? 'open' : '' %>>
+    <summary>More details <span class="muted small">— material, certifications, terms, ETD, validity</span></summary>
+    <div class="row">
+      <label>Category <input name="items[<%= i %>][spec][category]" value="<%= sv('category') %>"></label>
+      <label>Materials <input name="items[<%= i %>][spec][materials]" value="<%= sv('materials') %>"></label>
+      <label>Size (cm) <input name="items[<%= i %>][spec][size]" value="<%= sv('size') %>" placeholder="L x W x H"></label>
+    </div>
+    <div class="row">
+      <label>Certifications <input name="items[<%= i %>][spec][certifications]" value="<%= sv('certifications') %>" placeholder="CE, RoHS, FCC…"></label>
+      <label>Packaging <input name="items[<%= i %>][spec][packaging_type]" value="<%= sv('packaging_type') %>"></label>
+    </div>
+    <div class="row">
+      <label>Incoterm <select name="items[<%= i %>][spec][incoterm]"><option value="">—</option><% ['EXW', 'FCA', 'FOB', 'CIF', 'CFR', 'CPT', 'DAP', 'DDP'].forEach(c => { %><option <%= sv('incoterm') === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+      <label>Payment terms <input name="items[<%= i %>][spec][payment_terms]" value="<%= sv('payment_terms') %>" placeholder="30% deposit, 70% before shipment"></label>
+      <label>Needed by (ETD) <input type="date" name="items[<%= i %>][spec][etd]" value="<%= sv('etd') %>"></label>
+      <label>Quote valid until <input type="date" name="items[<%= i %>][spec][valid_until]" value="<%= sv('valid_until') %>"></label>
+    </div>
+  </details>
+  <div class="dropwrap">
+    <div class="filedrop compact" data-dropzone data-max="10" data-max-mb="20" tabindex="0">
+      <input type="file" name="item_files_<%= i %>" multiple accept="image/*,.pdf,.xlsx,.xls,.docx,.doc,.csv" aria-label="Files for this product">
+      <span class="dicon"><%- icon('upload') %></span>
+      <strong data-drop-count>Drag photos or files for this product, or <span class="dlink">browse</span></strong>
+      <span class="muted small dsub">Photos, PDF, Excel or Word · up to 10 files, 20 MB each · paste a screenshot with ⌘/Ctrl V</span>
+    </div>
+    <div class="fgrid" data-drop-list></div>
+    <% if (aiOn) { %>
+    <div class="aifill" hidden>
+      <button type="button" class="btn small" data-aifill>✨ Read the photo / PDF with AI — fill name, details, material, certifications…</button>
+      <span class="muted small aistat" aria-live="polite"></span>
+    </div>
+    <% } %>
+  </div>
+</div>
