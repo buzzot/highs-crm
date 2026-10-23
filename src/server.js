@@ -38,14 +38,15 @@ app.use(express.static(PUBLIC, { maxAge: '10m' }));
 // the quote calculator in the browser uses the exact same pricing module as the server
 app.get('/js/pricing.js', (req, res) => res.type('application/javascript').sendFile(path.join(__dirname, 'lib', 'pricing.js')));
 // counts behind the red balls in the menu: four queries run together and are reused for 20 s
-let navCache = { at: 0, value: { sourcing: 0, orders: 0, purchasing: 0 }, pending: null };
+let navCache = { at: 0, value: { sourcing: 0, orders: 0, purchasing: 0, products: 0 }, pending: null };
 async function navPending() {
   if (Date.now() - navCache.at < 20e3) return navCache.value;
   navCache.pending ||= (async () => {
     const n = async q => { try { return (await q).count || 0; } catch { return 0; } }; // a table missing before its migration counts as 0
     const head = (table, status) => admin.from(table).select('id', { count: 'exact', head: true }).eq('status', status);
-    const [rev, po, pay, spo] = await Promise.all([n(head('request_revisions', 'pending')), n(head('purchase_orders', 'submitted')), n(head('order_payments', 'submitted')), n(head('supplier_pos', 'replied'))]);
-    navCache = { at: Date.now(), value: { sourcing: rev + po, orders: pay, purchasing: spo }, pending: null };
+    const prodQ = admin.from('supplier_products').select('id', { count: 'exact', head: true }).in('status', ['submitted', 'edit_requested', 'updated']);
+    const [rev, po, pay, spo, prods] = await Promise.all([n(head('request_revisions', 'pending')), n(head('purchase_orders', 'submitted')), n(head('order_payments', 'submitted')), n(head('supplier_pos', 'replied')), n(prodQ)]);
+    navCache = { at: Date.now(), value: { sourcing: rev + po, orders: pay, purchasing: spo, products: prods }, pending: null };
     return navCache.value;
   })().finally(() => { navCache.pending = null; });
   return navCache.pending;
