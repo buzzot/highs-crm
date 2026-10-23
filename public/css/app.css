@@ -1320,3 +1320,7 @@ label:has(> .picker-native) { position: relative; }
 .rqmore > summary { cursor: pointer; font-size: 13px; font-weight: 500; color: var(--ink-2); padding: 4px 0 10px; }
 .aifill-row { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; }
 .rqspec { margin: 2px 0 6px; }
+.sendlist { display: grid; gap: 8px; margin-top: 12px; }
+.sendrow { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(220px, 1.4fr) auto; gap: 12px; align-items: center; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.sendrow input[type=text] { margin: 0; }
+@media (max-width: 700px) { .sendrow { grid-template-columns: 1fr; } }

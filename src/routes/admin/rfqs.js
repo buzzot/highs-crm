@@ -50,7 +50,7 @@ r.post('/new', async (req, res) => {
   const { data: rfq, error } = await admin.from('rfqs').insert({ title, request_id: isId(b.request_id) ? b.request_id : null, currency: RFQ_CURRENCIES.includes(b.currency) ? b.currency : 'USD',
     deadline: /^\d{4}-\d{2}-\d{2}$/.test(b.deadline || '') ? b.deadline : null, message: String(b.message || '').trim().slice(0, 3000) || null, items, created_by: req.user.id }).select('id, ref').single();
   if (error) return back(res, to.slice(0, -1), { err: missingTable(error) ? MIGRATION : error.message });
-  await admin.from('rfq_suppliers').insert(sup.map(supplier_id => ({ rfq_id: rfq.id, supplier_id })));
+  await admin.from('rfq_suppliers').insert(sup.map(supplier_id => ({ rfq_id: rfq.id, supplier_id, sent_to: String(b['email_' + supplier_id] || '').trim().slice(0, 300) || null })));
   await log({ entityType: isId(b.request_id) ? 'request' : 'supplier', entityId: isId(b.request_id) ? b.request_id : sup[0], action: 'rfq_created', actorId: req.user.id, detail: { note: `${rfq.ref} → ${sup.length} supplier(s)` } });
   res.redirect(`/admin/rfqs/${rfq.id}?msg=${encodeURIComponent('RFQ created. Check it, then send it to the suppliers.')}`);
 });

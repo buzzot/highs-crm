@@ -18,13 +18,31 @@
     if (!e.target.hasAttribute('data-rm')) return;
     if (body.rows.length > 1) { e.target.closest('tr').remove(); renumber(); }
   });
-  var boxes = document.querySelectorAll('input[name=supplier_ids]'), count = document.getElementById('supCount');
-  var filter = document.getElementById('supFilter');
-  if (!count || !filter) return;
-  function tick() { count.textContent = Array.prototype.filter.call(boxes, function (b) { return b.checked; }).length; }
-  Array.prototype.forEach.call(boxes, function (b) { b.addEventListener('change', tick); });
-  filter.addEventListener('input', function (e) {
-    var q = e.target.value.toLowerCase();
-    Array.prototype.forEach.call(document.querySelectorAll('.checklist .check'), function (l) { l.style.display = l.getAttribute('data-name').indexOf(q) >= 0 ? '' : 'none'; });
+  // suppliers: pick one from the searchable list → it moves into "Send to" with its email for confirmation
+  var pick = document.getElementById('supPick'), sendList = document.getElementById('sendList'), empty = document.getElementById('sendEmpty'), count = document.getElementById('supCount');
+  if (!pick || !sendList) return;
+  var removed = {}; // id -> option element, put back in the picker when the row is removed
+  function tick() {
+    var n = sendList.querySelectorAll('.sendrow').length;
+    count.textContent = n; empty.hidden = n > 0;
+  }
+  pick.addEventListener('change', function () {
+    var opt = pick.selectedOptions[0];
+    if (!opt || !opt.value) return;
+    var row = document.createElement('div'); row.className = 'sendrow';
+    var id = opt.value, name = opt.getAttribute('data-name'), email = opt.getAttribute('data-email');
+    var nm = document.createElement('strong'); nm.textContent = name;
+    var inp = document.createElement('input'); inp.type = 'text'; inp.name = 'email_' + id; inp.value = email; inp.placeholder = 'email address — required to send'; inp.setAttribute('aria-label', 'Email for ' + name);
+    var hid = document.createElement('input'); hid.type = 'hidden'; hid.name = 'supplier_ids'; hid.value = id;
+    var rm = document.createElement('button'); rm.type = 'button'; rm.className = 'link small danger'; rm.textContent = 'Remove';
+    rm.addEventListener('click', function () {
+      row.remove(); pick.appendChild(removed[id]); delete removed[id]; tick();
+    });
+    row.appendChild(nm); row.appendChild(inp); row.appendChild(hid); row.appendChild(rm);
+    sendList.appendChild(row);
+    removed[id] = opt; opt.remove(); pick.value = '';
+    tick();
+    if (!email) inp.focus();
   });
+  tick();
 })();

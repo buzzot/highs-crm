@@ -36,11 +36,12 @@
   </div>
   <div class="card">
     <h2>Send to <span class="count" id="supCount">0</span></h2>
-    <input type="search" id="supFilter" placeholder="Search suppliers…">
-    <div class="checklist">
-      <% suppliers.forEach(s => { %><label class="check" data-name="<%= (s.name + ' ' + (s.city || '')).toLowerCase() %>"><input type="checkbox" name="supplier_ids" value="<%= s.id %>"> <strong><%= s.name %></strong> <span class="muted small"><%= [s.city, s.email || 'no email'].filter(Boolean).join(' · ') %></span></label><% }) %>
-      <% if (!suppliers.length) { %><p class="muted">No suppliers yet — add them under Suppliers first.</p><% } %>
-    </div>
+    <label>Add a supplier
+      <select id="supPick" data-picker="Supplier"><option value="">— choose a supplier —</option>
+        <% suppliers.forEach(s => { %><option value="<%= s.id %>" data-name="<%= s.name %>" data-email="<%= s.email || '' %>"><%= s.name %><%= s.email ? ' · ' + s.email : '' %></option><% }) %>
+      </select></label>
+    <div class="sendlist" id="sendList"><p class="muted small" id="sendEmpty">No supplier chosen yet. Pick one above — each one appears here with the email address the RFQ will go to.</p></div>
+    <% if (!suppliers.length) { %><p class="muted">No suppliers yet — add them under Suppliers first.</p><% } %>
   </div>
   <div class="actions"><button class="btn primary">Create RFQ</button><span class="muted small">Nothing is sent yet — you check it on the next page.</span></div>
 </form>
