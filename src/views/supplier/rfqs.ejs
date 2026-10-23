@@ -1,0 +1,21 @@
+<%- include('../partials/head') %>
+<div class="pagehead"><div><p class="eyebrow">Requests for quotation</p><h1>RFQs</h1><p class="muted">Lumi Trade asks for your best price on these products.</p></div></div>
+<div class="card">
+  <% if (!list.length) { %><p class="muted">No requests for quotation yet. When Lumi Trade needs a price from you, it will appear here and arrive by email.</p><% } else { %>
+  <table class="tbl">
+    <thead><tr><th>RFQ</th><th>Products</th><th>Answer by</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    <% list.forEach(x => { const open = x.rfqs.status !== 'closed'; %>
+      <tr>
+        <td><strong><%= x.rfqs.ref %></strong><div class="muted small"><%= x.rfqs.title %></div></td>
+        <td><%= (x.rfqs.items || []).length %></td>
+        <td class="small"><%= x.rfqs.deadline || '—' %></td>
+        <td><span class="pill <%= x.status === 'replied' ? 'accepted' : x.status === 'declined' ? 'declined' : 'quoted' %>"><%= !open && x.status === 'sent' ? 'Closed' : x.status === 'sent' ? 'Please answer' : labels[x.status] %></span></td>
+        <td class="right"><a class="btn small <%= x.status === 'sent' && open ? 'primary' : '' %>" href="/supplier/rfqs/<%= x.id %>"><%= x.status === 'sent' && open ? 'Answer' : 'Open' %></a></td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table>
+  <% } %>
+</div>
+<%- include('../partials/foot') %>

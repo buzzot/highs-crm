@@ -4,6 +4,18 @@
     <p class="muted"><a href="/admin/clients/<%= request.organizations.id %>"><%= request.organizations.name %></a> · submitted by <%= request.creator?.full_name || request.creator?.email || '—' %> · <%= fmt.date(request.created_at) %></p></div>
   <span class="pill lg <%= request.status %>"><%= fmt.status(request.status) %></span>
 </div>
+<% const rfqList = typeof rfqs !== 'undefined' ? rfqs : []; %>
+<div class="card">
+  <h2>Ask suppliers for a price <% if (rfqList.length) { %><span class="count"><%= rfqList.length %></span><% } %></h2>
+  <% if (!rfqList.length) { %><p class="muted">Send this request to several suppliers at once and compare their prices side by side.</p><% } else { %>
+  <table class="tbl compact"><tbody>
+    <% rfqList.forEach(x => { const sup = x.rfq_suppliers || []; const done = sup.filter(v => v.status === 'replied' || v.status === 'declined').length; %>
+    <tr><td><a href="/admin/rfqs/<%= x.id %>"><strong><%= x.ref %></strong></a> <span class="muted small"><%= x.title %></span></td><td class="small"><%= done %> of <%= sup.length %> answered</td>
+      <td><span class="pill <%= x.status === 'open' ? 'quoted' : x.status === 'closed' ? 'closed' : 'new' %>"><%= x.status === 'open' ? 'Open' : x.status === 'closed' ? 'Closed' : 'Draft' %></span></td></tr>
+    <% }) %>
+  </tbody></table><% } %>
+  <div class="actions"><a class="btn <%= rfqList.length ? '' : 'primary' %>" href="/admin/rfqs/new?request=<%= request.id %>">+ New RFQ</a></div>
+</div>
 <% const poList = typeof pos !== 'undefined' ? pos : []; %>
 <% if (poList.length) { %>
   <div class="card <%= poList.some(x => x.status === 'submitted') ? 'pending' : '' %>">

@@ -41,9 +41,10 @@ r.get('/:id', async (req, res) => {
   const { data: briefUse } = await admin.from('ai_usage').select('*').eq('feature', 'sourcing_brief').eq('entity_type', 'request').eq('entity_id', id).eq('ok', true).order('created_at', { ascending: false }).limit(1).maybeSingle();
   const { data: pending } = await admin.from('request_revisions').select('*, creator:profiles!request_revisions_created_by_fkey(full_name, email)').eq('request_id', id).eq('status', 'pending').maybeSingle();
   const { data: pos } = await admin.from('purchase_orders').select('id, po_no, status, submitted_at, lines, currency, order_id').eq('request_id', id).order('created_at', { ascending: false });
+  const { data: rfqs } = await admin.from('rfqs').select('id, ref, title, status, rfq_suppliers(status)').eq('request_id', id).order('created_at', { ascending: false }); // empty before migration 0029
   const allDocs = docs || [];
   res.render('admin/sourcing/detail', {
-    pos: pos || [], title: request.ref, request, quotes: quotes || [], docs: allDocs.filter(d => !d.revision_id), items: items || [],
+    rfqs: rfqs || [], pos: pos || [], title: request.ref, request, quotes: quotes || [], docs: allDocs.filter(d => !d.revision_id), items: items || [],
     pending: pending || null, briefUsage: briefUse ? { model: briefUse.model, input: briefUse.input_tokens, output: briefUse.output_tokens, cacheRead: briefUse.cache_read_tokens, cacheWrite: briefUse.cache_write_tokens, total: briefUse.input_tokens + briefUse.output_tokens + briefUse.cache_read_tokens + briefUse.cache_write_tokens, at: briefUse.created_at } : null, pendingDiff: pending ? diff(snapshot(request, items || []), pending.data) : null,
     pendingDocs: pending ? allDocs.filter(d => d.revision_id === pending.id) : [], events: events || [], staff: staff || [],
     orders: orders || [], statuses: REQUEST_STATUSES, msg: req.query.msg, err: req.query.err,

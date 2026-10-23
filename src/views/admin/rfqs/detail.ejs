@@ -1,0 +1,129 @@
+<%- include('../../partials/head') %>
+<%
+  const draft = rfq.status === 'draft';
+  const unsent = rs.filter(s => s.status === 'draft').length;
+  const answered = rs.filter(s => s.status === 'replied' || s.status === 'declined').length;
+  const money = (v, c) => fmt.money(v, c, 2);
+  const hasAnswers = rs.some(s => s.status === 'replied');
+%>
+<div class="pagehead">
+  <div><a class="back" href="<%= rfq.requests ? '/admin/sourcing/' + rfq.requests.id : '/admin/rfqs' %>">← <%= rfq.requests ? rfq.requests.ref : 'RFQs' %></a>
+    <h1><%= rfq.ref %> <span class="muted">· <%= rfq.title %></span></h1>
+    <p class="muted"><%= rs.length %> supplier<%= rs.length === 1 ? '' : 's' %> · <%= answered %> answered · <%= rfq.items.length %> product<%= rfq.items.length === 1 ? '' : 's' %><%= rfq.deadline ? ' · answer by ' + rfq.deadline : '' %></p></div>
+  <div class="headactions">
+    <% if (rfq.status !== 'closed' && unsent) { %><form method="post" action="/admin/rfqs/<%= rfq.id %>/send" class="inline"><button class="btn primary"><%- icon('mail') %> Send to <%= unsent %> supplier<%= unsent === 1 ? '' : 's' %></button></form><% } %>
+    <span class="pill lg <%= rfq.status === 'open' ? 'quoted' : rfq.status === 'closed' ? 'closed' : 'new' %>"><%= labels[rfq.status] %></span>
+  </div>
+</div>
+<% if (msg) { %><div class="alert ok"><%= msg %></div><% } %>
+<% if (err) { %><div class="alert err"><%= err %></div><% } %>
+
+<% if (hasAnswers) { %>
+<div class="card">
+  <h2>Comparison <span class="muted small">prices in <%= rfq.currency %> per unit, lowest highlighted</span></h2>
+  <div class="tablewrap"><table class="tbl cmp">
+    <thead><tr><th>Product</th><th class="right">Qty</th><% rs.forEach(s => { %><th class="right"><%= s.suppliers.name %><div class="muted small"><%= rsLabels[s.status] %></div></th><% }) %></tr></thead>
+    <tbody>
+    <% cmp.rows.forEach(row => { %>
+      <tr><td><strong><%= row.item.description %></strong><% if (row.item.sku) { %><div class="muted small"><%= row.item.sku %></div><% } %></td>
+        <td class="right num"><%= row.item.quantity ? Number(row.item.quantity).toLocaleString('en-US') : '—' %></td>
+        <% row.cells.forEach(c => { %><td class="right num <%= c.best ? 'cmp-best' : '' %>">
+          <% if (c.price == null) { %><span class="muted">—</span><% } else { %>
+            <strong><%= money(c.converted, rfq.currency) %></strong>
+            <% if (c.currency !== rfq.currency) { %><div class="muted small">quoted <%= money(c.price, c.currency) %></div><% } %>
+            <div class="muted small"><%= [c.moq ? 'MOQ ' + Number(c.moq).toLocaleString('en-US') : '', c.lead_days ? c.lead_days + ' d' : ''].filter(Boolean).join(' · ') %></div>
+          <% } %></td><% }) %>
+      </tr>
+    <% }) %>
+      <tr class="cmp-total"><td colspan="2"><strong>Total for the quantities</strong></td>
+        <% cmp.totals.forEach(t => { %><td class="right num"><% if (t.quoted) { %><strong><%= money(t.total, rfq.currency) %></strong><% if (t.quoted < t.of) { %><div class="muted small">only <%= t.quoted %> of <%= t.of %> quoted</div><% } %><% } else { %><span class="muted">—</span><% } %></td><% }) %>
+      </tr>
+    </tbody>
+  </table></div>
+</div>
+<% } %>
+
+<div class="card">
+  <h2>Suppliers <span class="count"><%= rs.length %></span></h2>
+  <table class="tbl">
+    <thead><tr><th>Supplier</th><th>Email</th><th>Status</th><th>Sent</th><th></th></tr></thead>
+    <tbody>
+    <% rs.forEach(s => { %>
+      <tr>
+        <td><a href="/admin/suppliers/<%= s.suppliers.id %>"><strong><%= s.suppliers.name %></strong></a></td>
+        <td class="small"><% if (s.status === 'draft') { %><form method="post" action="/admin/rfqs/<%= rfq.id %>/send" id="f<%= s.id %>" class="inline"><input type="hidden" name="rs" value="<%= s.id %>"><input name="to_<%= s.id %>" value="<%= s.sent_to || s.suppliers.email || '' %>" placeholder="email address" size="26"></form><% } else { %><%= s.sent_to || '—' %><% } %></td>
+        <td><span class="pill <%= s.status === 'replied' ? 'accepted' : s.status === 'declined' ? 'declined' : s.status === 'sent' ? 'quoted' : 'new' %>"><%= rsLabels[s.status] %></span></td>
+        <td class="small muted"><%= s.sent_at ? fmt.datetime(s.sent_at) : '—' %></td>
+        <td class="right nowrap">
+          <% if (s.status === 'draft' && rfq.status !== 'closed') { %><button class="btn small" form="f<%= s.id %>">Send</button><% } %>
+          <% if (s.status === 'sent' && rfq.status !== 'closed') { %><form method="post" action="/admin/rfqs/<%= rfq.id %>/send" class="inline"><input type="hidden" name="rs" value="<%= s.id %>"><button class="btn small">Resend</button></form><% } %>
+          <% if (s.status === 'draft') { %><form method="post" action="/admin/rfqs/<%= rfq.id %>/suppliers" class="inline"><input type="hidden" name="remove" value="<%= s.id %>"><button class="link small danger">Remove</button></form><% } %>
+        </td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table>
+  <% if (addable.length && rfq.status !== 'closed') { %>
+  <form method="post" action="/admin/rfqs/<%= rfq.id %>/suppliers" class="row gap-top">
+    <select name="supplier_ids" data-picker="Supplier" required><option value="">— add a supplier —</option><% addable.forEach(a => { %><option value="<%= a.id %>"><%= a.name %></option><% }) %></select>
+    <button class="btn small">Add</button>
+  </form>
+  <% } %>
+</div>
+
+<% rs.filter(s => s.status !== 'draft').forEach(s => { const resp = current[s.id]; %>
+<div class="card">
+  <h2><%= s.suppliers.name %> <span class="pill <%= s.status === 'replied' ? 'accepted' : s.status === 'declined' ? 'declined' : 'quoted' %>"><%= rsLabels[s.status] %></span></h2>
+  <% if (resp && resp.status === 'declined') { %><p class="muted">The supplier can't quote this.<%= resp.note ? ' “' + resp.note + '”' : '' %></p><% } %>
+  <% if (resp && resp.status === 'confirmed') { %>
+    <p class="small muted">Answered <%= fmt.datetime(resp.created_at) %> · via <%= ({ portal: 'supplier portal', email: 'email', manual: 'entered by staff' })[resp.source] %></p>
+    <% const t = resp.terms || {}; const tl = [['Incoterm', t.incoterm], ['Port', t.fob_port], ['Payment', t.payment_terms], ['Valid until', t.valid_until]].filter(([, x]) => x); %>
+    <% if (tl.length) { %><p class="small"><%= tl.map(([k, x]) => k + ': ' + x).join(' · ') %></p><% } %>
+    <% if (resp.note) { %><p style="white-space:pre-line"><%= resp.note %></p><% } %>
+    <% (resp.file_ids || []).forEach(id => { const d = docs.find(x => x.id === id); if (d) { %><a class="fchip" href="/admin/documents/<%= d.id %>/download" target="_blank"><%- icon('file') %>&nbsp;<%= d.title %></a> <% } }) %>
+  <% } else if (s.status === 'sent') { %><p class="muted">Waiting for the answer.</p><% } %>
+  <% if (rfq.status !== 'closed') { %>
+  <details class="gap-top"><summary class="btn small"><%= resp ? 'Replace the answer' : 'Enter their answer' %></summary>
+    <p class="muted small">For an answer that came by WeChat, phone or a file — type it in here.</p>
+    <%- include('../../partials/rfq_answer', { action: `/admin/rfqs/${rfq.id}/answer/${s.id}`, rfq, resp, declineLabel: 'Mark as can\'t quote' }) %>
+  </details>
+  <% } %>
+</div>
+<% }) %>
+
+<form method="post" action="/admin/rfqs/<%= rfq.id %>" class="stack">
+<div class="card">
+  <h2>RFQ details</h2>
+  <div class="grid2">
+    <label>Title<input name="title" value="<%= rfq.title %>" maxlength="200"></label>
+    <div class="row">
+      <label>Answer by<input type="date" name="deadline" value="<%= rfq.deadline || '' %>"></label>
+      <label>Prices in<select name="currency" <%= draft ? '' : 'disabled' %>><% currencies.forEach(c => { %><option <%= c === rfq.currency ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+    </div>
+  </div>
+  <label>Message to suppliers<textarea name="message" rows="3"><%= rfq.message || '' %></textarea></label>
+  <table class="tbl" id="rfqItems">
+    <thead><tr><th>Product</th><th>SKU</th><th class="right">Qty</th><th>Unit</th><th>Notes</th><th></th></tr></thead>
+    <tbody>
+    <% rfq.items.forEach((it, i) => { %>
+      <tr>
+        <td><input type="hidden" name="item[<%= i %>][id]" value="<%= it.id %>"><input type="hidden" name="item[<%= i %>][request_item_id]" value="<%= it.request_item_id || '' %>"><input name="item[<%= i %>][description]" value="<%= it.description %>" <%= draft ? '' : 'readonly' %>></td>
+        <td><input name="item[<%= i %>][sku]" value="<%= it.sku || '' %>" size="10" <%= draft ? '' : 'readonly' %>></td>
+        <td><input name="item[<%= i %>][quantity]" value="<%= it.quantity ?? '' %>" size="7" class="right" <%= draft ? '' : 'readonly' %>></td>
+        <td><input name="item[<%= i %>][unit]" value="<%= it.unit || 'pcs' %>" size="5" <%= draft ? '' : 'readonly' %>></td>
+        <td><input name="item[<%= i %>][notes]" value="<%= it.notes || '' %>" <%= draft ? '' : 'readonly' %>></td>
+        <td><% if (draft) { %><button type="button" class="link small danger" data-rm>Remove</button><% } %></td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table>
+  <% if (draft) { %><p><button type="button" class="btn small" id="addItem">+ Add product</button></p><% } else { %><p class="muted small">Products can't be changed after the RFQ is sent, so everyone answers the same list.</p><% } %>
+  <div class="actions"><button class="btn primary">Save</button></div>
+</div>
+</form>
+<div class="actions">
+  <% if (rfq.status !== 'draft') { %><form method="post" action="/admin/rfqs/<%= rfq.id %>/status" class="inline"><input type="hidden" name="status" value="<%= rfq.status === 'closed' ? 'open' : 'closed' %>"><button class="btn"><%= rfq.status === 'closed' ? 'Reopen RFQ' : 'Close RFQ' %></button></form><% } %>
+  <% if (rs.every(s => s.status === 'draft')) { %><form method="post" action="/admin/rfqs/<%= rfq.id %>/delete" class="inline" onsubmit="return confirm('Delete this RFQ?')"><button class="btn danger">Delete</button></form><% } %>
+</div>
+<script src="/js/rfq-new.js"></script>
+<%- include('../../partials/foot') %>

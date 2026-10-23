@@ -1,0 +1,31 @@
+<%- include('../../partials/head') %>
+<div class="pagehead"><div><h1>RFQs</h1><p class="muted">Ask several suppliers for a price at once and compare their answers.</p></div>
+  <div class="headactions"><a class="btn" href="/admin/purchasing">Purchasing</a><a class="btn primary" href="/admin/rfqs/new">+ New RFQ</a></div></div>
+<% if (msg) { %><div class="alert ok"><%= msg %></div><% } %>
+<% if (error) { %><div class="alert err"><%= error %></div><% } %>
+<div class="card flush">
+  <div class="toolbar"><div class="tabs">
+    <% [['', 'All'], ['draft', 'Draft'], ['open', 'Open'], ['closed', 'Closed']].forEach(([k, l]) => { %><a class="<%= status === k ? 'on' : '' %>" href="/admin/rfqs<%= k ? '?status=' + k : '' %>"><%= l %></a><% }) %>
+  </div></div>
+  <% if (!rfqs.length) { %>
+    <div class="emptybox"><strong>No RFQs yet</strong><p class="muted">Start one from a sourcing request, or create it here.</p><div class="actions"><a class="btn primary" href="/admin/rfqs/new">+ New RFQ</a></div></div>
+  <% } else { %>
+  <table class="tbl">
+    <thead><tr><th>RFQ</th><th>Request</th><th>Products</th><th>Suppliers</th><th>Answered</th><th>Answer by</th><th>Status</th></tr></thead>
+    <tbody>
+    <% rfqs.forEach(x => { const sup = x.rfq_suppliers || []; const done = sup.filter(s => s.status === 'replied' || s.status === 'declined').length; %>
+      <tr>
+        <td><a href="/admin/rfqs/<%= x.id %>"><strong><%= x.ref %></strong></a><div class="muted small"><%= x.title %></div></td>
+        <td class="small"><%= x.requests ? x.requests.ref : '—' %></td>
+        <td><%= (x.items || []).length %></td>
+        <td><%= sup.length %></td>
+        <td><%= done %> / <%= sup.length %></td>
+        <td class="small"><%= x.deadline || '—' %></td>
+        <td><span class="pill <%= x.status === 'open' ? 'quoted' : x.status === 'closed' ? 'closed' : 'new' %>"><%= labels[x.status] %></span></td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table>
+  <% } %>
+</div>
+<%- include('../../partials/foot') %>

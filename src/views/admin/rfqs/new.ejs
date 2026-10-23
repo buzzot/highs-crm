@@ -1,0 +1,48 @@
+<%- include('../../partials/head') %>
+<div class="pagehead"><div><a class="back" href="<%= request ? '/admin/sourcing/' + request.id : '/admin/rfqs' %>">← <%= request ? request.ref : 'RFQs' %></a><h1>New RFQ</h1>
+  <p class="muted">Ask several suppliers for a price on the same products. Their answers come back into one RFQ, side by side.</p></div></div>
+<% if (error) { %><div class="alert err"><%= error %></div><% } %>
+<form method="post" action="/admin/rfqs/new" class="stack">
+  <% if (request) { %><input type="hidden" name="request_id" value="<%= request.id %>"><% } %>
+  <div class="card">
+    <h2>RFQ</h2>
+    <div class="grid2">
+      <label>Title<input name="title" required maxlength="200" value="<%= request ? request.title : '' %>" placeholder="e.g. LED desk lamp 10W"></label>
+      <div class="row">
+        <label>Answer by<input type="date" name="deadline"></label>
+        <label>Prices in<select name="currency"><% currencies.forEach(c => { %><option <%= c === (request && request.target_currency || 'USD') ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+      </div>
+    </div>
+    <label>Message to suppliers <span class="muted small">— optional, added to the email</span><textarea name="message" rows="3" placeholder="Specs, logo, packaging, target price range…"></textarea></label>
+  </div>
+  <div class="card">
+    <h2>Products</h2>
+    <table class="tbl" id="rfqItems">
+      <thead><tr><th>Product</th><th>SKU</th><th class="right">Qty</th><th>Unit</th><th>Notes for the supplier</th><th></th></tr></thead>
+      <tbody>
+      <% items.forEach((it, i) => { %>
+        <tr>
+          <td><input type="hidden" name="item[<%= i %>][id]" value="<%= it.id %>"><input type="hidden" name="item[<%= i %>][request_item_id]" value="<%= it.request_item_id || '' %>"><input name="item[<%= i %>][description]" value="<%= it.description %>" placeholder="Product name"></td>
+          <td><input name="item[<%= i %>][sku]" value="<%= it.sku %>" size="10"></td>
+          <td><input name="item[<%= i %>][quantity]" value="<%= it.quantity ?? '' %>" inputmode="numeric" size="7" class="right"></td>
+          <td><input name="item[<%= i %>][unit]" value="<%= it.unit || 'pcs' %>" size="5"></td>
+          <td><input name="item[<%= i %>][notes]" value="<%= it.notes || '' %>"></td>
+          <td><button type="button" class="link small danger" data-rm>Remove</button></td>
+        </tr>
+      <% }) %>
+      </tbody>
+    </table>
+    <p><button type="button" class="btn small" id="addItem">+ Add product</button></p>
+  </div>
+  <div class="card">
+    <h2>Send to <span class="count" id="supCount">0</span></h2>
+    <input type="search" id="supFilter" placeholder="Search suppliers…">
+    <div class="checklist">
+      <% suppliers.forEach(s => { %><label class="check" data-name="<%= (s.name + ' ' + (s.city || '')).toLowerCase() %>"><input type="checkbox" name="supplier_ids" value="<%= s.id %>"> <strong><%= s.name %></strong> <span class="muted small"><%= [s.city, s.email || 'no email'].filter(Boolean).join(' · ') %></span></label><% }) %>
+      <% if (!suppliers.length) { %><p class="muted">No suppliers yet — add them under Suppliers first.</p><% } %>
+    </div>
+  </div>
+  <div class="actions"><button class="btn primary">Create RFQ</button><span class="muted small">Nothing is sent yet — you check it on the next page.</span></div>
+</form>
+<script src="/js/rfq-new.js"></script>
+<%- include('../../partials/foot') %>

@@ -8,6 +8,7 @@ import { signedUrl, uploadDocument, deleteDocument } from '../lib/storage.js';
 import multer from '../lib/multer-utf8.js';
 import { catalogItems, STATUS_LABEL } from '../lib/supplier-product.js';
 import { clean as cleanProduct, missing, containerFit, CURRENCIES, INCOTERMS, CATEGORIES } from '../lib/supplier-product.js';
+import { cleanResponse, RS_LABEL } from '../lib/rfq.js';
 import { parseQuotation, gaps, MAX_PRODUCTS } from '../lib/supplier-bulk.js';
 import { validateSupplierCompany, COMPANY_TYPES } from '../lib/supplier-company.js';
 
@@ -157,6 +158,50 @@ r.post('/products/bulk/submit', async (req, res) => {
   if (error) return res.redirect('/supplier/products?msg=' + encodeURIComponent(error.message));
   await log({ entityType: 'supplier', entityId: req.user.supplier_id, action: 'product_submitted', actorId: req.user.id, detail: { note: `${(data || []).length} products (bulk)` } });
   res.redirect('/supplier/products?msg=' + encodeURIComponent(`Thank you — ${(data || []).length} products were sent to Lumi Trade for review.`));
+});
+
+// ---- RFQs: requests for quotation from Lumi Trade; the supplier answers in the portal ----
+const rfqUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 8 } }).array('files', 8);
+async function ownRfq(req, id) {
+  if (!/^[0-9a-f-]{36}$/i.test(id || '')) return null;
+  const { data: rs } = await admin.from('rfq_suppliers').select('*').eq('id', id).eq('supplier_id', req.user.supplier_id).neq('status', 'draft').maybeSingle();
+  if (!rs) return null;
+  const { data: rfq } = await admin.from('rfqs').select('id, ref, title, currency, deadline, message, items, status').eq('id', rs.rfq_id).single();
+  const { data: resp } = await admin.from('rfq_responses').select('*').eq('rfq_supplier_id', rs.id).neq('status', 'parsed').order('created_at', { ascending: false }).limit(1);
+  return { rs, rfq, resp: (resp || [])[0] || null };
+}
+
+r.get('/rfqs', async (req, res) => {
+  const { data: list, error } = await admin.from('rfq_suppliers').select('id, status, sent_at, replied_at, rfqs(ref, title, deadline, status, items)').eq('supplier_id', req.user.supplier_id).neq('status', 'draft').order('sent_at', { ascending: false });
+  res.render('supplier/rfqs', { title: 'RFQs', list: error ? [] : list || [], labels: RS_LABEL, msg: req.query.msg });
+});
+
+r.get('/rfqs/:id', async (req, res) => {
+  const x = await ownRfq(req, req.params.id);
+  if (!x) return res.status(404).send('Not found');
+  res.render('supplier/rfq', { title: x.rfq.ref, ...x, labels: RS_LABEL, err: req.query.err, msg: req.query.msg });
+});
+
+r.post('/rfqs/:id', (req, res, next) => rfqUpload(req, res, err => { req.uploadError = err ? err.message : null; next(); }), async (req, res) => {
+  const x = await ownRfq(req, req.params.id);
+  if (!x) return res.status(404).send('Not found');
+  const to = `/supplier/rfqs/${x.rs.id}`;
+  if (x.rfq.status === 'closed') return res.redirect(to + '?err=' + encodeURIComponent('This RFQ is closed.'));
+  if (req.uploadError) return res.redirect(to + '?err=' + encodeURIComponent(req.uploadError));
+  const declined = req.body.decline === '1';
+  const parsed = cleanResponse(req.body, x.rfq.items, x.rfq.currency);
+  if (!declined && parsed.problems.length) return res.redirect(to + '?err=' + encodeURIComponent(parsed.problems.join('; ')));
+  const file_ids = [];
+  for (const file of req.files || []) {
+    const doc = await uploadDocument({ file, entityType: 'supplier', entityId: req.user.supplier_id, kind: 'other', title: file.originalname, clientVisible: false, uploadedBy: req.user.id });
+    file_ids.push(doc.id);
+  }
+  const { error } = await admin.from('rfq_responses').insert({ rfq_id: x.rfq.id, rfq_supplier_id: x.rs.id, supplier_id: req.user.supplier_id, source: 'portal', status: declined ? 'declined' : 'confirmed',
+    lines: declined ? [] : parsed.lines, terms: declined ? {} : parsed.terms, note: String(req.body.note || '').trim().slice(0, 2000) || null, file_ids, created_by: req.user.id });
+  if (error) return res.redirect(to + '?err=' + encodeURIComponent(error.message));
+  await admin.from('rfq_suppliers').update({ status: declined ? 'declined' : 'replied', replied_at: new Date().toISOString() }).eq('id', x.rs.id);
+  await log({ entityType: 'supplier', entityId: req.user.supplier_id, action: declined ? 'rfq_declined' : 'rfq_answered', actorId: req.user.id, detail: { note: x.rfq.ref } });
+  res.redirect('/supplier/rfqs?msg=' + encodeURIComponent(declined ? 'Thank you — we noted that you can\'t quote this one.' : `Thank you — your prices for ${x.rfq.ref} were sent to Lumi Trade.`));
 });
 
 r.get('/products/new', async (req, res) => renderForm(res, req, { sub: null, data: { ...cleanProduct({}), photo_ids: [] } }));

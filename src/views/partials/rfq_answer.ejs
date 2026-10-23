@@ -1,0 +1,41 @@
+<%# locals: action, rfq, resp (previous answer or null), multipart (bool), declineLabel %>
+<%
+  const prev = resp && resp.status === 'confirmed' ? resp : null;
+  const lineOf = id => (prev && prev.lines || []).find(l => l.item_id === id) || {};
+  const t = (prev && prev.terms) || {};
+  const v = x => (x === null || x === undefined ? '' : x);
+%>
+<form method="post" action="<%= action %>" enctype="multipart/form-data" class="rfqans stack">
+  <% rfq.items.forEach(it => { const l = lineOf(it.id); const n = 'line[' + it.id + ']'; %>
+  <div class="rfqitem">
+    <div class="rfqitem-h"><strong><%= it.description %></strong><% if (it.sku) { %> <span class="muted small"><%= it.sku %></span><% } %>
+      <span class="muted small"><%= it.quantity ? '· ' + Number(it.quantity).toLocaleString('en-US') + ' ' + (it.unit || 'pcs') : '' %></span>
+      <% if (it.notes) { %><div class="muted small"><%= it.notes %></div><% } %></div>
+    <div class="rfqgrid">
+      <label>Unit price<input name="<%= n %>[unit_price]" value="<%= v(l.unit_price) %>" inputmode="decimal"></label>
+      <label>Currency<select name="<%= n %>[currency]"><% ['USD', 'CNY', 'EUR', 'GBP'].forEach(c => { %><option <%= (l.currency || rfq.currency) === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+      <label>MOQ<input name="<%= n %>[moq]" value="<%= v(l.moq) %>" inputmode="numeric"></label>
+      <label>Lead time (days)<input name="<%= n %>[lead_days]" value="<%= v(l.lead_days) %>" inputmode="numeric"></label>
+      <label>Pcs per carton<input name="<%= n %>[carton_qty]" value="<%= v(l.carton_qty) %>" inputmode="numeric"></label>
+      <label>Carton L × W × H (cm)<span class="trio"><input name="<%= n %>[carton_l]" value="<%= v(l.carton_l) %>" inputmode="decimal" aria-label="Length"><input name="<%= n %>[carton_w]" value="<%= v(l.carton_w) %>" inputmode="decimal" aria-label="Width"><input name="<%= n %>[carton_h]" value="<%= v(l.carton_h) %>" inputmode="decimal" aria-label="Height"></span></label>
+      <label>Carton gross (kg)<input name="<%= n %>[gross_kg]" value="<%= v(l.gross_kg) %>" inputmode="decimal"></label>
+      <label class="rfq-wide">Note<input name="<%= n %>[note]" value="<%= v(l.note) %>" placeholder="e.g. price for black colour, logo +0.10"></label>
+    </div>
+  </div>
+  <% }) %>
+  <div class="rfqitem">
+    <div class="rfqitem-h"><strong>Terms for the whole quote</strong></div>
+    <div class="rfqgrid">
+      <label>Incoterm<select name="incoterm"><option value="">—</option><% ['EXW', 'FCA', 'FOB', 'CIF', 'CFR', 'CPT', 'DAP', 'DDP'].forEach(c => { %><option <%= t.incoterm === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+      <label>Port / delivery point<input name="fob_port" value="<%= v(t.fob_port) %>"></label>
+      <label>Payment terms<input name="payment_terms" value="<%= v(t.payment_terms) %>" placeholder="30% deposit, 70% before shipment"></label>
+      <label>Price valid until<input type="date" name="valid_until" value="<%= v(t.valid_until) %>"></label>
+      <label class="rfq-wide">Message<input name="note" value="<%= v(prev && prev.note) %>"></label>
+      <label class="rfq-wide">Attach files <span class="muted small">— price list, photos, specs</span><input type="file" name="files" multiple></label>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn primary"><%= prev ? 'Update answer' : 'Send answer' %></button>
+    <button class="btn" name="decline" value="1" formnovalidate onclick="return confirm('Send a message that you can\'t quote this?')"><%= typeof declineLabel === 'undefined' ? "We can't quote" : declineLabel %></button>
+  </div>
+</form>

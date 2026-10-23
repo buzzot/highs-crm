@@ -1297,3 +1297,22 @@ label:has(> .picker-native) { position: relative; }
 .sfilters { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
 .sfilters input[type=search] { flex: 1; min-width: 0; }
 .sfilters select { width: auto; }
+
+/* RFQ */
+.checklist { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 4px 14px; max-height: 280px; overflow: auto; margin-top: 10px; }
+.checklist .check { display: flex; align-items: baseline; gap: 8px; padding: 6px 8px; border-radius: 8px; cursor: pointer; }
+.checklist .check:hover { background: var(--line-2); }
+.cmp td, .cmp th { vertical-align: top; }
+.cmp-best { background: var(--ok-soft); }
+.cmp-total td { border-top: 2px solid var(--line); }
+.tablewrap { overflow-x: auto; }
+.rfqitem { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; background: var(--surface); }
+.rfqitem-h { margin-bottom: 10px; }
+.rfqgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 14px; }
+.rfqgrid label { display: block; min-width: 0; }
+.rfqgrid input:not([type=file]), .rfqgrid select { width: 100%; box-sizing: border-box; }
+.rfqgrid .rfq-wide { grid-column: 1 / -1; }
+.rfqgrid .trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.rfqgrid .trio input { padding-left: 8px; padding-right: 8px; }
+.stack { display: grid; gap: 16px; }
+@media (max-width: 760px) { .rfqgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

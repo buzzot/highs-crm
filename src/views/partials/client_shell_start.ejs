@@ -9,6 +9,7 @@
     ['/supplier/products', 'My products', 'package', p => p.startsWith('/supplier/products') && p !== '/supplier/products/new' && p !== '/supplier/products/bulk'],
     ['/supplier/products/new', 'Add product', 'plus', p => p === '/supplier/products/new'],
     ['/supplier/products/bulk', 'Bulk upload', 'upload', p => p === '/supplier/products/bulk'],
+    ['/supplier/rfqs', 'RFQs', 'quote', p => p.startsWith('/supplier/rfqs')],
     ['/supplier/company', 'Company', 'building', p => p.startsWith('/supplier/company')],
     ['/account', 'Account', 'user', p => p.startsWith('/account')],
   ] : [

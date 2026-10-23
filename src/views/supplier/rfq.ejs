@@ -1,0 +1,12 @@
+<%- include('../partials/head') %>
+<div class="pagehead"><div><a class="back" href="/supplier/rfqs">← RFQs</a><p class="eyebrow"><%= rfq.ref %></p><h1><%= rfq.title %></h1>
+  <p class="muted"><%= rfq.deadline ? 'Please answer by ' + rfq.deadline + '. ' : '' %>Prices per piece. You can update your answer until Lumi Trade closes the request.</p></div>
+  <span class="pill lg <%= rs.status === 'replied' ? 'accepted' : rs.status === 'declined' ? 'declined' : 'quoted' %>"><%= labels[rs.status] %></span></div>
+<% if (err) { %><div class="alert err"><%= err %></div><% } %>
+<% if (rfq.message) { %><div class="card"><strong>Message from Lumi Trade</strong><p style="white-space:pre-line"><%= rfq.message %></p></div><% } %>
+<% if (rs.status === 'replied') { %><div class="alert ok">Your answer was sent<%= rs.replied_at ? ' on ' + fmt.datetime(rs.replied_at) : '' %>. You can change it below.</div><% } %>
+<% if (rs.status === 'declined') { %><div class="alert warn">You told us you can't quote this one. You can still send prices below.</div><% } %>
+<% if (rfq.status === 'closed') { %><div class="alert warn">This request is closed.</div><% } else { %>
+<%- include('../partials/rfq_answer', { action: '/supplier/rfqs/' + rs.id, rfq, resp }) %>
+<% } %>
+<%- include('../partials/foot') %>

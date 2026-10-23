@@ -2,7 +2,7 @@
 <% const tab = (s, label, n) => `<a class="${(status === s && !unlinked) ? 'on' : ''}" href="/admin/purchasing${s ? '?status=' + s : ''}">${label}${n != null ? ' <span>' + n + '</span>' : ''}</a>`; %>
 <div class="pagehead">
   <div><h1>Purchasing</h1><p class="muted">Purchase orders to our suppliers — send them, and keep the supplier's confirmation, proforma invoice and packing list together.</p></div>
-  <div class="headactions"><a class="btn" href="/admin/orders">From an order</a><a class="btn primary" href="/admin/purchasing/new">+ New purchase order</a></div>
+  <div class="headactions"><a class="btn" href="/admin/rfqs">RFQs</a><a class="btn" href="/admin/orders">From an order</a><a class="btn primary" href="/admin/purchasing/new">+ New purchase order</a></div>
 </div>
 <% if (error) { %><div class="alert err"><%= error %></div><% } %>
 
