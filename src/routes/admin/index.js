@@ -6,6 +6,7 @@ import { requireStaff } from '../../middleware/auth.js';
 import { admin } from '../../lib/supabase.js';
 import { defaultCurrency, sumIn } from '../../lib/currency.js';
 import { getSettings } from '../../lib/util.js';
+import { applyCashProfit } from '../../lib/order-profit.js';
 import clients from './clients.js';
 import suppliers from './suppliers.js';
 import products from './products.js';
@@ -39,6 +40,7 @@ r.get('/', async (req, res) => {
     admin.from('quotes').select('id', { count: 'exact', head: true }).eq('status', 'draft'),
   ]);
   const all = orders.data || [];
+  await applyCashProfit(all);   // same profit rule as the Orders list
   const open = all.filter(o => !['delivered', 'closed', 'cancelled'].includes(o.status));
   const byStatus = {};
   open.forEach(o => { byStatus[o.status] = (byStatus[o.status] || 0) + 1; });

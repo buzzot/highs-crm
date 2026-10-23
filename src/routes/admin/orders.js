@@ -16,6 +16,7 @@ import { sendEmail } from '../../lib/mailer.js';
 import { paymentDecidedEmail } from '../../lib/email-templates.js';
 import { recalcOrder, confirmedReceived } from '../../lib/payments-db.js';
 import { cashProfit } from '../../lib/payments.js';
+import { applyCashProfit } from '../../lib/order-profit.js';
 const appUrl = () => (process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
 import { rfqEmail } from '../../lib/email-templates.js';
 import { replyAddress, subjectTag } from '../../lib/freight.js';
@@ -53,14 +54,7 @@ r.get('/', async (req, res) => {
   const defCur = await defaultCurrency(admin), settings = await getSettings(admin), list = data || [];
   // orders with no goods items (logistics only): gross profit is what was actually received minus costs
   const live = list.filter(o => o.status !== 'cancelled');   // cancelled orders earn nothing: no margin, no profit, not in the totals
-  const noGoods = live.filter(o => !(Number(o.subtotal) > 0));
-  if (noGoods.length) {
-    const { data: pays } = await admin.from('order_payments').select('order_id, amount, currency').eq('status', 'confirmed').in('order_id', noGoods.map(o => o.id));
-    noGoods.forEach(o => {
-      const got = (pays || []).filter(p => p.order_id === o.id && p.currency === o.currency).reduce((t, p) => t + Number(p.amount || 0), 0);
-      if (got > 0) { o.gross_profit = cashProfit({ received: got, cost: o.cost_total, freight: o.freight_total }).profit; o.profit_on_received = true; }
-    });
-  }
+  await applyCashProfit(live);
   const totals = { goods: sumIn(settings, defCur, live.map(o => [o.subtotal, o.currency])), profit: sumIn(settings, defCur, live.map(o => [o.gross_profit, o.currency])), mixed: live.some(o => o.currency !== defCur) };
   res.render('admin/orders/index', { title: 'Orders', totals, orders: list, byStatus, statuses: ORDER_STATUSES, status, clients: clients || [] });
 });
