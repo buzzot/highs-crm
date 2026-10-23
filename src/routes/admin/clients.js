@@ -84,6 +84,7 @@ r.post('/:id/details', async (req, res) => {
   if (!patch.name) return res.redirect(`/admin/clients/${req.params.id}?err=` + encodeURIComponent('Company name is required.'));
   patch.default_currency ||= res.locals.defCur || 'CNY';
   patch.active = req.body.active === 'on';
+  if ('language' in req.body) patch.language = normLang(req.body.language);
   const { error } = await admin.from('organizations').update(patch).eq('id', req.params.id);
   res.redirect(`/admin/clients/${req.params.id}?` + (error ? 'err=' + encodeURIComponent(error.message) : 'msg=' + encodeURIComponent('Details saved.')));
 });
