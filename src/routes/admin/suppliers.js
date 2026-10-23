@@ -4,7 +4,7 @@ import { clean, bool, notFound, getSettings } from '../../lib/util.js';
 import { defaultCurrency, sumIn } from '../../lib/currency.js';
 import { requireAdmin } from '../../middleware/auth.js';
 import { ACTIVITY_TYPES as BASE_TYPES, readActivity, withLastLogin } from '../../lib/crm.js';
-import { inviteUser, memberRows } from '../../lib/invites.js';
+import { inviteUser, memberRows, stashInvite, takeInvite, wantsLinkOnly } from '../../lib/invites.js';
 import { log } from '../../lib/activity.js';
 import { COMPANY_TYPES } from '../../lib/supplier-company.js';
 import { usageSummary, setCompanyAi } from '../../lib/ai-access.js';
@@ -83,8 +83,9 @@ r.post('/invite', async (req, res) => {
   await log({ entityType: 'supplier', entityId: sup.id, action: 'supplier_invited', actorId: req.user.id, detail: { note: email } });
   if (!bool(req.body.send)) return res.redirect(`/admin/suppliers/${sup.id}?msg=` + encodeURIComponent('Supplier added. Send the invitation when you are ready.'));
   try {
-    await inviteUser({ email, role: 'supplier', supplierId: sup.id, invitedBy: req.user.id });
-    res.redirect(`/admin/suppliers/${sup.id}?msg=` + encodeURIComponent(`Invitation sent to ${email} — valid 14 days. The supplier fills in the company details.`));
+    const r2 = await inviteUser({ email, role: 'supplier', supplierId: sup.id, invitedBy: req.user.id, mail: !wantsLinkOnly(req.body) });
+    if (!r2.mailed) stashInvite(res, email, r2);
+    res.redirect(`/admin/suppliers/${sup.id}?msg=` + encodeURIComponent(r2.mailed ? `Invitation sent to ${email} — valid 14 days. The supplier fills in the company details.` : `Invitation created for ${email} — copy the link below and send it yourself.`));
   } catch (e) {
     res.redirect(`/admin/suppliers/${sup.id}?err=` + encodeURIComponent(`Supplier added, but the invitation was not sent: ${e.message}`));
   }
@@ -116,7 +117,7 @@ r.get('/:id', async (req, res) => {
     aiUse, aiPrices: await getPrices(), title: s.name, s, products: products || [], photoOf, orders: orders || [], docs: docs || [], spend, types: COMPANY_TYPES,
     members, events: events || [], crmStatuses: CRM_STATUSES, activityTypes: ACTIVITY_TYPES,
     portalBlocked: members.some(m => m.state === 'accepted') && !members.some(m => m.state === 'accepted' && m.active !== false),
-    msg: req.query.msg, err: req.query.err,
+    invShow: takeInvite(req, res), msg: req.query.msg, err: req.query.err,
   });
 });
 
@@ -175,8 +176,10 @@ r.post('/:id/invite', async (req, res) => {
   const { data: s } = await admin.from('suppliers').select('id').eq('id', req.params.id).single();
   if (!s) return notFound(res, 'Supplier');
   try {
-    const result = await inviteUser({ email: req.body.email, role: 'supplier', supplierId: s.id, invitedBy: req.user.id });
-    res.redirect(`/admin/suppliers/${s.id}?msg=` + encodeURIComponent(`${result.resent ? 'New invitation link sent' : 'Invitation sent'} to ${String(req.body.email).trim()} — valid 14 days.`));
+    const result = await inviteUser({ email: req.body.email, role: 'supplier', supplierId: s.id, invitedBy: req.user.id, mail: !wantsLinkOnly(req.body) });
+    const to = String(req.body.email).trim();
+    if (!result.mailed) stashInvite(res, to, result);
+    res.redirect(`/admin/suppliers/${s.id}?msg=` + encodeURIComponent(result.mailed ? `${result.resent ? 'New invitation link sent' : 'Invitation sent'} to ${to} — valid 14 days.` : `Invitation ready for ${to} — copy the link below and send it yourself.`));
   } catch (e) {
     res.redirect(`/admin/suppliers/${s.id}?err=` + encodeURIComponent(e.message));
   }

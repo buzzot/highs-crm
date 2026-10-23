@@ -176,3 +176,10 @@ document.querySelectorAll('time.localtime').forEach(function (t) { var d = new D
     sync();
   });
 })();
+
+// copy buttons: <button data-copy="text">
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-copy]'); if (!b) return;
+  const t = b.dataset.copy, done = () => { const o = b.textContent; b.textContent = 'Copied ✓'; setTimeout(() => { b.textContent = o; }, 1500); };
+  if (navigator.clipboard) navigator.clipboard.writeText(t).then(done, () => {}); else { const i = document.createElement('input'); i.value = t; document.body.appendChild(i); i.select(); document.execCommand('copy'); i.remove(); done(); }
+});

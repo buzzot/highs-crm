@@ -1,9 +1,10 @@
 import { randomBytes } from 'node:crypto';
 import { admin } from './supabase.js';
 import { sendInvite } from './otp.js';
+import { seal, unseal } from './signed.js';
 
 import { INVITE_DAYS } from './members.js';
-export { INVITE_DAYS, memberRows } from './members.js';
+export { INVITE_DAYS, memberRows, wantsLinkOnly } from './members.js';
 
 /**
  * Invite (or re-invite) a person by email.
@@ -12,7 +13,7 @@ export { INVITE_DAYS, memberRows } from './members.js';
  * Resend from your own domain. The login is created here (without a password); the person sets the
  * password on the invitation page after confirming the code. Re-inviting revokes earlier open invitations.
  */
-export async function inviteUser({ email, role = 'client', orgId = null, supplierId = null, invitedBy = null }) {
+export async function inviteUser({ email, role = 'client', orgId = null, supplierId = null, invitedBy = null, mail = true }) {
   email = String(email || '').trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error('Enter a valid email address.');
   if (role === 'client' && !orgId) throw new Error('Client invites need an organization.');
@@ -54,8 +55,8 @@ export async function inviteUser({ email, role = 'client', orgId = null, supplie
     supplierId ? admin.from('suppliers').select('name, details_completed_at').eq('id', supplierId).single() : { data: null },
     invitedBy ? admin.from('profiles').select('full_name').eq('id', invitedBy).single() : { data: null },
   ]);
-  await sendInvite({ email, token, orgName: org?.name || (sup?.details_completed_at ? sup.name : null), inviterName: inviter?.full_name || null, days: INVITE_DAYS, kind: role === 'supplier' ? 'supplier' : 'client' });
-  return { resent: !!existing, expiresAt };
+  const sent = await sendInvite({ mail, email, token, orgName: org?.name || (sup?.details_completed_at ? sup.name : null), inviterName: inviter?.full_name || null, days: INVITE_DAYS, kind: role === 'supplier' ? 'supplier' : 'client' });
+  return { resent: !!existing, expiresAt, link: sent.url, code: sent.code, mailError: sent.mailError, mailed: mail && !sent.mailError };
 }
 
 /** Look up an invitation by its link token and say whether it can still be used. */
@@ -73,3 +74,17 @@ export async function findInvite(token) {
   return { state: 'valid', inv };
 }
 
+
+// ---- hand-over of an invitation link (for people who cannot receive email) ----
+const SHOW_COOKIE = 'hb_invshow';
+/** Keep the fresh link + code for the next page view only (encrypted cookie, 10 minutes). */
+export function stashInvite(res, email, r) {
+  const ttl = 10 * 60e3;
+  res.cookie(SHOW_COOKIE, seal({ email, link: r.link, code: r.code, mailed: r.mailed, err: r.mailError || null }, ttl), { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: ttl, path: '/admin' });
+}
+/** Read and clear it: the link is shown once. */
+export function takeInvite(req, res) {
+  const v = unseal(req.cookies?.[SHOW_COOKIE]);
+  if (req.cookies?.[SHOW_COOKIE]) res.clearCookie(SHOW_COOKIE, { path: '/admin' });
+  return v || null;
+}

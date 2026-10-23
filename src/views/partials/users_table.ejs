@@ -6,6 +6,17 @@
 <%
   const ago = d => { if (!d) return ''; const days = Math.floor((Date.now() - new Date(d)) / 864e5); return days <= 0 ? 'today' : days === 1 ? 'yesterday' : days < 30 ? days + ' days ago' : fmt.date(d); };
 %>
+<% if (typeof invShow !== 'undefined' && invShow) { %>
+<div class="invshow">
+  <div class="invshow-head"><strong>Invitation for <%= invShow.email %></strong>
+    <% if (invShow.err) { %><span class="badge warn">Email failed — <%= invShow.err %></span><% } else if (!invShow.mailed) { %><span class="muted small">No email was sent.</span><% } %>
+    <span class="muted small">Shown only once — copy it now. Valid 14 days.</span></div>
+  <div class="invshow-row"><span class="invshow-lbl">Link</span><input class="invshow-val" readonly value="<%= invShow.link %>" aria-label="Invitation link"><button type="button" class="btn small" data-copy="<%= invShow.link %>">Copy link</button></div>
+  <div class="invshow-row"><span class="invshow-lbl">Code</span><input class="invshow-val invshow-code" readonly value="<%= invShow.code %>" aria-label="Confirmation code"><button type="button" class="btn small" data-copy="<%= invShow.code %>">Copy code</button></div>
+  <div class="invshow-row"><span class="invshow-lbl">Message</span><input class="invshow-val" readonly value="Please open <%= invShow.link %> and enter code <%= invShow.code %> to set up your account." aria-label="Ready message"><button type="button" class="btn small" data-copy="Please open <%= invShow.link %> and enter code <%= invShow.code %> to set up your account.">Copy message</button></div>
+  <p class="muted small">The supplier opens the link, types the code, then fills in their details and sets a password. Lost it? Use “New link (no email)” on their row.</p>
+</div>
+<% } %>
 <% if (members.length) { %>
 <table class="tbl users">
   <thead><tr><th>Email (login)</th><th>Name</th><th>Status</th><th>Last sign-in</th><th></th></tr></thead>
@@ -28,6 +39,7 @@
       <td class="right nowrap">
         <% if (m.state === 'pending' || m.state === 'expired') { %>
           <form method="post" action="<%= base %>/invite" class="inline"><input type="hidden" name="email" value="<%= m.email %>"><button class="btn small <%= m.state === 'expired' ? 'primary' : '' %>">Resend</button></form>
+          <form method="post" action="<%= base %>/invite" class="inline"><input type="hidden" name="email" value="<%= m.email %>"><input type="hidden" name="no_email" value="1"><button class="link small" title="Create a fresh link and code without sending an email">New link (no email)</button></form>
           <form method="post" action="<%= base %>/invites/cancel" class="inline" onsubmit="return confirm('Cancel the invitation for <%= m.email %>?')"><input type="hidden" name="email" value="<%= m.email %>"><button class="link small danger">Cancel</button></form>
         <% } else if (m.id) { %>
           <form method="post" action="<%= base %>/users/<%= m.id %>/toggle" class="inline"><button class="link small <%= m.active === false ? '' : 'danger' %>"><%= m.active === false ? 'Enable' : 'Disable' %></button></form>
@@ -43,5 +55,6 @@
 <form method="post" action="<%= base %>/invite" class="row tight inviteform">
   <input type="email" name="email" required placeholder="<%= members.length ? otherPlaceholder : firstPlaceholder %>" value="<%= members.length ? '' : firstValue %>" aria-label="Email to invite">
   <button class="btn primary"><%- icon('mail') %> <%= members.length ? 'Invite another user' : 'Send invitation' %></button>
-  <span class="muted small">The invitation email is valid 14 days.</span>
+  <label class="chk"><input type="checkbox" name="no_email" value="1"> Can't receive email? Don't send — give me the link</label>
+  <span class="muted small">The invitation is valid 14 days.</span>
 </form>

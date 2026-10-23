@@ -1,6 +1,6 @@
 import { Router } from '../../lib/router.js';
 import { admin } from '../../lib/supabase.js';
-import { inviteUser, memberRows } from '../../lib/invites.js';
+import { inviteUser, memberRows, stashInvite, takeInvite, wantsLinkOnly } from '../../lib/invites.js';
 import { requireAdmin } from '../../middleware/auth.js';
 import { log } from '../../lib/activity.js';
 import { usageSummary, setCompanyAi } from '../../lib/ai-access.js';
@@ -64,7 +64,7 @@ r.get('/:id', async (req, res) => {
   };
   const aiUse = await usageSummary('organization', id);
   res.render('admin/clients/detail', {
-    aiUse, aiPrices: await getPrices(), title: client.name, org: client, members: memberRows(users || [], invites || []), requests: requests || [], orders: orders || [],
+    aiUse, aiPrices: await getPrices(), title: client.name, org: client, members: memberRows(users || [], invites || []), invShow: takeInvite(req, res), requests: requests || [], orders: orders || [],
     events: events || [], activityTypes: ACTIVITY_TYPES, kpi, msg: req.query.msg, err: req.query.err,
   });
 });
@@ -106,8 +106,10 @@ r.post('/:id', async (req, res) => {
 // invite a user into this client (multiple users per client supported)
 r.post('/:id/invite', async (req, res) => {
   try {
-    const result = await inviteUser({ email: req.body.email, role: 'client', orgId: req.params.id, invitedBy: req.user.id });
-    res.redirect(`/admin/clients/${req.params.id}?msg=` + encodeURIComponent(`${result.resent ? 'New invitation link sent' : 'Invitation sent'} to ${String(req.body.email).trim()} — valid 14 days.`));
+    const result = await inviteUser({ email: req.body.email, role: 'client', orgId: req.params.id, invitedBy: req.user.id, mail: !wantsLinkOnly(req.body) });
+    const to = String(req.body.email).trim();
+    if (!result.mailed) stashInvite(res, to, result);
+    res.redirect(`/admin/clients/${req.params.id}?msg=` + encodeURIComponent(result.mailed ? `${result.resent ? 'New invitation link sent' : 'Invitation sent'} to ${to} — valid 14 days.` : `Invitation ready for ${to} — copy the link below and send it yourself.`));
   } catch (e) {
     res.redirect(`/admin/clients/${req.params.id}?err=` + encodeURIComponent(e.message));
   }

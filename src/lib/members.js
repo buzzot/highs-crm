@@ -26,3 +26,6 @@ export function memberRows(profiles = [], invitations = [], now = new Date()) {
   const order = { pending: 0, expired: 1, accepted: 2, manual: 3 };
   return rows.sort((a, b) => (order[a.state] ?? 9) - (order[b.state] ?? 9) || a.email.localeCompare(b.email));
 }
+
+/** True when the invite form asked for "no email, just give me the link". */
+export const wantsLinkOnly = body => /^(1|on|true|yes)$/i.test(String(body?.no_email || ''));

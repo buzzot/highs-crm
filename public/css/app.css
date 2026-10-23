@@ -1331,3 +1331,11 @@ label:has(> .picker-native) { position: relative; }
 .supdlg .sp-line { display: block; font-size: 13px; }
 .supdlg .sp-email { color: var(--info, #1d5fb8); }
 @media (max-width: 700px) { .sendrow { grid-template-columns: 40px 1fr; } .sendrow input.sr-email { grid-column: 1 / -1; } }
+.invshow { border: 1px solid #e6b8b0; background: #fdf1ee; border-radius: var(--radius); padding: 14px 16px; margin: 0 0 16px; display: grid; gap: 8px; }
+.invshow-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.invshow-row { display: grid; grid-template-columns: 70px 1fr auto; gap: 10px; align-items: center; }
+.invshow-lbl { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted, #6b7785); }
+.invshow-val { margin: 0; font-family: ui-monospace, Menlo, monospace; font-size: 13px; background: var(--surface); }
+.invshow-code { max-width: 140px; letter-spacing: .25em; font-size: 16px; font-weight: 650; }
+.inviteform .chk { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted, #6b7785); }
+.inviteform .chk input { width: auto; flex: none; margin: 0; }
