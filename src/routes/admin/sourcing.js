@@ -17,9 +17,10 @@ const like = q => String(q || '').replace(/[,()%]/g, ' ').trim();
 // Sourcing pipeline: client requests → quotes → orders
 r.get('/', async (req, res) => {
   // requests with something waiting for staff: a client change to approve, or a submitted purchase order
-  const [{ data: pend }, { data: poPend }] = await Promise.all([admin.from('request_revisions').select('request_id').eq('status', 'pending'), admin.from('purchase_orders').select('request_id').eq('status', 'submitted')]);
+  const [{ data: pend }, { data: poPend }, { data: freshRows }] = await Promise.all([admin.from('request_revisions').select('request_id').eq('status', 'pending'), admin.from('purchase_orders').select('request_id').eq('status', 'submitted'), admin.from('requests').select('id').eq('status', 'new')]);
+  const newIds = (freshRows || []).map(x => x.id);
   const pendingIds = (pend || []).map(x => x.request_id), poIds = (poPend || []).map(x => x.request_id);
-  const waiting = [...new Set([...pendingIds, ...poIds])];
+  const waiting = [...new Set([...pendingIds, ...poIds, ...newIds])];
   const status = req.query.status || (waiting.length ? 'action' : 'open');
   let q = admin.from('requests')
     .select('*, organizations(id, name), assignee:profiles!requests_assigned_to_fkey(full_name, email), quotes(id, status)')
@@ -33,7 +34,7 @@ r.get('/', async (req, res) => {
   const [{ data }, { data: counts }] = await Promise.all([q, admin.from('requests').select('id, status')]);
   const byStatus = {}, waitBy = {};
   (counts || []).forEach(x => { byStatus[x.status] = (byStatus[x.status] || 0) + 1; if (waiting.includes(x.id)) waitBy[x.status] = (waitBy[x.status] || 0) + 1; });
-  res.render('admin/sourcing/index', { title: 'Sourcing', requests: data || [], pendingIds, poIds, waiting: waiting.length, waitBy, byStatus, statuses: REQUEST_STATUSES, status });
+  res.render('admin/sourcing/index', { title: 'Sourcing', requests: data || [], pendingIds, poIds, newIds, waiting: waiting.length, waitBy, byStatus, statuses: REQUEST_STATUSES, status });
 });
 
 // Staff enter a request that reached them outside the system (client email, WeChat): pick the client, list the products

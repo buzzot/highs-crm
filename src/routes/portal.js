@@ -9,7 +9,7 @@ import { combineQuotes, dropReplaced, poLinesFromCombined, quotationPdf, shownOf
 import { getCompany, poFromQuote, poPdf, totalOf, text as txt } from '../lib/purchase.js';
 import { staffEmails } from '../lib/request-changes.js';
 import { sendEmail } from '../lib/mailer.js';
-import { poSubmittedEmail, paymentSubmittedEmail } from '../lib/email-templates.js';
+import { poSubmittedEmail, paymentSubmittedEmail, newRequestEmail } from '../lib/email-templates.js';
 import { nextInstalment } from '../lib/payments.js';
 import { recalcOrder } from '../lib/payments-db.js';
 const appUrl = () => (process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
@@ -150,6 +150,12 @@ r.post('/requests', upload.any(), async (req, res) => {
     } catch (e) { console.error(`[request] ${data.id}: upload ${file.originalname} failed: ${e.message}`); }
   }
   await log({ entityType: 'request', entityId: data.id, action: 'created', actorId: req.user.id, clientVisible: true, detail: { products: items.length } });
+  try {   // tell the team a new request has arrived (never blocks the client)
+    const { data: rq } = await admin.from('requests').select('id, ref, title, assigned_to').eq('id', data.id).single();
+    const { data: org } = await admin.from('organizations').select('name').eq('id', req.user.org_id).maybeSingle();
+    const to = await staffEmails(rq || {});
+    if (to.length && rq) await sendEmail({ to, ...newRequestEmail({ request: rq, orgName: org?.name, who: req.user.full_name || req.user.email, products: items.length, url: `${appUrl()}/admin/sourcing/${rq.id}` }) });
+  } catch (e) { console.error(`[request] email to staff failed: ${e.message}`); }
   res.redirect(`/portal/requests/${data.id}`);
 });
 

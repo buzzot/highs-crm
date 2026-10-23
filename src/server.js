@@ -47,8 +47,8 @@ async function navPending() {
     const n = async q => { try { return (await q).count || 0; } catch { return 0; } }; // a table missing before its migration counts as 0
     const head = (table, status) => admin.from(table).select('id', { count: 'exact', head: true }).eq('status', status);
     const prodQ = admin.from('supplier_products').select('id', { count: 'exact', head: true }).in('status', ['submitted', 'edit_requested', 'updated']);
-    const [rev, po, pay, spo, prods] = await Promise.all([n(head('request_revisions', 'pending')), n(head('purchase_orders', 'submitted')), n(head('order_payments', 'submitted')), n(head('supplier_pos', 'replied')), n(prodQ)]);
-    navCache = { at: Date.now(), value: { sourcing: rev + po, orders: pay, purchasing: spo, products: prods }, pending: null };
+    const [rev, po, pay, spo, prods, fresh] = await Promise.all([n(head('request_revisions', 'pending')), n(head('purchase_orders', 'submitted')), n(head('order_payments', 'submitted')), n(head('supplier_pos', 'replied')), n(prodQ), n(head('requests', 'new'))]);
+    navCache = { at: Date.now(), value: { sourcing: rev + po + fresh, orders: pay, purchasing: spo, products: prods }, pending: null };
     return navCache.value;
   })().finally(() => { navCache.pending = null; });
   return navCache.pending;

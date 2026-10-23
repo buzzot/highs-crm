@@ -18,9 +18,9 @@
     <tbody>
     <% if (!requests.length) { %><tr><td colspan="9" class="muted"><%= status === 'action' ? 'Nothing is waiting for your approval.' : 'Nothing here.' %></td></tr><% } %>
     <% requests.forEach(q => { const urgent = q.needed_by && new Date(q.needed_by) < new Date(Date.now() + 21*864e5) && ['new','reviewing'].includes(q.status); %>
-      <tr class="<%= (pendingIds.includes(q.id) || poIds.includes(q.id)) ? 'needrow' : '' %>">
+      <tr class="<%= (pendingIds.includes(q.id) || poIds.includes(q.id) || (typeof newIds !== 'undefined' && newIds.includes(q.id))) ? 'needrow' : '' %>">
         <td><a href="/admin/sourcing/<%= q.id %>"><%= q.ref %></a><% if (String(q.ref).startsWith('IRQ-')) { %> <span class="tag" title="Started by staff, not by the client">staff</span><% } %></td>
-        <td><strong><%= q.title %></strong><% if (typeof pendingIds !== 'undefined' && pendingIds.includes(q.id)) { %> <span class="pill pending">Changes to approve</span><% } %><% if (typeof poIds !== 'undefined' && poIds.includes(q.id)) { %> <span class="pill pending">PO to approve</span><% } %><div class="muted small"><%= fmt.date(q.created_at) %></div></td>
+        <td><strong><%= q.title %></strong><% if (typeof pendingIds !== 'undefined' && pendingIds.includes(q.id)) { %> <span class="pill pending">Changes to approve</span><% } %><% if (typeof poIds !== 'undefined' && poIds.includes(q.id)) { %> <span class="pill pending">PO to approve</span><% } %><% if (typeof newIds !== 'undefined' && newIds.includes(q.id)) { %> <span class="pill pending">New request</span><% } %><div class="muted small"><%= fmt.date(q.created_at) %></div></td>
         <td><a href="/admin/clients/<%= q.organizations?.id %>"><%= q.organizations?.name %></a></td>
         <td><%= q.quantity ?? '—' %></td>
         <td><%= q.target_unit_price ? fmt.money(q.target_unit_price, q.target_currency, 4) : '—' %></td>

@@ -112,6 +112,18 @@ export function changeSubmittedEmail({ request, orgName, who, url }) {
   };
 }
 
+export function newRequestEmail({ request, orgName, who, products, url }) {
+  return {
+    subject: `New request ${request.ref} from ${orgName || 'a client'}`,
+    html: layout({
+      preheader: `${who} sent ${request.ref}`, eyebrow: 'New sourcing request', title: 'A client sent a request',
+      introHtml: `<strong>${esc(who)}</strong> from <strong>${esc(orgName || 'a client')}</strong> sent <strong>${esc(request.ref)} · ${esc(request.title)}</strong>${products > 1 ? ` (${products} products)` : ''}. Open it to start sourcing.`,
+      buttonText: 'Open request', buttonUrl: url, fineHtml: 'You get this email because you handle this request or are an admin.',
+    }),
+    text: `New request ${request.ref} from ${orgName || 'a client'} (${who}). Open: ${url}`,
+  };
+}
+
 // ---- offer sent to the client ----
 export function quoteSentEmail({ request, validUntil, leadTimeDays, url, count, total, currency, attached, notes, line }) {
   const facts = [validUntil ? `valid until ${validUntil}` : null, leadTimeDays ? `lead time ${leadTimeDays} days` : null].filter(Boolean).join(' · ');
