@@ -115,7 +115,8 @@ app.use((req, res) => res.status(404).render('error', { title: 'Not found', mess
 app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
   console.error(`[error] ${req.method} ${req.originalUrl}:`, err);
   const isStaff = req.user && ['admin', 'staff'].includes(req.user.role);
-  const detail = [err.message, err.code, err.details, err.hint].filter(Boolean).join(' · ');
+  const where = isStaff ? String(err.stack || '').split('\n').slice(1).find(l => /\/src\//.test(l)) : null; // first line of our own code, to find the cause fast
+  const detail = [err.message, err.code, err.details, err.hint, where && where.trim().replace(/^at /, '')].filter(Boolean).join(' · ');
   res.status(500).render('error', { title: 'Error', message: process.env.NODE_ENV === 'production' && !isStaff ? 'Something went wrong.' : `Something went wrong: ${detail}` });
 });
 
