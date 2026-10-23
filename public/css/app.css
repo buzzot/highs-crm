@@ -1321,6 +1321,13 @@ label:has(> .picker-native) { position: relative; }
 .aifill-row { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; }
 .rqspec { margin: 2px 0 6px; }
 .sendlist { display: grid; gap: 8px; margin-top: 12px; }
-.sendrow { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(220px, 1.4fr) auto; gap: 12px; align-items: center; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
-.sendrow input[type=text] { margin: 0; }
-@media (max-width: 700px) { .sendrow { grid-template-columns: 1fr; } }
+.sendrow { display: grid; grid-template-columns: 40px minmax(160px, 1fr) minmax(220px, 1.3fr) auto; gap: 14px; align-items: center; padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.sr-av { width: 36px; height: 36px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-weight: 650; font-size: 13px; }
+.sr-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sendrow input.sr-email { margin: 0; color: var(--info, #1d5fb8); font-weight: 500; }
+.supdlg .pk-foot { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); position: sticky; bottom: 0; background: var(--surface); }
+.supdlg .supopt { display: grid; grid-template-columns: auto 40px 1fr; gap: 12px; align-items: center; cursor: pointer; }
+.supdlg .supopt input { margin: 0; width: 18px; height: 18px; }
+.supdlg .sp-line { display: block; font-size: 13px; }
+.supdlg .sp-email { color: var(--info, #1d5fb8); }
+@media (max-width: 700px) { .sendrow { grid-template-columns: 40px 1fr; } .sendrow input.sr-email { grid-column: 1 / -1; } }

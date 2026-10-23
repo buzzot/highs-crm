@@ -36,11 +36,9 @@
   </div>
   <div class="card">
     <h2>Send to <span class="count" id="supCount">0</span></h2>
-    <label>Add a supplier
-      <select id="supPick" data-picker="Supplier"><option value="">— choose a supplier —</option>
-        <% suppliers.forEach(s => { %><option value="<%= s.id %>" data-name="<%= s.name %>" data-email="<%= s.email || '' %>"><%= s.name %><%= s.email ? ' · ' + s.email : '' %></option><% }) %>
-      </select></label>
-    <div class="sendlist" id="sendList"><p class="muted small" id="sendEmpty">No supplier chosen yet. Pick one above — each one appears here with the email address the RFQ will go to.</p></div>
+    <p><button type="button" class="btn" id="supAdd">+ Add suppliers</button> <span class="muted small">Pick one or several — they appear below with the email the RFQ will go to.</span></p>
+    <script type="application/json" id="supData"><%- JSON.stringify(suppliers.map(s => ({ id: s.id, name: s.name, email: s.email || '', contact: s.contact_name || '', city: s.city || '' }))).replace(/</g, '\\u003c') %></script>
+    <div class="sendlist" id="sendList"><p class="muted small" id="sendEmpty">No supplier chosen yet. Click “Add suppliers”.</p></div>
     <% if (!suppliers.length) { %><p class="muted">No suppliers yet — add them under Suppliers first.</p><% } %>
   </div>
   <div class="actions"><button class="btn primary">Create RFQ</button><span class="muted small">Nothing is sent yet — you check it on the next page.</span></div>
