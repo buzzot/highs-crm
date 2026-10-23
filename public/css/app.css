@@ -1344,3 +1344,10 @@ label:has(> .picker-native) { position: relative; }
 .reqedit summary::-webkit-details-marker { display: none; }
 .reqedit[open] form { position: absolute; right: 0; top: 36px; z-index: 5; width: 300px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; box-shadow: 0 12px 30px rgba(15,30,50,.18); display: grid; gap: 8px; }
 .reqedit textarea { width: 100%; }
+.tabs .needtab { background: #fdecea; color: #b3261e; font-weight: 600; border-radius: 999px; }
+.tabs .needtab.on { background: #b3261e; color: #fff; }
+.tabs .needtab .navball { margin-left: 6px; background: #b3261e; color: #fff; }
+.tabs .needtab.on .navball { background: #fff; color: #b3261e; }
+.tabdot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #d93025; margin-left: 6px; vertical-align: middle; }
+tr.needrow td { background: #fff8e6; }
+tr.needrow td:first-child { box-shadow: inset 4px 0 0 #e8a100; }

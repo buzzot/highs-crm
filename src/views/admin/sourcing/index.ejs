@@ -6,8 +6,9 @@
   <a class="btn<%= mine ? ' primary' : '' %>" href="/admin/sourcing?status=<%= status %><%= mine ? '' : '&mine=1' %>" title="<%= mine ? 'Showing only requests assigned to you — click to show all' : 'Show only requests assigned to you' %>"><%= mine ? '✓ Assigned to me' : 'Assigned to me' %></a></div>
 </div>
 <div class="tabs">
-  <a href="/admin/sourcing?status=open<%= mq %>" class="<%= status === 'open' ? 'on' : '' %>">Open <span><%= (byStatus.new||0)+(byStatus.reviewing||0)+(byStatus.quoted||0) %></span></a>
-  <% statuses.filter(s => (byStatus[s] || 0) > 0 || status === s).forEach(s => { %><a href="/admin/sourcing?status=<%= s %><%= mq %>" class="<%= status === s ? 'on' : '' %>"><%= fmt.status(s) %> <span><%= byStatus[s] || 0 %></span></a><% }) %>
+  <% if (waiting > 0 || status === 'action') { %><a href="/admin/sourcing?status=action<%= mq %>" class="needtab <%= status === 'action' ? 'on' : '' %>">⚠ Needs your action <span class="navball"><%= waiting %></span></a><% } %>
+  <a href="/admin/sourcing?status=open<%= mq %>" class="<%= status === 'open' ? 'on' : '' %>">Open <span><%= (byStatus.new||0)+(byStatus.reviewing||0)+(byStatus.quoted||0) %></span><% if ((waitBy.new||0)+(waitBy.reviewing||0)+(waitBy.quoted||0) > 0) { %><i class="tabdot" title="Something here is waiting for your approval"></i><% } %></a>
+  <% statuses.filter(s => (byStatus[s] || 0) > 0 || status === s).forEach(s => { %><a href="/admin/sourcing?status=<%= s %><%= mq %>" class="<%= status === s ? 'on' : '' %>"><%= fmt.status(s) %> <span><%= byStatus[s] || 0 %></span><% if (waitBy[s]) { %><i class="tabdot" title="Something here is waiting for your approval"></i><% } %></a><% }) %>
   <a href="/admin/sourcing?status=all<%= mq %>" class="<%= status === 'all' ? 'on' : '' %>">All</a>
 </div>
 <div class="card">
@@ -15,9 +16,9 @@
   <table class="tbl">
     <thead><tr><th>Ref</th><th>Request</th><th>Client</th><th>Qty</th><th>Target</th><th>Needed by</th><th>Quotes</th><th>Owner</th><th>Status</th></tr></thead>
     <tbody>
-    <% if (!requests.length) { %><tr><td colspan="9" class="muted">Nothing here.</td></tr><% } %>
+    <% if (!requests.length) { %><tr><td colspan="9" class="muted"><%= status === 'action' ? 'Nothing is waiting for your approval.' : 'Nothing here.' %></td></tr><% } %>
     <% requests.forEach(q => { const urgent = q.needed_by && new Date(q.needed_by) < new Date(Date.now() + 21*864e5) && ['new','reviewing'].includes(q.status); %>
-      <tr>
+      <tr class="<%= (pendingIds.includes(q.id) || poIds.includes(q.id)) ? 'needrow' : '' %>">
         <td><a href="/admin/sourcing/<%= q.id %>"><%= q.ref %></a><% if (String(q.ref).startsWith('IRQ-')) { %> <span class="tag" title="Started by staff, not by the client">staff</span><% } %></td>
         <td><strong><%= q.title %></strong><% if (typeof pendingIds !== 'undefined' && pendingIds.includes(q.id)) { %> <span class="pill pending">Changes to approve</span><% } %><% if (typeof poIds !== 'undefined' && poIds.includes(q.id)) { %> <span class="pill pending">PO to approve</span><% } %><div class="muted small"><%= fmt.date(q.created_at) %></div></td>
         <td><a href="/admin/clients/<%= q.organizations?.id %>"><%= q.organizations?.name %></a></td>
