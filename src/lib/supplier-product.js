@@ -70,3 +70,32 @@ export function toProduct(d, supplierId) {
     carton_cbm: cbm, carton_weight_kg: d.gross_kg,
   };
 }
+
+/** Share (0–100) of the details Lumi Trade wants that are filled in. `d` is wizard data; `photos` the photo count. */
+export function completeness(d = {}, photos = 0) {
+  const checks = [!!d.name, !!d.sku, !!d.category, !!d.description, d.unit_price > 0, d.moq > 0, photos > 0 || !!d.photo_link,
+    d.carton_qty > 0, d.carton_l > 0 && d.carton_w > 0 && d.carton_h > 0, d.gross_kg > 0, d.unit_weight_kg > 0, !!d.hs_code];
+  return Math.round(checks.filter(Boolean).length / checks.length * 100);
+}
+
+/**
+ * One list for the "My products" page: the supplier's drafts / submissions plus the products already in the catalog.
+ * status: draft | submitted | returned | selected (= in the Lumi Trade catalog).
+ */
+export function catalogItems({ products = [], photoOf = {}, subs = [] } = {}) {
+  const fromSubs = subs.filter(s => s.status !== 'approved').map(s => {
+    const d = s.data || {};
+    const photos = (d.photo_ids || []).length;
+    return { kind: 'submission', id: s.id, status: s.status, name: d.name || '(no name)', sku: d.sku || '', category: d.category || '', price: d.unit_price ?? null, currency: d.currency || 'USD',
+      moq: d.moq ?? null, photo: (d.photo_ids || [])[0] || null, pct: completeness(d, photos), updated: s.updated_at, note: s.review_note || null };
+  });
+  const fromProducts = products.map(p => {
+    const d = { name: p.name, sku: p.supplier_sku, category: p.category, description: p.description || p.name, unit_price: p.unit_cost, moq: p.moq, carton_qty: p.carton_qty,
+      carton_l: p.carton_length_cm, carton_w: p.carton_width_cm, carton_h: p.carton_height_cm, gross_kg: p.carton_weight_kg, unit_weight_kg: p.unit_weight_kg, hs_code: p.hs_code };
+    return { kind: 'product', id: p.id, status: 'selected', name: p.name, sku: p.supplier_sku || '', category: p.category || '', price: p.unit_cost ?? null, currency: p.cost_currency || 'CNY',
+      moq: p.moq ?? null, photo: photoOf[p.id] || null, pct: completeness(d, photoOf[p.id] ? 1 : 0), updated: p.created_at, note: null };
+  });
+  return [...fromSubs, ...fromProducts].sort((a, b) => String(b.updated || '').localeCompare(String(a.updated || '')));
+}
+
+export const STATUS_LABEL = { draft: 'Draft', submitted: 'Submitted', returned: 'Sent back', selected: 'In catalog' };

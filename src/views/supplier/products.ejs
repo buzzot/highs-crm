@@ -1,40 +1,46 @@
 <%- include('../partials/head') %>
-<div class="pagehead"><div><h1>My products</h1><p class="muted">Products Lumi Trade buys from you, as we have them on file. Add new ones yourself, or send us your latest price list for changes.</p></div>
-  <a class="btn primary" href="/supplier/products/new"><%- icon('plus') %> Add product</a></div>
-<% if (subs && subs.length) { %>
+<%
+  const tabs = [['', 'All', counts.all], ['draft', 'Drafts', counts.draft], ['submitted', 'Submitted', counts.submitted], ['returned', 'Sent back', counts.returned], ['selected', 'In catalog', counts.selected]].filter(t => t[0] === '' || t[2] > 0 || status === t[0]);
+  const href = st => '/supplier/products?' + new URLSearchParams(Object.entries({ status: st, q, cat }).filter(([, v]) => v)).toString();
+  const pill = { draft: 'new', submitted: 'quoted', returned: 'bad', selected: 'delivered' };
+%>
+<div class="pagehead"><div><p class="eyebrow">Product catalog</p><h1>My products</h1><p class="muted">Submit your products and prices to Lumi Trade.</p></div>
+  <div class="row"><a class="btn" href="/supplier/products/bulk"><%- icon('upload') %> Bulk upload</a><a class="btn primary" href="/supplier/products/new"><%- icon('plus') %> Add product</a></div></div>
+<div class="kpis">
+  <div class="kpi"><span class="n"><%= counts.all %></span><span class="l">Total products</span></div>
+  <div class="kpi"><span class="n"><%= counts.draft %></span><span class="l">Drafts</span></div>
+  <div class="kpi"><span class="n"><%= counts.submitted + counts.returned %></span><span class="l">Submitted / in review</span></div>
+  <div class="kpi"><span class="n"><%= counts.selected %></span><span class="l">In the Lumi Trade catalog</span></div>
+</div>
 <div class="card">
-  <h2>Your submissions <span class="count"><%= subs.length %></span></h2>
+  <div class="tabs">
+    <% tabs.forEach(([k, label, n]) => { %><a href="<%= href(k) %>" class="<%= status === k ? 'on' : '' %>"><%= label %> <span class="count"><%= n %></span></a><% }) %>
+  </div>
+  <form method="get" action="/supplier/products" class="sfilters">
+    <% if (status) { %><input type="hidden" name="status" value="<%= status %>"><% } %>
+    <input type="search" name="q" value="<%= q %>" placeholder="Search name or SKU…" class="grow">
+    <select name="cat"><option value="">All categories</option><% cats.forEach(c => { %><option <%= c === cat ? 'selected' : '' %>><%= c %></option><% }) %></select>
+    <button class="btn">Search</button>
+    <% if (avg !== null) { %><span class="muted small nowrap">Avg. completeness <strong><%= avg %>%</strong></span><% } %>
+  </form>
+  <% if (!items.length) { %>
+    <p class="muted"><%= counts.all ? 'No products match.' : 'No products yet. Add one, or upload your whole price list with Bulk upload.' %></p>
+  <% } else { %>
   <table class="tbl">
-    <thead><tr><th></th><th>Product</th><th>Status</th><th>Updated</th><th></th></tr></thead>
+    <thead><tr><th></th><th>Product</th><th>Category</th><th class="right">Price</th><th class="right">MOQ</th><th>Status</th><th>Completeness</th><th>Updated</th><th></th></tr></thead>
     <tbody>
-    <% subs.forEach(x => { const ph = (x.data && x.data.photo_ids || [])[0]; const label = { draft: 'Draft', submitted: 'With Lumi Trade for review', returned: 'Sent back to you' }[x.status] || x.status; %>
+    <% items.forEach(x => { %>
       <tr>
-        <td class="thumbcell"><% if (ph) { %><img class="pthumbsm" src="/supplier/photos/<%= ph %>" alt="" loading="lazy"><% } %></td>
-        <td><strong><%= x.data && x.data.name || '(no name)' %></strong><% if (x.status === 'returned' && x.review_note) { %><div class="small bad"><%= x.review_note %></div><% } %></td>
-        <td><span class="pill <%= x.status === 'returned' ? 'bad' : x.status === 'submitted' ? 'quoted' : 'new' %>"><%= label %></span></td>
-        <td class="small muted"><%= fmt.date(x.updated_at) %></td>
+        <td class="thumbcell"><% if (x.photo) { %><img class="pthumbsm" src="/supplier/photos/<%= x.photo %>" alt="" loading="lazy"><% } %></td>
+        <td><strong><%= x.name %></strong><% if (x.sku) { %><div class="muted small"><%= x.sku %></div><% } %><% if (x.status === 'returned' && x.note) { %><div class="small bad"><%= x.note %></div><% } %></td>
+        <td><%= x.category || '—' %></td>
+        <td class="right"><%= x.price != null ? fmt.money(x.price, x.currency, 2) : '—' %></td>
+        <td class="right"><%= x.moq ?? '—' %></td>
+        <td><span class="pill <%= pill[x.status] %>"><%= labels[x.status] %></span></td>
+        <td><div class="pbar"><i style="width:<%= x.pct %>%"></i></div><span class="small muted"><%= x.pct %>%</span></td>
+        <td class="small muted nowrap"><%= fmt.date(x.updated) %></td>
         <td class="right nowrap"><% if (x.status === 'draft' || x.status === 'returned') { %><a class="btn small" href="/supplier/products/<%= x.id %>/edit"><%= x.status === 'returned' ? 'Fix and resubmit' : 'Continue' %></a>
           <form method="post" action="/supplier/products/<%= x.id %>/delete" class="inline" onsubmit="return confirm('Delete this draft?')"><button class="link small danger">Delete</button></form><% } %></td>
-      </tr>
-    <% }) %>
-    </tbody>
-  </table>
-</div>
-<% } %>
-<div class="card">
-  <% if (!products.length) { %><p class="muted">No products on file yet.</p><% } else { %>
-  <table class="tbl">
-    <thead><tr><th></th><th>Product</th><th>Your SKU</th><th>Category</th><th class="right">Price</th><th>MOQ</th><th>Carton</th></tr></thead>
-    <tbody>
-    <% products.forEach(p => { %>
-      <tr>
-        <td class="thumbcell"><% if (photoOf[p.id]) { %><img class="pthumbsm" src="/supplier/photos/<%= photoOf[p.id] %>" alt="" loading="lazy"><% } %></td>
-        <td><strong><%= p.name %></strong><% if (p.hs_code) { %><div class="muted small">HS <%= p.hs_code %></div><% } %></td>
-        <td><%= p.supplier_sku || '—' %></td>
-        <td><%= p.category || '—' %></td>
-        <td class="right"><%= p.unit_cost != null ? fmt.money(p.unit_cost, p.cost_currency, 2) : '—' %></td>
-        <td><%= p.moq ?? '—' %></td>
-        <td class="small"><%= p.carton_qty ? p.carton_qty + ' pcs' : '' %><% if (p.carton_length_cm) { %><div class="muted"><%= [p.carton_length_cm, p.carton_width_cm, p.carton_height_cm].map(Number).join('×') %> cm<%= p.carton_weight_kg ? ' · ' + Number(p.carton_weight_kg) + ' kg' : '' %></div><% } %></td>
       </tr>
     <% }) %>
     </tbody>

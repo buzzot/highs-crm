@@ -30,3 +30,11 @@ test('toProduct maps the form onto a products row; extras go into spec', () => {
   assert.equal(p.spec.Materials, 'EPDM'); assert.equal(p.spec['Carton net weight (kg)'], '14'); assert.equal(p.spec['Production lead time (days)'], '25');
   assert.equal(p.spec.Brand, undefined);
 });
+
+import { completeness, catalogItems } from '../src/lib/supplier-product.js';
+test('catalogItems merges submissions and catalog products; completeness is a percentage', () => {
+  assert.equal(completeness({}, 0), 0);
+  const items = catalogItems({ products: [{ id: 'p1', name: 'A', created_at: '2026-10-01', unit_cost: 2 }], photoOf: {}, subs: [{ id: 's1', status: 'draft', data: { name: 'B' }, updated_at: '2026-10-05' }, { id: 's2', status: 'approved', data: { name: 'C' }, updated_at: '2026-10-06' }] });
+  assert.deepEqual(items.map(i => [i.name, i.status]), [['B', 'draft'], ['A', 'selected']]);
+  assert.ok(items[0].pct > 0 && items[0].pct < 100);
+});

@@ -6,6 +6,7 @@ import { requireSupplier } from '../middleware/auth.js';
 import { log } from '../lib/activity.js';
 import { signedUrl, uploadDocument, deleteDocument } from '../lib/storage.js';
 import multer from '../lib/multer-utf8.js';
+import { catalogItems, STATUS_LABEL } from '../lib/supplier-product.js';
 import { clean as cleanProduct, missing, containerFit, CURRENCIES, INCOTERMS, CATEGORIES } from '../lib/supplier-product.js';
 import { parseQuotation, gaps, MAX_PRODUCTS } from '../lib/supplier-bulk.js';
 import { validateSupplierCompany, COMPANY_TYPES } from '../lib/supplier-company.js';
@@ -13,7 +14,7 @@ import { validateSupplierCompany, COMPANY_TYPES } from '../lib/supplier-company.
 const r = Router();
 r.use(requireSupplier);
 
-const PRODUCT_COLS = 'id, name, supplier_sku, category, hs_code, unit_cost, cost_currency, moq, unit_weight_kg, carton_qty, carton_weight_kg, carton_length_cm, carton_width_cm, carton_height_cm, created_at';
+const PRODUCT_COLS = 'id, name, description, supplier_sku, category, hs_code, unit_cost, cost_currency, moq, unit_weight_kg, carton_qty, carton_weight_kg, carton_length_cm, carton_width_cm, carton_height_cm, created_at';
 
 r.get('/', async (req, res) => {
   const sid = req.user.supplier_id;
@@ -61,7 +62,13 @@ r.get('/products', async (req, res) => {
   const photoOf = {};
   (photos || []).forEach(d => { photoOf[d.entity_id] ||= d.id; });
   const { data: subs } = await admin.from('supplier_products').select('id, status, data, review_note, submitted_at, updated_at').eq('supplier_id', sid).neq('status', 'approved').order('updated_at', { ascending: false }); // empty before migration 0028
-  res.render('supplier/products', { title: 'My products', products: products || [], photoOf, subs: subs || [], msg: req.query.msg });
+  const all = catalogItems({ products: products || [], photoOf, subs: subs || [] });
+  const q = String(req.query.q || '').trim().toLowerCase(), cat = String(req.query.cat || ''), status = String(req.query.status || '');
+  const items = all.filter(i => (!status || i.status === status) && (!cat || i.category === cat) && (!q || (i.name + ' ' + i.sku).toLowerCase().includes(q)));
+  const counts = { all: all.length }; for (const k of Object.keys(STATUS_LABEL)) counts[k] = all.filter(i => i.status === k).length;
+  const cats = [...new Set(all.map(i => i.category).filter(Boolean))].sort();
+  const avg = all.length ? Math.round(all.reduce((t, i) => t + i.pct, 0) / all.length) : null;
+  res.render('supplier/products', { title: 'My products', items, counts, cats, avg, q, cat, status, labels: STATUS_LABEL, msg: req.query.msg });
 });
 
 // ---- "Add product" wizard: a submission stays here (draft → submitted → approved/returned) until staff approve it as a real product ----
