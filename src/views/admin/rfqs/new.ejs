@@ -43,5 +43,5 @@
   </div>
   <div class="actions"><button class="btn primary">Create RFQ</button><span class="muted small">Nothing is sent yet — you check it on the next page.</span></div>
 </form>
-<script src="/js/rfq-new.js"></script>
+<script src="/js/rfq-new.js?v=<%= typeof assetV === 'undefined' ? '' : assetV %>"></script>
 <%- include('../../partials/foot') %>

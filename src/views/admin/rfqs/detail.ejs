@@ -125,5 +125,5 @@
   <% if (rfq.status !== 'draft') { %><form method="post" action="/admin/rfqs/<%= rfq.id %>/status" class="inline"><input type="hidden" name="status" value="<%= rfq.status === 'closed' ? 'open' : 'closed' %>"><button class="btn"><%= rfq.status === 'closed' ? 'Reopen RFQ' : 'Close RFQ' %></button></form><% } %>
   <% if (rs.every(s => s.status === 'draft')) { %><form method="post" action="/admin/rfqs/<%= rfq.id %>/delete" class="inline" onsubmit="return confirm('Delete this RFQ?')"><button class="btn danger">Delete</button></form><% } %>
 </div>
-<script src="/js/rfq-new.js"></script>
+<script src="/js/rfq-new.js?v=<%= typeof assetV === 'undefined' ? '' : assetV %>"></script>
 <%- include('../../partials/foot') %>

@@ -126,5 +126,5 @@
     <button type="submit" class="btn primary" id="sp_submit" hidden><%= reopen ? 'Send changes' : sub.status === 'submitted' ? 'Save changes' : 'Submit for review' %></button>
   </footer>
 </form>
-<script src="/js/supplier-product.js" defer></script>
+<script src="/js/supplier-product.js?v=<%= typeof assetV === 'undefined' ? '' : assetV %>" defer></script>
 <%- include('../partials/foot') %>

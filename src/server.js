@@ -54,8 +54,9 @@ async function navPending() {
   return navCache.pending;
 }
 
+const ASSET_V = Date.now().toString(36);   // new on every start/deploy, so browsers never keep an old stylesheet or script
 app.use((req, res, next) => {
-  Object.assign(res.locals, { fmt, icon, showValue, deliveryLabel, path: req.path, query: req.query, msg: req.query.msg, err: req.query.err });
+  Object.assign(res.locals, { assetV: ASSET_V, fmt, icon, showValue, deliveryLabel, path: req.path, query: req.query, msg: req.query.msg, err: req.query.err });
   next();
 });
 app.use(loadUser);

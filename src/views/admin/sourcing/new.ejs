@@ -42,5 +42,5 @@
   </div>
 </form>
 <template id="rqTemplate"><%- include('_item', { it: {}, i: '__I__', cur, aiOn, units }) %></template>
-<script src="/js/staff-request.js"></script>
+<script src="/js/staff-request.js?v=<%= typeof assetV === 'undefined' ? '' : assetV %>"></script>
 <%- include('../../partials/foot') %>
