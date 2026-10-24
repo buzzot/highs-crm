@@ -257,7 +257,6 @@ r.post('/account', requireAuth, async (req, res) => {
   const patch = {};
   for (const k of ['full_name', 'job_title', 'phone', 'wechat']) if (k in req.body) patch[k] = String(req.body[k] || '').trim() || null;
   if (patch.full_name === null) delete patch.full_name;
-  if (patch.wechat && /^(WhatsApp|WeChat)$/.test(req.body.messenger || '')) patch.wechat = `${req.body.messenger}: ${patch.wechat}`;   // number/ID is stored with the messenger it belongs to
   if (Object.keys(patch).length) await admin.from('profiles').update(patch).eq('id', req.user.id);
   if (password && (password.length < 8 || password !== req.body.password2)) return res.redirect('/account?err=' + encodeURIComponent('Password not changed: at least 8 characters, typed twice the same.'));
   if (password && password.length >= 8) await admin.auth.admin.updateUserById(req.user.id, { password });
