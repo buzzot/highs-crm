@@ -1368,7 +1368,7 @@ html[lang=ru] .pill::first-letter, html[lang=ru] .badge::first-letter { text-tra
 .reqtbl td:first-child > a { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-weight: 600; }
 
 /* account page */
-.acct { max-width: 920px; margin: 0 auto; }
+.acct { width: 100%; }
 .acct-head { display: flex; align-items: center; gap: 16px; margin: 4px 0 24px; }
 .acct-head h1 { margin: 0; font-size: 28px; line-height: 1.2; letter-spacing: -.01em; }
 .acct-head p { margin: 4px 0 0; font-size: 14px; }
@@ -1382,7 +1382,7 @@ html[lang=ru] .pill::first-letter, html[lang=ru] .badge::first-letter { text-tra
 .acct .f { display: grid; gap: 6px; margin: 0; flex: none; min-width: 0; font-size: 14px; font-weight: 500; color: var(--ink); }
 .acct .f > .cap { display: flex; align-items: baseline; gap: 6px; margin: 0; flex: none; font-size: 14px; font-weight: 500; line-height: 20px; }
 .acct .acct-pwbtn[hidden] { display: none; }
-.acct .f em { font-style: normal; font-weight: 400; color: var(--muted); font-size: 12px; }
+.acct .f em { line-height: 1; font-style: normal; font-weight: 400; color: var(--muted); font-size: 12px; }
 .acct .f small, .acct .hint { margin: 0; color: var(--muted); font-weight: 400; font-size: 12.5px; line-height: 1.4; }
 .acct .f small.err { color: #c0392b; }
 .acct input[type=text], .acct input[type=email], .acct input[type=tel], .acct input[type=password] { margin: 0; height: 40px; padding: 0 12px; border-radius: 8px; border-color: var(--line); font-size: 14px; }
@@ -1397,7 +1397,7 @@ html[lang=ru] .pill::first-letter, html[lang=ru] .badge::first-letter { text-tra
 .acct .wrap > .eye:hover { color: var(--ink); }
 .acct .wrap .tick { color: #1a9d6b; } .acct .wrap .cross { color: #d64545; }
 .acct-mrow { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; }
-.seg { box-sizing: border-box; display: inline-flex; align-items: stretch; padding: 3px; height: 40px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.seg { margin: 0; align-self: start; box-sizing: border-box; display: inline-flex; align-items: stretch; padding: 3px; height: 40px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
 .seg label { display: block; margin: 0; flex: none; cursor: pointer; }
 .seg input { position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; margin: 0; }
 .seg span { display: flex; align-items: center; height: 100%; padding: 0 11px; border-radius: 5px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
