@@ -1,24 +1,120 @@
 <%- include('../partials/head') %>
-<div class="card">
-  <h1>My account</h1>
-  <% if (saved) { %><div class="alert ok">Saved.</div><% } %>
-  <form method="post" action="/account">
-    <label>Email <input type="email" value="<%= user.email %>" disabled></label>
-    <div class="row">
-      <label>Full name <input type="text" name="full_name" value="<%= user.full_name || '' %>" required></label>
-      <label>Job title <input type="text" name="job_title" value="<%= user.job_title || '' %>"></label>
+<%
+  const raw = user.wechat || '';
+  const m = /^(WhatsApp|WeChat):\s*(.*)$/s.exec(raw);
+  const messenger = m ? m[1] : (user.role === 'client' ? 'WhatsApp' : 'WeChat');
+  const handle = m ? m[2] : raw;
+  const initials = ((user.full_name || '').trim().split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('') || (user.email || '?')[0]).toUpperCase();
+  const lock = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>';
+%>
+<div class="acct">
+  <div class="acct-head">
+    <span class="acct-av" id="acctAv"><%= initials %></span>
+    <div><h1>My account</h1><p class="muted">Profile, contacts and security</p></div>
+  </div>
+  <% if (saved) { %><div class="acct-flash" role="status">Changes saved</div><% } %>
+  <form method="post" action="/account" class="acct-card" id="acctForm" autocomplete="off" novalidate>
+    <section class="acct-sec">
+      <div class="acct-lab"><h2>Profile</h2><p>How colleagues and partners see you.</p></div>
+      <div class="acct-fields">
+        <div class="f"><span class="cap">Email</span>
+          <span class="wrap"><input type="email" value="<%= user.email %>" disabled><%- lock %></span>
+          <small>Used to sign in. Can't be changed.</small>
+        </div>
+        <div class="acct-row">
+          <div class="f"><label class="cap" for="a_name">Name</label>
+            <input id="a_name" type="text" name="full_name" value="<%= user.full_name || '' %>" placeholder="Ivan Petrov" required>
+            <small class="err" id="e_name" hidden>Enter your name</small>
+          </div>
+          <div class="f"><label class="cap" for="a_job">Job title <em>optional</em></label>
+            <input id="a_job" type="text" name="job_title" value="<%= user.job_title || '' %>" placeholder="Procurement manager">
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="acct-sec">
+      <div class="acct-lab"><h2>Contacts</h2><p>For quick contact about orders.</p></div>
+      <div class="acct-fields">
+        <div class="acct-row">
+          <div class="f"><label class="cap" for="a_phone">Phone <em>optional</em></label>
+            <input id="a_phone" type="tel" name="phone" value="<%= user.phone || '' %>" placeholder="+7 900 000-00-00" inputmode="tel">
+            <small class="err" id="e_phone" hidden>Invalid phone number format</small>
+          </div>
+          <div class="f"><span class="cap">Messenger <em>optional</em></span>
+            <div class="acct-mrow">
+              <span class="seg" role="radiogroup" aria-label="Messenger">
+                <label><input type="radio" name="messenger" value="WhatsApp" <%= messenger === 'WhatsApp' ? 'checked' : '' %>><span>WhatsApp</span></label>
+                <label><input type="radio" name="messenger" value="WeChat" <%= messenger === 'WeChat' ? 'checked' : '' %>><span>WeChat</span></label>
+              </span>
+              <input type="text" name="wechat" id="a_msg" value="<%= handle %>" placeholder="+7 900" aria-label="Number or ID in messenger">
+            </div>
+            <small class="mh" data-m="WhatsApp" <%- messenger === 'WhatsApp' ? '' : 'hidden' %>>Number in WhatsApp</small>
+            <small class="mh" data-m="WeChat" <%- messenger === 'WeChat' ? '' : 'hidden' %>>Your WeChat ID</small>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="acct-sec">
+      <div class="acct-lab"><h2>Security</h2><p>Password and sign-in protection.</p></div>
+      <div class="acct-fields">
+        <div class="acct-note">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>
+          <span>Sign-in is protected by a one-time code sent to <strong><%= user.email %></strong>.</span>
+        </div>
+        <button type="button" class="btn acct-pwbtn" id="pwOpen"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="M10.8 12.2L20 3M16 7l3 3"/></svg>Change password</button>
+        <div class="acct-row acct-pw" id="pwBox" hidden>
+          <div class="f"><label class="cap" for="a_pw">New password</label>
+            <span class="wrap"><input id="a_pw" type="password" name="password" autocomplete="new-password"><button type="button" class="eye" id="eye" aria-label="Show password"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button></span>
+            <span class="strength" id="strength" hidden><i></i><i></i><i></i><i></i></span>
+            <small id="h_pw">At least 8 characters, letters and digits</small>
+            <small class="err" id="e_pw" hidden>At least 8 characters</small>
+          </div>
+          <div class="f"><label class="cap" for="a_pw2">Repeat password</label>
+            <span class="wrap"><input id="a_pw2" type="password" name="password2" autocomplete="new-password" disabled></span>
+            <small class="err" id="e_pw2" hidden>Passwords don't match</small>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="acct-foot">
+      <button type="button" class="btn ghost" id="acctCancel" disabled>Cancel</button>
+      <button class="btn primary" id="acctSave" disabled>Save</button>
     </div>
-    <div class="row">
-      <label>Phone <input type="text" name="phone" value="<%= user.phone || '' %>"></label>
-      <label>WeChat / WhatsApp <input type="text" name="wechat" value="<%= user.wechat || '' %>"></label>
-    </div>
-    <h3>Change password</h3>
-    <div class="row">
-      <label>New password <input type="password" name="password" minlength="8" placeholder="leave blank to keep" autocomplete="new-password"></label>
-      <label>Repeat new password <input type="password" name="password2" minlength="8" autocomplete="new-password"></label>
-    </div>
-    <button class="btn primary">Save</button>
   </form>
-  <p class="muted small">Sign-in is protected by a one-time code emailed to <%= user.email %>.</p>
 </div>
+<script>
+(() => {
+  const $ = id => document.getElementById(id), f = $('acctForm'), save = $('acctSave'), cancel = $('acctCancel');
+  const snap = () => new URLSearchParams(new FormData(f)).toString(), start = snap();
+  const show = (id, on) => { $(id).hidden = !on; };
+  const pw = $('a_pw'), pw2 = $('a_pw2'), box = $('pwBox');
+  const score = p => (p.length >= 8) + (/[A-ZА-Я]/.test(p) && /[a-zа-я]/.test(p)) + /\d/.test(p) + /[^\wА-Яа-я]/.test(p);
+  const validate = () => {
+    const bad = { name: !$('a_name').value.trim(), phone: !!$('a_phone').value && !/^\+?[\d\s()-]{7,20}$/.test($('a_phone').value), pw: !!pw.value && pw.value.length < 8, pw2: !!pw2.value && pw.value !== pw2.value };
+    for (const k in bad) { show('e_' + k, bad[k] && (k !== 'name' || touched)); const el = { name: $('a_name'), phone: $('a_phone'), pw, pw2 }[k]; el.classList.toggle('bad', bad[k] && (k !== 'name' || touched)); }
+    show('h_pw', !bad.pw);
+    return !Object.values(bad).some(Boolean);
+  };
+  let touched = false;
+  const refresh = () => {
+    pw2.disabled = !pw.value; const s = score(pw.value), bars = $('strength');
+    bars.hidden = !pw.value; [...bars.children].forEach((b, i) => { b.className = i < s ? 'on' + (s < 2 ? 1 : s < 4 ? 2 : 3) : ''; });
+    const dirty = snap() !== start; save.disabled = cancel.disabled = !dirty; validate();
+    const w = pw2.parentNode; w.querySelector('.tick,.cross')?.remove();
+    if (pw2.value) w.insertAdjacentHTML('beforeend', pw.value === pw2.value ? '<svg class="tick" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg>' : '<svg class="cross" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>');
+    const n = $('a_name').value.trim().split(/\s+/).filter(Boolean).map(x => x[0]).slice(0, 2).join('');
+    if (n) $('acctAv').textContent = n.toUpperCase();
+  };
+  f.addEventListener('input', refresh); f.addEventListener('change', refresh);
+  $('pwOpen').onclick = () => { box.hidden = false; $('pwOpen').hidden = true; pw.focus(); };
+  $('eye').onclick = () => { const t = pw.type === 'password' ? 'text' : 'password'; pw.type = pw2.type = t; };
+  f.querySelectorAll('input[name=messenger]').forEach(r => r.addEventListener('change', () => { f.querySelectorAll('.mh').forEach(h => { h.hidden = h.dataset.m !== r.value; }); $('a_msg').placeholder = r.value === 'WeChat' ? 'wxid_...' : '+7 900'; }));
+  f.addEventListener('submit', e => { touched = true; if (!validate() || (pw.value && pw.value !== pw2.value)) { e.preventDefault(); return; } });
+  cancel.onclick = () => { f.reset(); box.hidden = true; $('pwOpen').hidden = false; touched = false; f.querySelectorAll('.mh').forEach(h => { h.hidden = h.dataset.m !== f.messenger.value; }); refresh(); };
+  refresh();
+})();
+</script>
 <%- include('../partials/foot') %>
