@@ -1,6 +1,13 @@
 // Russian texts for the client portal. English text (exactly as the page prints it) → Russian.
 // Kept short on purpose so the interface stays tidy. Anything not listed simply stays in English.
 export const RU = {
+  // account page
+  'Profile, contacts and security': 'Профиль, контакты и безопасность', 'Profile': 'Профиль', 'How colleagues and partners see you.': 'Как вас видят коллеги и партнёры.',
+  'Used to sign in. Can\'t be changed.': 'Используется для входа. Изменить нельзя.', 'Name': 'Имя', 'Job title': 'Должность', 'optional': 'необязательно',
+  'Contacts': 'Контакты', 'For quick contact about orders.': 'Для быстрой связи по заказам.', 'Phone': 'Телефон', 'Messenger': 'Мессенджер',
+  'Number in WhatsApp': 'Номер в WhatsApp', 'ID in WeChat': 'ID в WeChat', 'Security': 'Безопасность', 'Password and sign-in protection.': 'Пароль и защита входа.',
+  'Sign-in is protected by a one-time code sent to': 'Вход защищён одноразовым кодом, который приходит на', 'Change password': 'Сменить пароль', 'New password': 'Новый пароль',
+  'Repeat new password': 'Повторите пароль', 'At least 8 characters, with letters and a number.': 'Не менее 8 символов, с буквами и цифрой.', 'Cancel': 'Отменить', 'Save': 'Сохранить', 'Saved.': 'Сохранено.', 'My account': 'Мой аккаунт',
   // sign-in & invitation pages
   '8+ characters, letters and a number': '8+ символов, буквы и цифра', 'Access is by invitation only · © 2026 Lumi Trade': 'Доступ только по приглашению · © 2026 Lumi Trade',
   'Asked more than once? Use the newest email.': 'Запрашивали несколько раз? Используйте самое новое письмо.', 'Back to sign in': 'Назад ко входу',

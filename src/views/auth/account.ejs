@@ -1,24 +1,82 @@
 <%- include('../partials/head') %>
-<div class="card">
-  <h1>My account</h1>
+<%
+  const raw = user.wechat || '';
+  const m = /^(WhatsApp|WeChat):\s*(.*)$/s.exec(raw);
+  const messenger = m ? m[1] : (user.role === 'client' ? 'WhatsApp' : 'WeChat');
+  const handle = m ? m[2] : raw;
+  const initial = (user.full_name || user.email || '?').trim().charAt(0).toUpperCase();
+%>
+<div class="acct">
+  <div class="acct-head">
+    <span class="acct-av"><%= initial %></span>
+    <div><h1>My account</h1><p class="muted">Profile, contacts and security</p></div>
+  </div>
   <% if (saved) { %><div class="alert ok">Saved.</div><% } %>
-  <form method="post" action="/account">
-    <label>Email <input type="email" value="<%= user.email %>" disabled></label>
-    <div class="row">
-      <label>Full name <input type="text" name="full_name" value="<%= user.full_name || '' %>" required></label>
-      <label>Job title <input type="text" name="job_title" value="<%= user.job_title || '' %>"></label>
+  <form method="post" action="/account" class="acct-card" id="acctForm" autocomplete="off">
+    <section class="acct-sec">
+      <div class="acct-lab"><h2>Profile</h2><p>How colleagues and partners see you.</p></div>
+      <div class="acct-fields">
+        <label>Email
+          <span class="acct-lock"><input type="email" value="<%= user.email %>" disabled><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
+          <small>Used to sign in. Can't be changed.</small>
+        </label>
+        <div class="acct-row">
+          <label>Name <input type="text" name="full_name" value="<%= user.full_name || '' %>" required></label>
+          <label>Job title <em>optional</em> <input type="text" name="job_title" value="<%= user.job_title || '' %>"></label>
+        </div>
+      </div>
+    </section>
+
+    <section class="acct-sec">
+      <div class="acct-lab"><h2>Contacts</h2><p>For quick contact about orders.</p></div>
+      <div class="acct-fields">
+        <div class="acct-row">
+          <label>Phone <em>optional</em> <input type="text" name="phone" value="<%= user.phone || '' %>" inputmode="tel"></label>
+          <div class="acct-msg">
+            <span class="acct-cap">Messenger <em>optional</em></span>
+            <div class="acct-mrow">
+              <span class="seg" role="radiogroup" aria-label="Messenger">
+                <label><input type="radio" name="messenger" value="WhatsApp" <%= messenger === 'WhatsApp' ? 'checked' : '' %>><span>WhatsApp</span></label>
+                <label><input type="radio" name="messenger" value="WeChat" <%= messenger === 'WeChat' ? 'checked' : '' %>><span>WeChat</span></label>
+              </span>
+              <input type="text" name="wechat" value="<%= handle %>" aria-label="Messenger number or ID">
+            </div>
+            <small class="mh" data-m="WhatsApp" <%- messenger === 'WhatsApp' ? '' : 'hidden' %>>Number in WhatsApp</small>
+            <small class="mh" data-m="WeChat" <%- messenger === 'WeChat' ? '' : 'hidden' %>>ID in WeChat</small>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="acct-sec">
+      <div class="acct-lab"><h2>Security</h2><p>Password and sign-in protection.</p></div>
+      <div class="acct-fields">
+        <div class="acct-note">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>
+          <span>Sign-in is protected by a one-time code sent to <strong><%= user.email %></strong>.</span>
+        </div>
+        <details class="acct-pw">
+          <summary class="btn">Change password</summary>
+          <div class="acct-row">
+            <label>New password <input type="password" name="password" minlength="8" autocomplete="new-password"><small>At least 8 characters, with letters and a number.</small></label>
+            <label>Repeat new password <input type="password" name="password2" minlength="8" autocomplete="new-password"></label>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <div class="acct-foot">
+      <a href="/account" class="acct-cancel">Cancel</a>
+      <button class="btn primary" id="acctSave" disabled>Save</button>
     </div>
-    <div class="row">
-      <label>Phone <input type="text" name="phone" value="<%= user.phone || '' %>"></label>
-      <label>WeChat / WhatsApp <input type="text" name="wechat" value="<%= user.wechat || '' %>"></label>
-    </div>
-    <h3>Change password</h3>
-    <div class="row">
-      <label>New password <input type="password" name="password" minlength="8" placeholder="leave blank to keep" autocomplete="new-password"></label>
-      <label>Repeat new password <input type="password" name="password2" minlength="8" autocomplete="new-password"></label>
-    </div>
-    <button class="btn primary">Save</button>
   </form>
-  <p class="muted small">Sign-in is protected by a one-time code emailed to <%= user.email %>.</p>
 </div>
+<script>
+(() => {
+  const f = document.getElementById('acctForm'), b = document.getElementById('acctSave'), start = new URLSearchParams(new FormData(f)).toString();
+  const sync = () => { b.disabled = new URLSearchParams(new FormData(f)).toString() === start; };
+  f.addEventListener('input', sync); f.addEventListener('change', sync);
+  f.querySelectorAll('input[name=messenger]').forEach(r => r.addEventListener('change', () => f.querySelectorAll('.mh').forEach(h => { h.hidden = h.dataset.m !== r.value || !r.checked; })));
+})();
+</script>
 <%- include('../partials/foot') %>
