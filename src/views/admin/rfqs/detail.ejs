@@ -29,9 +29,9 @@
         <td class="right num"><%= row.item.quantity ? Number(row.item.quantity).toLocaleString('en-US') : '—' %></td>
         <% row.cells.forEach(c => { %><td class="right num <%= c.best ? 'cmp-best' : '' %>">
           <% if (c.price == null) { %><span class="muted">—</span><% } else { %>
-            <strong><%= money(c.converted, rfq.currency) %></strong>
+            <strong><%= money(c.converted, rfq.currency) %></strong><%= c.price_unit ? ' / ' + c.price_unit : '' %>
             <% if (c.currency !== rfq.currency) { %><div class="muted small">quoted <%= money(c.price, c.currency) %></div><% } %>
-            <div class="muted small"><%= [c.moq ? 'MOQ ' + Number(c.moq).toLocaleString('en-US') : '', c.lead_days ? c.lead_days + ' d' : ''].filter(Boolean).join(' · ') %></div>
+            <div class="muted small"><%= [c.moq ? 'MOQ ' + Number(c.moq).toLocaleString('en-US') : '', c.lead_days ? c.lead_days + ' d' : '', c.package_type ? c.package_type + (c.carton_qty ? ' of ' + c.carton_qty : '') : ''].filter(Boolean).join(' · ') %></div>
           <% } %></td><% }) %>
       </tr>
     <% }) %>

@@ -43,3 +43,12 @@ test('supplier email lists the products, the deadline and both ways to answer', 
   const m = rfqSupplierEmail({ rfq: { ref: 'RFQ-2610-0001', title: 'Lamp', deadline: '2026-10-30', items }, supplier: { name: 'Acme Fab' }, url: 'https://x.test/supplier/rfqs/1', message: 'Black', senderName: 'Marsel' });
   assert.match(m.subject, /RFQ-2610-0001/); assert.match(m.html, /Lamp/); assert.match(m.html, /2026-10-30/); assert.match(m.html, /reply to this email/); assert.match(m.text, /supplier\/rfqs\/1/);
 });
+
+test('cleanResponse keeps the price unit and package type the supplier chose', () => {
+  const items = [{ id: 'a', description: 'Steel rope', unit: 'm' }, { id: 'b', description: 'Bags', unit: 'pcs' }];
+  const r = cleanResponse({ line: { a: { unit_price: '3.2', price_unit: 'kg', package_type: 'drum / reel', carton_qty: '500' }, b: { unit_price: '1', price_unit: 'bogus', package_type: 'nonsense' } } }, items, 'USD');
+  assert.equal(r.lines[0].price_unit, 'kg');
+  assert.equal(r.lines[0].package_type, 'Drum / reel');
+  assert.equal(r.lines[1].price_unit, 'pcs');   // unknown unit falls back to the unit asked for in the RFQ
+  assert.equal(r.lines[1].package_type, '');
+});

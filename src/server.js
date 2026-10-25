@@ -4,6 +4,7 @@ import cookieParser from 'cookie-parser';
 import { toRussian, pickLang, LANG_COOKIE } from './lib/i18n.js';
 import { inviteLang } from './lib/lang.js';
 import { supplierRfqCount } from './lib/supplier-nav.js';
+import { RFQ_UNITS, PACKAGE_TYPES } from './lib/rfq.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadUser } from './middleware/auth.js';
@@ -57,7 +58,7 @@ async function navPending() {
 
 const ASSET_V = Date.now().toString(36);   // new on every start/deploy, so browsers never keep an old stylesheet or script
 app.use((req, res, next) => {
-  Object.assign(res.locals, { assetV: ASSET_V, fmt, icon, showValue, deliveryLabel, path: req.path, query: req.query, msg: req.query.msg, err: req.query.err });
+  Object.assign(res.locals, { assetV: ASSET_V, RFQ_UNITS, PACKAGE_TYPES, fmt, icon, showValue, deliveryLabel, path: req.path, query: req.query, msg: req.query.msg, err: req.query.err });
   next();
 });
 app.use(loadUser);

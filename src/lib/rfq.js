@@ -6,6 +6,8 @@ import { cleanSpec, specFacts } from './request-spec.js';
 export const RFQ_STATUS_LABEL = { draft: 'Draft', open: 'Open', closed: 'Closed' };
 export const RS_LABEL = { draft: 'Not sent', sent: 'Waiting', replied: 'Answered', declined: 'Declined' };
 export const RFQ_CURRENCIES = ['USD', 'CNY', 'EUR', 'GBP'];
+export const RFQ_UNITS = ['pcs', 'sets', 'pairs', 'm', 'm²', 'kg', 'tons', 'litres', 'rolls', 'boxes', 'cartons', 'bags', 'drums'];
+export const PACKAGE_TYPES = ['Carton', 'Pallet', 'Bag', 'Roll', 'Drum / reel', 'Wooden case', 'Box', 'Bundle', 'Bucket', 'Loose / bulk', 'Other'];
 const INCOTERMS = ['EXW', 'FCA', 'FOB', 'CIF', 'CFR', 'CPT', 'DAP', 'DDP'];
 
 const numOrNull = v => {
@@ -13,6 +15,7 @@ const numOrNull = v => {
   const n = Number(s);
   return s !== '' && Number.isFinite(n) && n >= 0 ? n : null;
 };
+const pick = (v, list, dflt) => { const t = txt(v, 30).toLowerCase(); return list.find(o => o.toLowerCase() === t) || dflt || ''; };
 const arr = v => (Array.isArray(v) ? v : Object.values(v || {}));
 const txt = (v, n = 300) => String(v ?? '').trim().slice(0, n);
 
@@ -41,7 +44,7 @@ export function cleanResponse(body = {}, items = [], defaultCurrency = 'USD') {
     if (!filled) continue;
     if (txt(x.unit_price) !== '' && price == null) problems.push(`"${it.description}": unit price is not a number`);
     const cur = RFQ_CURRENCIES.includes(String(x.currency || '').toUpperCase()) ? String(x.currency).toUpperCase() : defaultCurrency;
-    lines.push({ item_id: it.id, unit_price: price, currency: cur, moq: numOrNull(x.moq), lead_days: numOrNull(x.lead_days), carton_qty: numOrNull(x.carton_qty),
+    lines.push({ item_id: it.id, unit_price: price, currency: cur, moq: numOrNull(x.moq), lead_days: numOrNull(x.lead_days), carton_qty: numOrNull(x.carton_qty), price_unit: pick(x.price_unit, RFQ_UNITS, it.unit), package_type: pick(x.package_type, PACKAGE_TYPES, ''),
       carton_l: numOrNull(x.carton_l), carton_w: numOrNull(x.carton_w), carton_h: numOrNull(x.carton_h), gross_kg: numOrNull(x.gross_kg), note: txt(x.note, 600) });
   }
   const incoterm = String(body.incoterm || '').toUpperCase();
@@ -72,7 +75,7 @@ export function compare({ items = [], suppliers = [], responses = [], currency =
       const l = resp && resp.status === 'confirmed' ? (resp.lines || []).find(x => x.item_id === it.id) : null;
       if (!l || l.unit_price == null) return { rs: s.id, price: null };
       const conv = l.unit_price * fxRate(settings, l.currency || currency, currency);
-      return { rs: s.id, price: l.unit_price, currency: l.currency || currency, converted: Math.round(conv * 10000) / 10000, moq: l.moq, lead_days: l.lead_days, carton_qty: l.carton_qty, note: l.note || '' };
+      return { rs: s.id, price: l.unit_price, currency: l.currency || currency, converted: Math.round(conv * 10000) / 10000, moq: l.moq, lead_days: l.lead_days, carton_qty: l.carton_qty, price_unit: l.price_unit || '', package_type: l.package_type || '', note: l.note || '' };
     });
     const priced = cells.filter(c => c.converted != null);
     const min = priced.length ? Math.min(...priced.map(c => c.converted)) : null;
@@ -96,7 +99,7 @@ export function rfqSupplierEmail({ rfq, supplier, url, message, senderName, file
   const intro = `Dear ${esc(supplier?.contact_name || supplier?.name || 'partner')},<br>we would like your best price for the products below${rfq.deadline ? `. Please answer by <strong>${esc(rfq.deadline)}</strong>` : ''}.`
     + (message ? `<br><br>${esc(message).replace(/\n/g, '<br>')}` : '') + table
     + (files.length ? `<div style="margin:0 0 14px;font-size:13px;color:#16202e;"><strong>Files for this request (${files.length}):</strong> ${files.map(esc).join(', ')}<br><span style="color:#4a5566;">${attached ? 'They are attached to this email and' : 'You can download them'} in the supplier portal.</span></div>` : '')
-    + `<span style="font-size:13px;color:#4a5566;">Please include for each product: unit price and currency, MOQ, production lead time, carton size and weight, and your price validity, incoterm and payment terms.</span>`;
+    + `<span style="font-size:13px;color:#4a5566;">Please include for each product: unit price and currency, the unit the price is per, MOQ, production lead time, package type, size and weight, and your price validity, incoterm and payment terms.</span>`;
   return {
     subject: `Request for quotation ${rfq.ref} — ${rfq.title}`,
     html: layout({ preheader: `Please quote: ${rfq.title}`, eyebrow: `Request for quotation · ${rfq.ref}`, title: rfq.title, introHtml: intro, buttonText: 'Answer in the supplier portal', buttonUrl: url,

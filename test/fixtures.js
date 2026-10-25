@@ -1,5 +1,5 @@
 import { piDocument } from '../src/lib/purchase.js';
-import { compare as rfqCompare } from '../src/lib/rfq.js';
+import { compare as rfqCompare, RFQ_UNITS, PACKAGE_TYPES } from '../src/lib/rfq.js';
 import { clean as spClean, missing as spMissing, containerFit as spFit, catalogItems as spItems, STATUS_LABEL as SP_LABEL } from '../src/lib/supplier-product.js';
 import { cargoLine, cargoTotals } from '../src/lib/cargo.js';
 // Realistic sample data shaped like the Supabase query results each route passes to its view.
@@ -92,7 +92,7 @@ const INCOTERMS = ['EXW', 'FOB', 'FCA', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DDP'
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CNY'];
 const ORDER_STATUSES = ['confirmed', 'deposit_paid', 'in_production', 'qc', 'packed', 'shipped', 'in_transit', 'customs', 'delivered', 'closed', 'cancelled'];
 
-const base = (user, path, extra = {}) => ({ defCur: 'CNY', fmt, icon, aiLine: u => usageLine(u), showValue, deliveryLabel, lang: 'en', here: path, user, path, query: {}, msg: null, err: null, ...extra });
+const base = (user, path, extra = {}) => ({ RFQ_UNITS, PACKAGE_TYPES, defCur: 'CNY', fmt, icon, aiLine: u => usageLine(u), showValue, deliveryLabel, lang: 'en', here: path, user, path, query: {}, msg: null, err: null, ...extra });
 const months = ['May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'].map((label, i) => ({ key: label, label, revenue: [8200, 12100, 9400, 15800, 18300, 13300][i], profit: [1500, 2300, 1700, 3000, 3500, 2500][i] }));
 const ordersList = [overview, { ...overview, id: 'ord2', order_no: 'HB-2610-1190', client_name: 'Nordic Home AB', status: 'qc', subtotal: 9150, cost_total: 7810, margin_pct: 17.2, gross_profit: 980, freight_total: 360 }, { ...overview, id: 'ord3', order_no: 'HB-2609-1102', status: 'in_transit', subtotal: 22400, margin_pct: 28, gross_profit: 3900 }];
 

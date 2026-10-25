@@ -1,6 +1,6 @@
 <%- include('../partials/head') %>
 <div class="pagehead"><div><a class="back" href="/supplier/rfqs">← RFQs</a><p class="eyebrow"><%= rfq.ref %></p><h1><%= rfq.title %></h1>
-  <p class="muted"><%= rfq.deadline ? 'Please answer by ' + rfq.deadline + '. ' : '' %>Prices per piece. You can update your answer until Lumi Trade closes the request.</p></div>
+  <p class="muted"><%= rfq.deadline ? 'Please answer by ' + rfq.deadline + '. ' : '' %>Say what each price is per (piece, metre, kg…) and how it is packed. You can update your answer until Lumi Trade closes the request.</p></div>
   <span class="pill lg <%= rs.status === 'replied' ? 'accepted' : rs.status === 'declined' ? 'declined' : 'quoted' %>"><%= labels[rs.status] %></span></div>
 <% if (err) { %><div class="alert err"><%= err %></div><% } %>
 <% if (rfq.message) { %><div class="card"><strong>Message from Lumi Trade</strong><p style="white-space:pre-line"><%= rfq.message %></p></div><% } %>

@@ -15,11 +15,13 @@
     <div class="rfqgrid">
       <label>Unit price<input name="<%= n %>[unit_price]" value="<%= v(l.unit_price) %>" inputmode="decimal"></label>
       <label>Currency<select name="<%= n %>[currency]"><% ['USD', 'CNY', 'EUR', 'GBP'].forEach(c => { %><option <%= (l.currency || rfq.currency) === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+      <label>Price is per<select name="<%= n %>[price_unit]"><% const pu = l.price_unit || it.unit || 'pcs'; const pus = RFQ_UNITS.includes(pu) ? RFQ_UNITS : [pu].concat(RFQ_UNITS); pus.forEach(c => { %><option <%= pu === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
       <label>MOQ<input name="<%= n %>[moq]" value="<%= v(l.moq) %>" inputmode="numeric"></label>
       <label>Lead time (days)<input name="<%= n %>[lead_days]" value="<%= v(l.lead_days) %>" inputmode="numeric"></label>
-      <label>Pcs per carton<input name="<%= n %>[carton_qty]" value="<%= v(l.carton_qty) %>" inputmode="numeric"></label>
-      <label>Carton L × W × H (cm)<span class="trio"><input name="<%= n %>[carton_l]" value="<%= v(l.carton_l) %>" inputmode="decimal" aria-label="Length"><input name="<%= n %>[carton_w]" value="<%= v(l.carton_w) %>" inputmode="decimal" aria-label="Width"><input name="<%= n %>[carton_h]" value="<%= v(l.carton_h) %>" inputmode="decimal" aria-label="Height"></span></label>
-      <label>Carton gross (kg)<input name="<%= n %>[gross_kg]" value="<%= v(l.gross_kg) %>" inputmode="decimal"></label>
+      <label>Package type<select name="<%= n %>[package_type]"><option value="">—</option><% PACKAGE_TYPES.forEach(c => { %><option <%= l.package_type === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+      <label>Quantity per package<input name="<%= n %>[carton_qty]" value="<%= v(l.carton_qty) %>" inputmode="numeric" placeholder="in the unit above"></label>
+      <label>Package gross weight (kg)<input name="<%= n %>[gross_kg]" value="<%= v(l.gross_kg) %>" inputmode="decimal"></label>
+      <label class="rfq-span2">Package L × W × H (cm)<span class="trio"><input name="<%= n %>[carton_l]" value="<%= v(l.carton_l) %>" inputmode="decimal" aria-label="Length"><input name="<%= n %>[carton_w]" value="<%= v(l.carton_w) %>" inputmode="decimal" aria-label="Width"><input name="<%= n %>[carton_h]" value="<%= v(l.carton_h) %>" inputmode="decimal" aria-label="Height"></span></label>
       <label class="rfq-wide">Note<input name="<%= n %>[note]" value="<%= v(l.note) %>" placeholder="e.g. price for black colour, logo +0.10"></label>
     </div>
   </div>
@@ -32,7 +34,16 @@
       <label>Payment terms<input name="payment_terms" value="<%= v(t.payment_terms) %>" placeholder="30% deposit, 70% before shipment"></label>
       <label>Price valid until<input type="date" name="valid_until" value="<%= v(t.valid_until) %>"></label>
       <label class="rfq-wide">Message<input name="note" value="<%= v(prev && prev.note) %>"></label>
-      <label class="rfq-wide">Attach files <span class="muted small">— price list, photos, specs</span><input type="file" name="files" multiple></label>
+      <div class="rfq-wide dropwrap">
+        <div class="lbl">Attach files <span class="muted small">— price list, product photos, specs, certificates</span></div>
+        <div class="filedrop compact" data-dropzone data-max="8" data-max-mb="20" tabindex="0">
+          <input type="file" name="files" multiple aria-label="Attach files">
+          <span class="dicon"><%- icon('upload') %></span>
+          <strong data-drop-count>Drag files here or <span class="dlink">browse</span></strong>
+          <span class="muted small dsub">PDF, Excel, Word, photos · up to 8 files, 20 MB each</span>
+        </div>
+        <div class="fgrid" data-drop-list></div>
+      </div>
     </div>
   </div>
   <div class="actions">

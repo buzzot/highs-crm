@@ -1312,10 +1312,12 @@ label:has(> .picker-native) { position: relative; }
 .rfqgrid label { display: block; min-width: 0; }
 .rfqgrid input:not([type=file]), .rfqgrid select { width: 100%; box-sizing: border-box; }
 .rfqgrid .rfq-wide { grid-column: 1 / -1; }
+.rfqgrid .rfq-span2 { grid-column: span 2; }
+.rfqgrid .dropwrap .lbl { font-size: 13px; margin-bottom: 6px; }
 .rfqgrid .trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
 .rfqgrid .trio input { padding-left: 8px; padding-right: 8px; }
 .stack { display: grid; gap: 16px; }
-@media (max-width: 760px) { .rfqgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .rfqgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rfqgrid .rfq-span2 { grid-column: 1 / -1; } }
 .rqmore { margin: 6px 0 12px; }
 .rqmore > summary { cursor: pointer; font-size: 13px; font-weight: 500; color: var(--ink-2); padding: 4px 0 10px; }
 .aifill-row { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; }
