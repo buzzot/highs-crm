@@ -3,6 +3,7 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import { toRussian, pickLang, LANG_COOKIE } from './lib/i18n.js';
 import { inviteLang } from './lib/lang.js';
+import { supplierRfqCount } from './lib/supplier-nav.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadUser } from './middleware/auth.js';
@@ -84,7 +85,10 @@ app.use(async (req, res, next) => {
     const [prices, nav] = await Promise.all([getPrices(), navPending()]);
     res.locals.aiLine = u => usageLine(u, prices);
     res.locals.navPending = nav; // red balls on the menu
-  } else res.locals.aiLine = () => '';
+  } else {
+    res.locals.aiLine = () => '';
+    if (req.user?.role === 'supplier') res.locals.supNav = { rfqs: await supplierRfqCount(req.user.supplier_id) };   // red number on the RFQs menu
+  }
   aiContext.run({ userId: req.user?.id || null, orgId: req.user?.org_id || null, supplierId: req.user?.supplier_id || null }, next);
 });
 

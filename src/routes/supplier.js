@@ -9,6 +9,7 @@ import multer from '../lib/multer-utf8.js';
 import { catalogItems, STATUS_LABEL, EDITABLE, fromProduct } from '../lib/supplier-product.js';
 import { clean as cleanProduct, missing, containerFit, CURRENCIES, INCOTERMS, CATEGORIES } from '../lib/supplier-product.js';
 import { cleanResponse, RS_LABEL } from '../lib/rfq.js';
+import { forgetSupplierRfq } from '../lib/supplier-nav.js';
 import { parseQuotation, gaps, MAX_PRODUCTS } from '../lib/supplier-bulk.js';
 import { validateSupplierCompany, COMPANY_TYPES } from '../lib/supplier-company.js';
 
@@ -212,6 +213,7 @@ r.post('/rfqs/:id', (req, res, next) => rfqUpload(req, res, err => { req.uploadE
     lines: declined ? [] : parsed.lines, terms: declined ? {} : parsed.terms, note: String(req.body.note || '').trim().slice(0, 2000) || null, file_ids, created_by: req.user.id });
   if (error) return res.redirect(to + '?err=' + encodeURIComponent(error.message));
   await admin.from('rfq_suppliers').update({ status: declined ? 'declined' : 'replied', replied_at: new Date().toISOString() }).eq('id', x.rs.id);
+  forgetSupplierRfq(req.user.supplier_id);
   await log({ entityType: 'supplier', entityId: req.user.supplier_id, action: declined ? 'rfq_declined' : 'rfq_answered', actorId: req.user.id, detail: { note: x.rfq.ref } });
   res.redirect('/supplier/rfqs?msg=' + encodeURIComponent(declined ? 'Thank you — we noted that you can\'t quote this one.' : `Thank you — your prices for ${x.rfq.ref} were sent to Lumi Trade.`));
 });

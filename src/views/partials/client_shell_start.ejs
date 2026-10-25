@@ -34,7 +34,7 @@
     </a>
     <nav class="snav">
       <% nav.forEach(([href, label, ico, on]) => { %>
-        <a href="<%= href %>" class="<%= on(path) ? 'on' : '' %>"><%- icon(ico) %><span><%= label %></span></a>
+        <a href="<%= href %>" class="<%= on(path) ? 'on' : '' %>"><%- icon(ico) %><span><%= label %></span><% if (isSupplier && href === '/supplier/rfqs' && typeof supNav !== 'undefined' && supNav.rfqs > 0) { %><span class="navball" title="<%= supNav.rfqs %> RFQ<%= supNav.rfqs > 1 ? 's' : '' %> waiting for your answer"><%= supNav.rfqs > 99 ? '99+' : supNav.rfqs %></span><% } %></a>
       <% }) %>
     </nav>
     <div class="sfoot">

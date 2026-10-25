@@ -1448,3 +1448,4 @@ html[lang=ru] .pill::first-letter, html[lang=ru] .badge::first-letter { text-tra
 .filesadd .dropwrap { width: 100%; }
 .supfiles { padding-top: 10px; }
 .fitem.supfile { text-decoration: none; padding-right: 8px; }
+.side nav a .navball { margin-left: auto; }
