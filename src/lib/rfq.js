@@ -88,18 +88,19 @@ export function compare({ items = [], suppliers = [], responses = [], currency =
 }
 
 /** The email a supplier receives: items table, deadline, and two ways to answer (portal button, or reply to the email). */
-export function rfqSupplierEmail({ rfq, supplier, url, message, senderName }) {
+export function rfqSupplierEmail({ rfq, supplier, url, message, senderName, files = [], attached = false }) {
   const n = v => (v == null ? '' : Number(v).toLocaleString('en-US'));
   const td = (v, r) => `<td style="padding:7px 8px;border-bottom:1px solid #eef0f3;font-size:13px;color:#16202e;${r ? 'text-align:right;' : ''}">${esc(v ?? '')}</td>`;
   const th = (v, r) => `<th style="padding:7px 8px;border-bottom:2px solid #dfe3e8;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#7a8494;text-align:${r ? 'right' : 'left'};">${esc(v)}</th>`;
   const table = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:14px 0;"><tr>${th('Product')}${th('SKU')}${th('Qty', 1)}</tr>${rfq.items.map(i => `<tr>${td(i.description + (i.notes ? ' — ' + i.notes : '') + (specFacts(i.spec).length ? ' (' + specFacts(i.spec).map(([k, v]) => k + ': ' + v).join('; ') + ')' : ''))}${td(i.sku)}${td(i.quantity ? n(i.quantity) + ' ' + (i.unit || 'pcs') : '', 1)}</tr>`).join('')}</table>`;
   const intro = `Dear ${esc(supplier?.contact_name || supplier?.name || 'partner')},<br>we would like your best price for the products below${rfq.deadline ? `. Please answer by <strong>${esc(rfq.deadline)}</strong>` : ''}.`
     + (message ? `<br><br>${esc(message).replace(/\n/g, '<br>')}` : '') + table
+    + (files.length ? `<div style="margin:0 0 14px;font-size:13px;color:#16202e;"><strong>Files for this request (${files.length}):</strong> ${files.map(esc).join(', ')}<br><span style="color:#4a5566;">${attached ? 'They are attached to this email and' : 'You can download them'} in the supplier portal.</span></div>` : '')
     + `<span style="font-size:13px;color:#4a5566;">Please include for each product: unit price and currency, MOQ, production lead time, carton size and weight, and your price validity, incoterm and payment terms.</span>`;
   return {
     subject: `Request for quotation ${rfq.ref} — ${rfq.title}`,
     html: layout({ preheader: `Please quote: ${rfq.title}`, eyebrow: `Request for quotation · ${rfq.ref}`, title: rfq.title, introHtml: intro, buttonText: 'Answer in the supplier portal', buttonUrl: url,
       fineHtml: `You can also simply <strong>reply to this email</strong> with your prices (attachments are fine). ${senderName ? 'Sent by ' + esc(senderName) + '.' : ''}` }),
-    text: [`Request for quotation ${rfq.ref}: ${rfq.title}`, rfq.deadline ? `Please answer by ${rfq.deadline}.` : null, '', ...rfq.items.map(i => `- ${i.description}${i.sku ? ' (' + i.sku + ')' : ''}${i.quantity ? ' × ' + n(i.quantity) : ''}`), '', `Answer online: ${url}`, 'Or reply to this email with your prices.'].filter(x => x != null).join('\n'),
+    text: [`Request for quotation ${rfq.ref}: ${rfq.title}`, rfq.deadline ? `Please answer by ${rfq.deadline}.` : null, '', ...rfq.items.map(i => `- ${i.description}${i.sku ? ' (' + i.sku + ')' : ''}${i.quantity ? ' × ' + n(i.quantity) : ''}`), '', ...(files.length ? [`Files: ${files.join(', ')}${attached ? ' (attached)' : ' (download them in the portal)'}`, ''] : []), `Answer online: ${url}`, 'Or reply to this email with your prices.'].filter(x => x != null).join('\n'),
   };
 }

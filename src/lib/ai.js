@@ -580,3 +580,57 @@ Put certificates, materials, packaging and size into the spec object, not into d
   const s = v => (typeof v === 'string' && v.trim() ? v.trim() : null);
   return { name: s(input.name), sku: s(input.sku), description: s(input.description), spec: input.spec || {}, usage };
 }
+
+// ---------------------------------------------------------------------------------------------
+// RFQ files: before the client's original documents go to a supplier, look for the client's identity and for non-English text.
+// ---------------------------------------------------------------------------------------------
+const FILE_CHECK_TOOL = {
+  name: 'record_file_check',
+  description: 'Record, for every attached file, its main language and any information that identifies the end client.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      files: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            index: { type: 'integer', description: 'Number of the file as given in the message (1, 2, 3 …)' },
+            language: { type: 'string', description: 'Main language of the text in the file, in English (e.g. "English", "Russian", "Chinese"); "none" if there is no text' },
+            non_english: { type: 'boolean', description: 'true if any meaningful part of the text is not in English' },
+            client_info: {
+              type: 'array',
+              description: 'Anything that reveals who the end client is. Do not list Lumi Trade.',
+              items: { type: 'object', properties: { kind: { type: 'string', enum: ['company_name', 'person_name', 'email', 'phone', 'address', 'logo', 'website', 'bank_details', 'price', 'other'] }, text: { type: 'string', description: 'What it says, exactly as written (short)' } }, required: ['kind', 'text'] },
+            },
+            note: { type: 'string', description: 'One short sentence only if something else matters (unreadable page, watermark with a name…)' },
+          },
+          required: ['index', 'language', 'non_english', 'client_info'],
+        },
+      },
+    },
+    required: ['files'],
+  },
+};
+
+/**
+ * Check files that will be sent to a supplier (a factory that must not learn who our client is).
+ * @param {{ name: string, pdf?: Buffer, image?: { data: Buffer, mediaType: string } }[]} files  photos and PDFs only
+ * @returns {{ results: object[], usage: object }}  results[i] belongs to files[i]
+ */
+export async function reviewRfqFiles(files, entity = null) {
+  const system = `You prepare documents that a sourcing company will forward to a factory so it can quote a price. The factory must NOT learn who the end client is, and should get documents in English.
+For each file report: its main language, whether any meaningful text is not in English, and everything that identifies the end client — company name, person names, email, phone, postal address, logo, website, bank details, or the client's own prices/targets.
+Do not report Lumi Trade (the sourcing company) or the product's manufacturer/brand printed on the product itself. Quote text exactly as it appears, keep it short. Be factual; never guess.`;
+  const content = [];
+  files.slice(0, 12).forEach((f, i) => {
+    content.push({ type: 'text', text: `File ${i + 1}: ${f.name}` });
+    if (f.pdf) content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: f.pdf.toString('base64') } });
+    else content.push({ type: 'image', source: { type: 'base64', media_type: f.image.mediaType, data: f.image.data.toString('base64') } });
+  });
+  content.push({ type: 'text', text: 'Call record_file_check with one entry per file.' });
+  const { input, usage } = await forcedTool({ tool: FILE_CHECK_TOOL, content, system, maxTokens: 4000, feature: 'rfq_file_check', entity });
+  const byIndex = {};
+  for (const r of Array.isArray(input.files) ? input.files : []) byIndex[r.index] = r;
+  return { results: files.map((_, i) => byIndex[i + 1] || null), usage };
+}

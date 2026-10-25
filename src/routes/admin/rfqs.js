@@ -5,17 +5,46 @@ import { admin } from '../../lib/supabase.js';
 import { sendEmail } from '../../lib/mailer.js';
 import { log } from '../../lib/activity.js';
 import { replyAddress, subjectTag } from '../../lib/freight.js';
-import { uploadDocument } from '../../lib/storage.js';
+import { uploadDocument, downloadDocument, deleteDocument } from '../../lib/storage.js';
+import { aiEnabled, reviewRfqFiles } from '../../lib/ai.js';
+import { addUsage } from '../../lib/ai-usage.js';
+import { CHECKABLE, isImage, toReview, unchecked, cleanReview, MAX_FILES, reviewTotals, sendWarning } from '../../lib/rfq-files.js';
 import { back, notFound, getSettings, INCOTERMS } from '../../lib/util.js';
 import { cleanItems, cleanResponse, compare, currentResponses, rfqSupplierEmail, RFQ_STATUS_LABEL, RS_LABEL, RFQ_CURRENCIES } from '../../lib/rfq.js';
 
 const r = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 8 } });
+const filesUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: MAX_FILES } });
+const MIGRATION_FILES = 'Run supabase/migrations/0033_rfq_files.sql in Supabase first (it adds the file columns), then reload the schema cache.';
 const isId = v => /^[0-9a-f-]{36}$/i.test(v || '');
 const appUrl = () => (process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
 const MIGRATION = 'Run supabase/migrations/0029_rfqs.sql in Supabase first, then reload the schema cache.';
 const missingTable = e => /rfqs|rfq_suppliers|rfq_responses/.test(e?.message || '');
 const ids = v => [].concat(v || []).filter(isId);
+
+// AI check over a list of { key, name, mime, buffer } → { map: key → review, usage }. Never throws: a failure leaves the file "not checked".
+async function reviewMany(list, entity = null) {
+  const map = {}, ready = [];
+  for (const f of list) {
+    if (!CHECKABLE(f.mime, f.name)) map[f.key] = unchecked('Only photos and PDFs can be checked automatically — open the file and look yourself.');
+    else if (f.buffer.length > 20 * 1024 * 1024) map[f.key] = unchecked('Too large for the AI check.');
+    else ready.push(f);
+  }
+  let usage = null;
+  if (ready.length && !aiEnabled()) ready.forEach(f => { map[f.key] = unchecked('AI is not switched on — open the file and look yourself.'); });
+  else {
+    for (let i = 0; i < ready.length; i += 6) {
+      const part = ready.slice(i, i + 6);
+      try {
+        const out = await reviewRfqFiles(part.map(f => (isImage(f.mime) ? { name: f.name, image: { data: f.buffer, mediaType: f.mime.replace('image/jpg', 'image/jpeg') } } : { name: f.name, pdf: f.buffer })), entity);
+        usage = addUsage(usage, out.usage);
+        part.forEach((f, j) => { map[f.key] = out.results[j] ? toReview(out.results[j]) : unchecked('The AI gave no answer for this file.'); });
+      } catch (e) { part.forEach(f => { map[f.key] = unchecked('AI check failed: ' + e.message); }); }
+    }
+  }
+  return { map, usage };
+}
+const parseJson = v => { try { const x = JSON.parse(v || '{}'); return x && typeof x === 'object' ? x : {}; } catch { return {}; } };
 
 r.get('/', async (req, res) => {
   const status = ['draft', 'open', 'closed'].includes(req.query.status) ? req.query.status : '';
@@ -37,10 +66,27 @@ r.get('/new', async (req, res) => {
   let items = (reqRes[1]?.data || []).map(i => ({ id: '', description: i.name, sku: i.sku || '', quantity: i.quantity, unit: i.unit, notes: i.description || '', spec: i.spec || {}, request_item_id: i.id }));
   if (request && !items.length) items = [{ id: '', description: request.title, sku: '', quantity: request.quantity, unit: 'pcs', notes: request.description || '', request_item_id: null }];
   if (!items.length) items = [{ id: '', description: '', sku: '', quantity: null, unit: 'pcs', notes: '' }];
-  res.render('admin/rfqs/new', { title: 'New RFQ', suppliers: suppliers || [], request, items, currencies: RFQ_CURRENCIES, error: req.query.err || null });
+  const { data: clientDocs } = request ? await admin.from('documents').select('id, title, mime_type, size_bytes').eq('entity_type', 'request').eq('entity_id', request.id).is('revision_id', null).order('created_at') : { data: [] };
+  res.render('admin/rfqs/new', { title: 'New RFQ', suppliers: suppliers || [], request, items, currencies: RFQ_CURRENCIES, clientDocs: clientDocs || [], aiOn: aiEnabled(), error: req.query.err || null });
 });
 
-r.post('/new', async (req, res) => {
+// AI check of files before the RFQ exists: the chosen client documents + files dropped on the form. Nothing is saved here.
+r.post('/review', filesUpload.array('files', MAX_FILES), async (req, res) => {
+  try {
+    const list = [];
+    const picked = ids(req.body.doc_ids).slice(0, MAX_FILES);
+    if (picked.length) {
+      const { data: ds } = await admin.from('documents').select('id, title, mime_type, storage_path').in('id', picked);
+      for (const d of ds || []) list.push({ key: 'doc:' + d.id, name: d.title || 'file', mime: d.mime_type || '', buffer: await downloadDocument(d.storage_path) });
+    }
+    for (const f of req.files || []) list.push({ key: `new:${f.originalname}|${f.size}`, name: f.originalname, mime: f.mimetype, buffer: f.buffer });
+    if (!list.length) return res.json({ results: {}, names: {} });
+    const { map, usage } = await reviewMany(list);
+    res.json({ results: map, names: Object.fromEntries(list.map(f => [f.key, f.name])), usage: usage ? res.locals.aiLine(usage) : '' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+r.post('/new', filesUpload.array('files', MAX_FILES), async (req, res) => {
   const b = req.body, to = '/admin/rfqs/new' + (isId(b.request_id) ? '?request=' + b.request_id + '&' : '?');
   const items = cleanItems(b), sup = ids(b.supplier_ids);
   const title = String(b.title || '').trim().slice(0, 200);
@@ -50,9 +96,25 @@ r.post('/new', async (req, res) => {
   const { data: rfq, error } = await admin.from('rfqs').insert({ title, request_id: isId(b.request_id) ? b.request_id : null, currency: RFQ_CURRENCIES.includes(b.currency) ? b.currency : 'USD',
     deadline: /^\d{4}-\d{2}-\d{2}$/.test(b.deadline || '') ? b.deadline : null, message: String(b.message || '').trim().slice(0, 3000) || null, items, created_by: req.user.id }).select('id, ref').single();
   if (error) return back(res, to.slice(0, -1), { err: missingTable(error) ? MIGRATION : error.message });
+  // files: the client documents ticked on the form + anything dropped there
+  const fileIds = [], fileReview = {}, review = parseJson(b.review_json);
+  let fileErr = null;
+  const picked = ids(b.doc_ids);
+  if (picked.length && isId(b.request_id)) {
+    const { data: ds } = await admin.from('documents').select('id, entity_type, entity_id').in('id', picked);
+    for (const d of ds || []) if (d.entity_type === 'request' && d.entity_id === b.request_id) { fileIds.push(d.id); fileReview[d.id] = review['doc:' + d.id] ? cleanReview(review['doc:' + d.id]) : unchecked('Not checked yet.'); }
+  }
+  for (const file of req.files || []) {
+    try {
+      const doc = await uploadDocument({ file, entityType: 'rfq', entityId: rfq.id, kind: 'other', title: file.originalname, clientVisible: false, uploadedBy: req.user.id });
+      fileIds.push(doc.id); const k = `new:${file.originalname}|${file.size}`;
+      fileReview[doc.id] = review[k] ? cleanReview(review[k]) : unchecked('Not checked yet.');
+    } catch (e) { fileErr = /entity_type/.test(e.message) ? MIGRATION_FILES : `${file.originalname}: ${e.message}`; }
+  }
+  if (fileIds.length) { const { error: fe } = await admin.from('rfqs').update({ file_ids: fileIds, file_review: fileReview }).eq('id', rfq.id); if (fe) fileErr = /file_ids|file_review/.test(fe.message) ? MIGRATION_FILES : fe.message; }
   await admin.from('rfq_suppliers').insert(sup.map(supplier_id => ({ rfq_id: rfq.id, supplier_id, sent_to: String(b['email_' + supplier_id] || '').trim().slice(0, 300) || null })));
   await log({ entityType: isId(b.request_id) ? 'request' : 'supplier', entityId: isId(b.request_id) ? b.request_id : sup[0], action: 'rfq_created', actorId: req.user.id, detail: { note: `${rfq.ref} → ${sup.length} supplier(s)` } });
-  res.redirect(`/admin/rfqs/${rfq.id}?msg=${encodeURIComponent('RFQ created. Check it, then send it to the suppliers.')}`);
+  res.redirect(`/admin/rfqs/${rfq.id}?msg=${encodeURIComponent('RFQ created. Check it, then send it to the suppliers.')}${fileErr ? '&err=' + encodeURIComponent('Files not attached: ' + fileErr) : ''}`);
 });
 
 async function load(id) {
@@ -73,7 +135,10 @@ r.get('/:id', async (req, res) => {
   const fileIds = [...new Set(x.responses.flatMap(p => p.file_ids || []))];
   const { data: docs } = fileIds.length ? await admin.from('documents').select('id, title, mime_type').in('id', fileIds) : { data: [] };
   const invited = new Set(x.rs.map(s => s.supplier_id));
-  res.render('admin/rfqs/detail', { title: x.rfq.ref, ...x, current: currentResponses(x.responses), cmp: compare({ items: x.rfq.items, suppliers: x.rs, responses: x.responses, currency: x.rfq.currency, settings }),
+  const fids = x.rfq.file_ids || [];
+  const { data: fdocs } = fids.length ? await admin.from('documents').select('id, title, mime_type, size_bytes, entity_type').in('id', fids) : { data: [] };
+  const fileDocs = fids.map(id => (fdocs || []).find(d => d.id === id)).filter(Boolean);
+  res.render('admin/rfqs/detail', { fileDocs, fileReview: x.rfq.file_review || {}, sendWarn: sendWarning(reviewTotals(fids, x.rfq.file_review || {})), aiOn: aiEnabled(), maxFiles: MAX_FILES, title: x.rfq.ref, ...x, current: currentResponses(x.responses), cmp: compare({ items: x.rfq.items, suppliers: x.rs, responses: x.responses, currency: x.rfq.currency, settings }),
     docs: docs || [], addable: (all || []).filter(s => !invited.has(s.id)), labels: RFQ_STATUS_LABEL, rsLabels: RS_LABEL, currencies: RFQ_CURRENCIES, incoterms: INCOTERMS, msg: req.query.msg, err: req.query.err });
 });
 
@@ -117,12 +182,19 @@ r.post('/:id/send', async (req, res) => {
   const targets = x.rs.filter(s => (only ? s.id === only : s.status === 'draft'));
   if (!targets.length) return back(res, to, { err: 'Everyone has already been sent this RFQ.' });
   const sent = [], failed = [];
+  // attached files: named in the email, and attached to it when they are small enough (everything is also in the supplier portal)
+  const fids = x.rfq.file_ids || [];
+  const { data: fdocs } = fids.length ? await admin.from('documents').select('id, title, storage_path, size_bytes').in('id', fids) : { data: [] };
+  const fileList = fids.map(id => (fdocs || []).find(d => d.id === id)).filter(Boolean);
+  const attachable = fileList.reduce((n, d) => n + (d.size_bytes || 0), 0) <= 10 * 1024 * 1024;
+  let attachments = [];
+  if (attachable) { try { attachments = await Promise.all(fileList.map(async d => ({ filename: d.title || 'file', content: await downloadDocument(d.storage_path) }))); } catch (e) { console.error(`[rfq] attachments: ${e.message}`); attachments = []; } }
   for (const s of targets) {
     const emails = String(req.body['to_' + s.id] || s.sent_to || s.suppliers?.email || '').split(/[,;\s]+/).filter(v => /@/.test(v));
     if (!emails.length) { failed.push(`${s.suppliers?.name}: no email address`); continue; }
     try {
-      const m = rfqSupplierEmail({ rfq: x.rfq, supplier: s.suppliers, url: `${appUrl()}/supplier/rfqs/${s.id}`, message: x.rfq.message, senderName: req.user.full_name });
-      await sendEmail({ to: emails, ...m, subject: `${m.subject} ${subjectTag(x.rfq.ref, s.token)}`, replyTo: replyAddress(s.token, req.user.email) });
+      const m = rfqSupplierEmail({ rfq: x.rfq, supplier: s.suppliers, url: `${appUrl()}/supplier/rfqs/${s.id}`, message: x.rfq.message, senderName: req.user.full_name, files: fileList.map(d => d.title), attached: attachments.length > 0 });
+      await sendEmail({ to: emails, ...m, subject: `${m.subject} ${subjectTag(x.rfq.ref, s.token)}`, replyTo: replyAddress(s.token, req.user.email), attachments });
       await admin.from('rfq_suppliers').update({ status: s.status === 'draft' ? 'sent' : s.status, sent_to: emails.join(', '), sent_at: new Date().toISOString() }).eq('id', s.id);
       sent.push(s.suppliers?.name);
     } catch (e) { failed.push(`${s.suppliers?.name}: ${e.message}`); }
@@ -150,6 +222,53 @@ r.post('/:id/answer/:rs', upload.array('files', 8), async (req, res) => {
     lines: declined ? [] : parsed.lines, terms: declined ? {} : parsed.terms, note: String(req.body.note || '').trim().slice(0, 2000) || null, file_ids, created_by: req.user.id });
   await admin.from('rfq_suppliers').update({ status: declined ? 'declined' : 'replied', replied_at: new Date().toISOString() }).eq('id', s.id);
   back(res, to, { msg: `Answer from ${s.suppliers?.name} saved.` });
+});
+
+// files for the suppliers of an existing RFQ: add more, remove, run the AI check
+r.post('/:id/files', filesUpload.array('files', MAX_FILES), async (req, res) => {
+  const x = await load(req.params.id);
+  if (!x) return notFound(res, 'RFQ');
+  const to = `/admin/rfqs/${x.rfq.id}`;
+  if (x.rfq.status === 'closed') return back(res, to, { err: 'This RFQ is closed.' });
+  const have = x.rfq.file_ids || [], rev = { ...(x.rfq.file_review || {}) }, next = [...have];
+  const room = Math.max(0, MAX_FILES - have.length);
+  if (!(req.files || []).length) return back(res, to, { err: 'Choose a file first.' });
+  let err = (req.files || []).length > room ? `Only ${MAX_FILES} files fit on one RFQ.` : null;
+  for (const file of (req.files || []).slice(0, room)) {
+    try {
+      const doc = await uploadDocument({ file, entityType: 'rfq', entityId: x.rfq.id, kind: 'other', title: file.originalname, clientVisible: false, uploadedBy: req.user.id });
+      next.push(doc.id); rev[doc.id] = unchecked('Not checked yet.');
+    } catch (e) { err = /entity_type/.test(e.message) ? MIGRATION_FILES : `${file.originalname}: ${e.message}`; }
+  }
+  const { error } = await admin.from('rfqs').update({ file_ids: next, file_review: rev, updated_at: new Date().toISOString() }).eq('id', x.rfq.id);
+  if (error) return back(res, to, { err: /file_ids|file_review/.test(error.message) ? MIGRATION_FILES : error.message });
+  back(res, to, { msg: next.length > have.length ? `${next.length - have.length} file(s) added. Run the AI check before you send.` : undefined, err });
+});
+
+r.post('/:id/files/remove', async (req, res) => {
+  const x = await load(req.params.id);
+  if (!x) return notFound(res, 'RFQ');
+  const id = req.body.doc, have = x.rfq.file_ids || [];
+  if (!have.includes(id)) return back(res, `/admin/rfqs/${x.rfq.id}`, { err: 'File not found on this RFQ.' });
+  const rev = { ...(x.rfq.file_review || {}) }; delete rev[id];
+  await admin.from('rfqs').update({ file_ids: have.filter(v => v !== id), file_review: rev, updated_at: new Date().toISOString() }).eq('id', x.rfq.id);
+  const { data: d } = await admin.from('documents').select('entity_type').eq('id', id).maybeSingle();
+  if (d?.entity_type === 'rfq') await deleteDocument(id);          // files uploaded here are deleted; the client's own documents are only detached
+  back(res, `/admin/rfqs/${x.rfq.id}`, { msg: 'File removed from this RFQ.' });
+});
+
+r.post('/:id/review', async (req, res) => {
+  const x = await load(req.params.id);
+  if (!x) return notFound(res, 'RFQ');
+  const to = `/admin/rfqs/${x.rfq.id}`, have = x.rfq.file_ids || [];
+  if (!have.length) return back(res, to, { err: 'No files attached.' });
+  const { data: ds } = await admin.from('documents').select('id, title, mime_type, storage_path').in('id', have);
+  const list = [];
+  for (const d of ds || []) { try { list.push({ key: d.id, name: d.title || 'file', mime: d.mime_type || '', buffer: await downloadDocument(d.storage_path) }); } catch (e) { console.error(`[rfq] review download: ${e.message}`); } }
+  const { map } = await reviewMany(list, { type: 'rfq', id: x.rfq.id });
+  await admin.from('rfqs').update({ file_review: { ...(x.rfq.file_review || {}), ...map }, updated_at: new Date().toISOString() }).eq('id', x.rfq.id);
+  const warn = Object.values(map).filter(v => v.status === 'warn').length;
+  back(res, to, { msg: warn ? `AI check done — ${warn} file${warn > 1 ? 's need' : ' needs'} your attention.` : 'AI check done — nothing to flag in the files it could read.' });
 });
 
 r.post('/:id/status', async (req, res) => {

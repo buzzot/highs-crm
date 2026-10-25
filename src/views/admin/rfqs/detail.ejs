@@ -11,7 +11,7 @@
     <h1><%= rfq.ref %> <span class="muted">· <%= rfq.title %></span></h1>
     <p class="muted"><%= rs.length %> supplier<%= rs.length === 1 ? '' : 's' %> · <%= answered %> answered · <%= rfq.items.length %> product<%= rfq.items.length === 1 ? '' : 's' %><%= rfq.deadline ? ' · answer by ' + rfq.deadline : '' %></p></div>
   <div class="headactions">
-    <% if (rfq.status !== 'closed' && unsent) { %><form method="post" action="/admin/rfqs/<%= rfq.id %>/send" class="inline"><button class="btn primary"><%- icon('mail') %> Send to <%= unsent %> supplier<%= unsent === 1 ? '' : 's' %></button></form><% } %>
+    <% if (rfq.status !== 'closed' && unsent) { %><form method="post" action="/admin/rfqs/<%= rfq.id %>/send" class="inline"><button class="btn primary"<% if (sendWarn) { %> onclick="return confirm(<%= JSON.stringify(sendWarn) %>)"<% } %>><%- icon('mail') %> Send to <%= unsent %> supplier<%= unsent === 1 ? '' : 's' %></button></form><% } %>
     <span class="pill lg <%= rfq.status === 'open' ? 'quoted' : rfq.status === 'closed' ? 'closed' : 'new' %>"><%= labels[rfq.status] %></span>
   </div>
 </div>
@@ -43,6 +43,43 @@
 </div>
 <% } %>
 
+<div class="card" id="files">
+  <h2>Files for suppliers <span class="count"><%= fileDocs.length %></span>
+    <% if (aiOn && fileDocs.length) { %><span class="hactions"><form method="post" action="/admin/rfqs/<%= rfq.id %>/review" class="inline"><button class="btn small"><%- icon('sparkles') %> Check files with AI</button></form></span><% } %></h2>
+  <% if (!fileDocs.length) { %><p class="muted small">No files attached. Suppliers only see the product list and your message.</p><% } else { %>
+  <p class="muted small">Every supplier of this RFQ can open these files in the portal<%= rs.length ? '; they are also attached to the email when small enough' : '' %>.</p>
+  <div class="chk-list">
+  <% fileDocs.forEach(d => { const rv = fileReview[d.id] || { status: 'unchecked', issues: [], note: 'Not checked yet.' }; %>
+    <div class="chk-row <%= rv.status %>">
+      <% if ((d.mime_type || '').startsWith('image/')) { %><img class="chk-thumb" src="/admin/documents/<%= d.id %>/download" alt="" loading="lazy"><% } else { %><span class="fext chk-thumb"><%= ((d.title || '').split('.').pop() || 'file').slice(0, 4).toUpperCase() %></span><% } %>
+      <div class="chk-body">
+        <a href="/admin/documents/<%= d.id %>/download" target="_blank" rel="noopener"><strong><%= d.title %></strong></a>
+        <span class="muted small"> · <%= d.entity_type === 'rfq' ? 'added by us' : "client's file" %><%= d.size_bytes ? ' · ' + (d.size_bytes > 1048576 ? (d.size_bytes / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(d.size_bytes / 1024)) + ' KB') : '' %><%= rv.language && rv.status !== 'unchecked' ? ' · ' + rv.language : '' %></span>
+        <% if (rv.issues && rv.issues.length) { %><ul><% rv.issues.forEach(t => { %><li><%= t %></li><% }) %></ul><% } %>
+        <% if (rv.note) { %><div class="muted small"><%= rv.note %></div><% } %>
+      </div>
+      <span class="chk-badge <%= rv.status %>"><%= rv.status === 'ok' ? 'No issues' : rv.status === 'warn' ? 'Check this' : 'Not checked' %></span>
+      <% if (rfq.status !== 'closed') { %><form method="post" action="/admin/rfqs/<%= rfq.id %>/files/remove" class="inline"><input type="hidden" name="doc" value="<%= d.id %>"><button class="link small danger" onclick="return confirm('Remove this file from the RFQ?')">Remove</button></form><% } %>
+    </div>
+  <% }) %>
+  </div>
+  <% } %>
+  <% if (rfq.status !== 'closed' && fileDocs.length < maxFiles) { %>
+  <form method="post" action="/admin/rfqs/<%= rfq.id %>/files" enctype="multipart/form-data" class="filesadd">
+    <div class="dropwrap">
+      <div class="filedrop" data-dropzone data-max="<%= maxFiles - fileDocs.length %>" data-max-mb="20" tabindex="0">
+        <input type="file" name="files" multiple accept="image/*,.pdf,.xlsx,.xls,.docx,.doc,.csv" aria-label="Add files for the suppliers">
+        <span class="dicon"><%- icon('upload') %></span>
+        <strong data-drop-count>Drag files here or <span class="dlink">browse</span></strong>
+        <span class="muted small dsub">photos, PDF, Excel, Word · 20 MB each</span>
+      </div>
+      <div class="fgrid" data-drop-list></div>
+    </div>
+    <button class="btn">Add files</button>
+  </form>
+  <% } %>
+</div>
+
 <div class="card">
   <h2>Suppliers <span class="count"><%= rs.length %></span></h2>
   <table class="tbl">
@@ -55,7 +92,7 @@
         <td><span class="pill <%= s.status === 'replied' ? 'accepted' : s.status === 'declined' ? 'declined' : s.status === 'sent' ? 'quoted' : 'new' %>"><%= rsLabels[s.status] %></span></td>
         <td class="small muted"><%= s.sent_at ? fmt.datetime(s.sent_at) : '—' %></td>
         <td class="right nowrap">
-          <% if (s.status === 'draft' && rfq.status !== 'closed') { %><button class="btn small" form="f<%= s.id %>">Send</button><% } %>
+          <% if (s.status === 'draft' && rfq.status !== 'closed') { %><button class="btn small" form="f<%= s.id %>"<% if (sendWarn) { %> onclick="return confirm(<%= JSON.stringify(sendWarn) %>)"<% } %>>Send</button><% } %>
           <% if (s.status === 'sent' && rfq.status !== 'closed') { %><form method="post" action="/admin/rfqs/<%= rfq.id %>/send" class="inline"><input type="hidden" name="rs" value="<%= s.id %>"><button class="btn small">Resend</button></form><% } %>
           <% if (s.status === 'draft') { %><form method="post" action="/admin/rfqs/<%= rfq.id %>/suppliers" class="inline"><input type="hidden" name="remove" value="<%= s.id %>"><button class="link small danger">Remove</button></form><% } %>
         </td>

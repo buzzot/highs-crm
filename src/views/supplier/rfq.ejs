@@ -4,6 +4,13 @@
   <span class="pill lg <%= rs.status === 'replied' ? 'accepted' : rs.status === 'declined' ? 'declined' : 'quoted' %>"><%= labels[rs.status] %></span></div>
 <% if (err) { %><div class="alert err"><%= err %></div><% } %>
 <% if (rfq.message) { %><div class="card"><strong>Message from Lumi Trade</strong><p style="white-space:pre-line"><%= rfq.message %></p></div><% } %>
+<% if (typeof files !== 'undefined' && files.length) { %><div class="card"><strong>Files from Lumi Trade</strong>
+  <div class="fgrid supfiles">
+  <% files.forEach(d => { const u = '/supplier/rfqs/' + rs.id + '/files/' + d.id; %>
+    <a href="<%= u %>" target="_blank" rel="noopener" class="fitem supfile">
+      <% if ((d.mime_type || '').startsWith('image/')) { %><img src="<%= u %>" alt="" loading="lazy"><% } else { %><span class="fext"><%= ((d.title || '').split('.').pop() || 'file').slice(0, 4).toUpperCase() %></span><% } %>
+      <span class="fmeta"><span class="fname" title="<%= d.title %>"><%= d.title %></span><span class="fsize">Open / download</span></span></a>
+  <% }) %></div></div><% } %>
 <% if (rs.status === 'replied') { %><div class="alert ok">Your answer was sent<%= rs.replied_at ? ' on ' + fmt.datetime(rs.replied_at) : '' %>. You can change it below.</div><% } %>
 <% if (rs.status === 'declined') { %><div class="alert warn">You told us you can't quote this one. You can still send prices below.</div><% } %>
 <% if (rfq.status === 'closed') { %><div class="alert warn">This request is closed.</div><% } else { %>

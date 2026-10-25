@@ -2,7 +2,7 @@
 <div class="pagehead"><div><a class="back" href="<%= request ? '/admin/sourcing/' + request.id : '/admin/rfqs' %>">← <%= request ? request.ref : 'RFQs' %></a><h1>New RFQ</h1>
   <p class="muted">Ask several suppliers for a price on the same products. Their answers come back into one RFQ, side by side.</p></div></div>
 <% if (error) { %><div class="alert err"><%= error %></div><% } %>
-<form method="post" action="/admin/rfqs/new" class="stack">
+<form method="post" action="/admin/rfqs/new" class="stack" enctype="multipart/form-data">
   <% if (request) { %><input type="hidden" name="request_id" value="<%= request.id %>"><% } %>
   <div class="card">
     <h2>RFQ</h2>
@@ -34,6 +34,37 @@
     </table>
     <p><button type="button" class="btn small" id="addItem">+ Add product</button></p>
   </div>
+  <div class="card" id="rfqFiles" data-ai="<%= aiOn ? '1' : '' %>">
+    <h2>Files for the suppliers <span class="count" id="fileCount">0</span></h2>
+    <p class="muted small">Send the client's original photos and documents so every supplier quotes the right thing. Suppliers must not learn who the client is, so check the files before you send.</p>
+    <% if (clientDocs.length) { %>
+    <div class="subhead"><strong>From the client's request</strong><button type="button" class="link small" id="selAll">Select all</button></div>
+    <div class="fgrid pickgrid">
+      <% clientDocs.forEach(d => { %>
+      <label class="fitem pick"><input type="checkbox" name="doc_ids" value="<%= d.id %>">
+        <% if ((d.mime_type || '').startsWith('image/')) { %><img src="/admin/documents/<%= d.id %>/download" alt="" loading="lazy"><% } else { %><span class="fext"><%= ((d.title || '').split('.').pop() || 'file').slice(0, 4).toUpperCase() %></span><% } %>
+        <span class="fmeta"><span class="fname" title="<%= d.title %>"><%= d.title %></span><span class="fsize"><%= d.size_bytes ? (d.size_bytes > 1048576 ? (d.size_bytes / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(d.size_bytes / 1024)) + ' KB') : '' %></span></span></label>
+      <% }) %>
+    </div>
+    <% } else if (request) { %><p class="muted small">This request has no files from the client. You can add your own below.</p><% } %>
+    <div class="subhead"><strong><%= clientDocs.length ? 'Add other files' : 'Add files' %></strong><span class="muted small">photos, PDF, Excel, Word — up to 12 files, 20 MB each</span></div>
+    <div class="dropwrap">
+      <div class="filedrop" data-dropzone data-max="12" data-max-mb="20" tabindex="0">
+        <input type="file" name="files" multiple accept="image/*,.pdf,.xlsx,.xls,.docx,.doc,.csv" aria-label="Files for the suppliers">
+        <span class="dicon"><%- icon('upload') %></span>
+        <strong data-drop-count>Drag files here or <span class="dlink">browse</span></strong>
+        <span class="muted small dsub">for example a drawing, a sample photo or a spec sheet</span>
+      </div>
+      <div class="fgrid" data-drop-list></div>
+    </div>
+    <div class="filecheck">
+      <% if (aiOn) { %><button type="button" class="btn" id="fileCheck"><%- icon('sparkles') %> Check files with AI</button>
+      <span class="muted small" id="fileCheckNote">Looks for the client's name, logo, contacts and prices, and for text that is not English. Photos and PDFs only.</span>
+      <% } else { %><span class="muted small">AI check is not switched on (no API key) — open the files and look yourself.</span><% } %>
+    </div>
+    <div id="checkRes" class="checkres" aria-live="polite"></div>
+    <input type="hidden" name="review_json" id="reviewJson">
+  </div>
   <div class="card">
     <h2>Send to <span class="count" id="supCount">0</span></h2>
     <p><button type="button" class="btn" id="supAdd">+ Add suppliers</button> <span class="muted small">Pick one or several — they appear below with the email the RFQ will go to.</span></p>
@@ -43,5 +74,6 @@
   </div>
   <div class="actions"><button class="btn primary">Create RFQ</button><span class="muted small">Nothing is sent yet — you check it on the next page.</span></div>
 </form>
+<script src="/js/rfq-files.js?v=<%= typeof assetV === 'undefined' ? '' : assetV %>"></script>
 <script src="/js/rfq-new.js?v=<%= typeof assetV === 'undefined' ? '' : assetV %>"></script>
 <%- include('../../partials/foot') %>

@@ -166,7 +166,8 @@ async function ownRfq(req, id) {
   if (!/^[0-9a-f-]{36}$/i.test(id || '')) return null;
   const { data: rs } = await admin.from('rfq_suppliers').select('*').eq('id', id).eq('supplier_id', req.user.supplier_id).neq('status', 'draft').maybeSingle();
   if (!rs) return null;
-  const { data: rfq } = await admin.from('rfqs').select('id, ref, title, currency, deadline, message, items, status').eq('id', rs.rfq_id).single();
+  const { data: rfq } = await admin.from('rfqs').select('*').eq('id', rs.rfq_id).single();
+  if (rfq) { delete rfq.file_review; delete rfq.awarded; }   // staff notes about the files never reach the supplier
   const { data: resp } = await admin.from('rfq_responses').select('*').eq('rfq_supplier_id', rs.id).neq('status', 'parsed').order('created_at', { ascending: false }).limit(1);
   return { rs, rfq, resp: (resp || [])[0] || null };
 }
@@ -179,7 +180,18 @@ r.get('/rfqs', async (req, res) => {
 r.get('/rfqs/:id', async (req, res) => {
   const x = await ownRfq(req, req.params.id);
   if (!x) return res.status(404).send('Not found');
-  res.render('supplier/rfq', { title: x.rfq.ref, ...x, labels: RS_LABEL, err: req.query.err, msg: req.query.msg });
+  const fids = x.rfq.file_ids || [];
+  const { data: fdocs } = fids.length ? await admin.from('documents').select('id, title, mime_type').in('id', fids) : { data: [] };
+  res.render('supplier/rfq', { title: x.rfq.ref, ...x, files: fids.map(id => (fdocs || []).find(d => d.id === id)).filter(Boolean), labels: RS_LABEL, err: req.query.err, msg: req.query.msg });
+});
+
+// a file Lumi Trade attached to this RFQ — only for suppliers that were sent the RFQ, and only files listed on it
+r.get('/rfqs/:id/files/:doc', async (req, res) => {
+  const x = await ownRfq(req, req.params.id);
+  if (!x || !(x.rfq.file_ids || []).includes(req.params.doc)) return res.status(404).send('Not found');
+  const { data: doc } = await admin.from('documents').select('storage_path').eq('id', req.params.doc).maybeSingle();
+  if (!doc) return res.status(404).send('Not found');
+  res.redirect(await signedUrl(doc.storage_path));
 });
 
 r.post('/rfqs/:id', (req, res, next) => rfqUpload(req, res, err => { req.uploadError = err ? err.message : null; next(); }), async (req, res) => {

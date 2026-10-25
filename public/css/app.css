@@ -1422,3 +1422,29 @@ html[lang=ru] .pill::first-letter, html[lang=ru] .badge::first-letter { text-tra
   .acct-row { grid-template-columns: 1fr; }
   .acct-head h1 { font-size: 24px; }
 }
+
+/* RFQ files */
+.subhead { display: flex; align-items: baseline; gap: 12px; margin: 16px 0 8px; }
+.subhead strong { font-size: 13px; }
+.fitem.pick { padding: 8px 10px 8px 34px; cursor: pointer; }
+.fitem.pick input { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; margin: 0; }
+.fitem.pick:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.checkres { margin-top: 12px; display: grid; gap: 8px; }
+.filecheck { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+.chk-list { display: grid; gap: 8px; margin: 10px 0 14px; }
+.chk-row { display: flex; align-items: flex-start; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.chk-row.warn { border-color: #e8a33d; background: #fffaf0; }
+.chk-row.ok { border-color: #bfe3d3; }
+.chk-thumb { flex: none; width: 44px; height: 44px; border-radius: 8px; object-fit: cover; }
+.chk-thumb.fext { display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 700; }
+.chk-body { flex: 1; min-width: 0; font-size: 13.5px; }
+.chk-body ul { margin: 6px 0 0; padding-left: 18px; color: #8a5a00; }
+.chk-badge { flex: none; font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: 99px; white-space: nowrap; }
+.chk-badge.ok { background: #e1f4ec; color: #17794f; } .chk-badge.warn { background: #fdebc8; color: #8a5a00; } .chk-badge.unchecked { background: #eceff3; color: #5d6978; }
+.chk-head { padding: 10px 14px; border-radius: 10px; font-size: 13.5px; font-weight: 600; }
+.chk-head.warn { background: #fdebc8; color: #7a4e00; } .chk-head.ok { background: #e1f4ec; color: #17794f; }
+.checkres .stale { margin: 0; color: #8a5a00; font-weight: 600; }
+.filesadd { margin-top: 14px; display: grid; gap: 10px; justify-items: start; }
+.filesadd .dropwrap { width: 100%; }
+.supfiles { padding-top: 10px; }
+.fitem.supfile { text-decoration: none; padding-right: 8px; }
