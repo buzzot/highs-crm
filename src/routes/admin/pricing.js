@@ -237,6 +237,44 @@ r.get('/requests/:rid/quote-lines', async (req, res) => {
     rates: Object.fromEntries(CURRENCIES.map(a => [a, Object.fromEntries(CURRENCIES.map(c => [c, fxRate(settings, a, c)]))])) });
 });
 
+// form values → quote rows (shared by "save" and "preview PDF" so both always agree)
+function buildLines(rows, prods, shared, settings, rid) {
+  return rows.map(l => {
+    const cur = CURRENCIES.includes(l.cost_currency) ? l.cost_currency : 'CNY';
+    const pr = (prods || []).find(p => p.id === l.product_id);
+    const row = { request_id: rid, request_item_id: l.item_id, product_id: pr?.id || null, supplier_id: pr?.supplier_id || (isUuid(l.supplier_id) ? l.supplier_id : null),
+      quantity: Math.max(1, Math.round(Number(l.quantity) || 0)), unit_cost: Number(String(l.unit_cost).replace(',', '.')), cost_currency: cur, fx_rate: fxRate(settings, cur, shared.sell_currency),
+      margin_pct: Number(l.margin_pct) || settings.pricing.default_margin_pct, freight_estimate: Math.max(0, Number(l.freight) || 0), duties_estimate: 0, other_costs: 0, ...shared };
+    const calc = compute(row, settings);
+    return { l, full: { ...row, quantity: calc.quantity, margin_pct: calc.marginPct, unit_price: calc.unitPrice, landed_unit_price: calc.landedUnitPrice } };
+  });
+}
+function formShared(b, res) {
+  const sell = CURRENCIES.includes(b.sell_currency) ? b.sell_currency : (res.locals.defCur || 'CNY');
+  return { sell_currency: sell, incoterm: INCOTERMS.includes(b.incoterm) ? b.incoterm : 'FOB', freight_mode: modeOf(b.freight_mode),
+    lead_time_days: Number(b.lead_time_days) > 0 ? Math.round(Number(b.lead_time_days)) : null, valid_until: /^\d{4}-\d{2}-\d{2}$/.test(b.valid_until || '') ? b.valid_until : null };
+}
+const pricedRows = (b, itemIds) => (Array.isArray(b.line) ? b.line : Object.values(b.line || {})).filter(l => l && itemIds.has(l.item_id) && Number(String(l.unit_cost ?? '').replace(',', '.')) > 0);
+
+// the client quotation as a PDF, from what is typed on the form (nothing is saved)
+r.post('/requests/:rid/quote-lines/preview.pdf', async (req, res) => {
+  const rid = req.params.rid;
+  if (!isUuid(rid)) return notFound(res, 'Request');
+  const settings = await getSettings(admin);
+  const { data: request } = await admin.from('requests').select('*, organizations(*)').eq('id', rid).maybeSingle();
+  if (!request) return notFound(res, 'Request');
+  const { data: items } = await admin.from('request_items').select('id, name, sku').eq('request_id', rid);
+  const rows = pricedRows(req.body, new Set((items || []).map(i => i.id)));
+  if (!rows.length) return back(res, `/admin/pricing/requests/${rid}/quote-lines`, { err: 'Enter a factory price for at least one product to preview the PDF.' });
+  const prodIds = rows.map(l => l.product_id).filter(isUuid);
+  const { data: prods } = prodIds.length ? await admin.from('products').select('id, name, sku, supplier_id').in('id', prodIds) : { data: [] };
+  const quotes = buildLines(rows, prods, formShared(req.body, res), settings, rid).map((x, i) => ({ ...x.full, id: `preview-${i}`, status: 'draft', created_at: new Date().toISOString() }));
+  const item = id => (items || []).find(i => i.id === id);
+  const combined = combineQuotes(quotes, { nameOf: q => item(q.request_item_id)?.name || 'Item', skuOf: q => item(q.request_item_id)?.sku || '' });
+  res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${request.ref}-quotation-preview.pdf"` });
+  res.send(Buffer.from(quotationPdf({ request, combined, org: request.organizations, company: await getCompany(admin) })));
+});
+
 r.post('/requests/:rid/quote-lines', async (req, res) => {
   const rid = req.params.rid;
   if (!isUuid(rid)) return notFound(res, 'Request');
@@ -249,22 +287,13 @@ r.post('/requests/:rid/quote-lines', async (req, res) => {
     admin.from('quotes').select('id').eq('request_id', rid).eq('status', 'draft'),
   ]);
   const itemIds = new Set((items || []).map(i => i.id)), draftIds = new Set((drafts || []).map(q => q.id));
-  const sell = CURRENCIES.includes(b.sell_currency) ? b.sell_currency : (res.locals.defCur || 'CNY');
-  const shared = { sell_currency: sell, incoterm: INCOTERMS.includes(b.incoterm) ? b.incoterm : 'FOB', freight_mode: modeOf(b.freight_mode),
-    lead_time_days: Number(b.lead_time_days) > 0 ? Math.round(Number(b.lead_time_days)) : null, valid_until: /^\d{4}-\d{2}-\d{2}$/.test(b.valid_until || '') ? b.valid_until : null };
-  const rows = (Array.isArray(b.line) ? b.line : Object.values(b.line || {})).filter(l => l && itemIds.has(l.item_id) && Number(String(l.unit_cost ?? '').replace(',', '.')) > 0);
+  const shared = formShared(b, res);
+  const rows = pricedRows(b, itemIds);
   if (!rows.length) return back(res, to, { err: 'Enter a factory price for at least one product.' });
   const prodIds = rows.map(l => l.product_id).filter(isUuid);
   const { data: prods } = prodIds.length ? await admin.from('products').select('id, supplier_id').in('id', prodIds) : { data: [] };
   let saved = 0;
-  for (const l of rows) {
-    const cur = CURRENCIES.includes(l.cost_currency) ? l.cost_currency : 'CNY';
-    const pr = (prods || []).find(p => p.id === l.product_id);
-    const row = { request_id: rid, request_item_id: l.item_id, product_id: pr?.id || null, supplier_id: pr?.supplier_id || (isUuid(l.supplier_id) ? l.supplier_id : null),
-      quantity: Math.max(1, Math.round(Number(l.quantity) || 0)), unit_cost: Number(String(l.unit_cost).replace(',', '.')), cost_currency: cur, fx_rate: fxRate(settings, cur, sell),
-      margin_pct: Number(l.margin_pct) || settings.pricing.default_margin_pct, freight_estimate: Math.max(0, Number(l.freight) || 0), duties_estimate: 0, other_costs: 0, ...shared };
-    const calc = compute(row, settings);
-    const full = { ...row, quantity: calc.quantity, margin_pct: calc.marginPct, unit_price: calc.unitPrice, landed_unit_price: calc.landedUnitPrice };
+  for (const { l, full } of buildLines(rows, prods, shared, settings, rid)) {
     const write = async f => (isUuid(l.quote_id) && draftIds.has(l.quote_id)
       ? admin.from('quotes').update({ ...f, ai_check: null, status: 'draft' }).eq('id', l.quote_id)
       : admin.from('quotes').insert({ ...f, created_by: req.user.id, status: 'draft' }));

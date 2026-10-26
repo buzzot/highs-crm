@@ -58,8 +58,8 @@
   <% }) %>
 
   <div class="card ql-sum"><div class="row" style="align-items:center"><strong>Goods total</strong><strong id="ql_goods" style="margin-left:auto">—</strong></div>
-    <p class="muted small" style="margin:6px 0 0">Margin is on the product cost only; freight is passed through. Products without a factory price are skipped — you can add them later.</p></div>
-  <div class="actions"><button class="btn primary">Save quote lines</button><a class="btn" href="/admin/sourcing/<%= request.id %>">Cancel</a></div>
+    <p class="muted small" style="margin:6px 0 0">Margin is on the product cost only; freight is passed through. Products without a factory price are skipped — you can add them later. “Preview quotation PDF” shows what the client would receive (no costs or margins), without saving.</p></div>
+  <div class="actions"><button class="btn primary">Save quote lines</button><button class="btn" formaction="/admin/pricing/requests/<%= request.id %>/quote-lines/preview.pdf" formtarget="_blank">Preview quotation PDF</button><a class="btn" href="/admin/sourcing/<%= request.id %>">Cancel</a></div>
 </form>
 <script type="application/json" id="qlRates"><%- JSON.stringify(rates) %></script>
 <script>
