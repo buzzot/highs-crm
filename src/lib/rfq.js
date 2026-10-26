@@ -45,7 +45,7 @@ export function cleanResponse(body = {}, items = [], defaultCurrency = 'USD') {
     if (txt(x.unit_price) !== '' && price == null) problems.push(`"${it.description}": unit price is not a number`);
     const cur = RFQ_CURRENCIES.includes(String(x.currency || '').toUpperCase()) ? String(x.currency).toUpperCase() : defaultCurrency;
     lines.push({ item_id: it.id, unit_price: price, currency: cur, moq: numOrNull(x.moq), lead_days: numOrNull(x.lead_days), carton_qty: numOrNull(x.carton_qty), price_unit: pick(x.price_unit, RFQ_UNITS, it.unit), package_type: pick(x.package_type, PACKAGE_TYPES, ''),
-      carton_l: numOrNull(x.carton_l), carton_w: numOrNull(x.carton_w), carton_h: numOrNull(x.carton_h), gross_kg: numOrNull(x.gross_kg), note: txt(x.note, 600) });
+      carton_l: numOrNull(x.carton_l), carton_w: numOrNull(x.carton_w), carton_h: numOrNull(x.carton_h), gross_kg: numOrNull(x.gross_kg), note: txt(x.note, 1000) });
   }
   const incoterm = String(body.incoterm || '').toUpperCase();
   const terms = { incoterm: INCOTERMS.includes(incoterm) ? incoterm : '', fob_port: txt(body.fob_port, 120), payment_terms: txt(body.payment_terms, 300), valid_until: /^\d{4}-\d{2}-\d{2}$/.test(body.valid_until || '') ? body.valid_until : '' };
@@ -75,7 +75,7 @@ export function compare({ items = [], suppliers = [], responses = [], currency =
       const l = resp && resp.status === 'confirmed' ? (resp.lines || []).find(x => x.item_id === it.id) : null;
       if (!l || l.unit_price == null) return { rs: s.id, price: null };
       const conv = l.unit_price * fxRate(settings, l.currency || currency, currency);
-      return { rs: s.id, price: l.unit_price, currency: l.currency || currency, converted: Math.round(conv * 10000) / 10000, moq: l.moq, lead_days: l.lead_days, carton_qty: l.carton_qty, price_unit: l.price_unit || '', package_type: l.package_type || '', note: l.note || '' };
+      return { rs: s.id, price: l.unit_price, currency: l.currency || currency, converted: Math.round(conv * 10000) / 10000, moq: l.moq, lead_days: l.lead_days, carton_qty: l.carton_qty, file_ids: l.file_ids || [], price_unit: l.price_unit || '', package_type: l.package_type || '', note: l.note || '' };
     });
     const priced = cells.filter(c => c.converted != null);
     const min = priced.length ? Math.min(...priced.map(c => c.converted)) : null;
@@ -106,4 +106,27 @@ export function rfqSupplierEmail({ rfq, supplier, url, message, senderName, file
       fineHtml: `You can also simply <strong>reply to this email</strong> with your prices (attachments are fine). ${senderName ? 'Sent by ' + esc(senderName) + '.' : ''}` }),
     text: [`Request for quotation ${rfq.ref}: ${rfq.title}`, rfq.deadline ? `Please answer by ${rfq.deadline}.` : null, '', ...rfq.items.map(i => `- ${i.description}${i.sku ? ' (' + i.sku + ')' : ''}${i.quantity ? ' × ' + n(i.quantity) : ''}`), '', ...(files.length ? [`Files: ${files.join(', ')}${attached ? ' (attached)' : ' (download them in the portal)'}`, ''] : []), `Answer online: ${url}`, 'Or reply to this email with your prices.'].filter(x => x != null).join('\n'),
   };
+}
+
+/** Files a supplier's earlier answer holds: { general: [ids], byItem: { itemId: [ids] } } — the "keep" boxes of the form may only name these. */
+export function keptFiles(prev, keep) {
+  const want = new Set([].concat(keep || []).map(String));
+  const general = ((prev && prev.file_ids) || []).filter(id => want.has(id));
+  const byItem = {};
+  for (const l of (prev && prev.lines) || []) { const ids = (l.file_ids || []).filter(id => want.has(id)); if (ids.length) byItem[l.item_id] = ids; }
+  return { general, byItem };
+}
+
+/** Put kept + newly uploaded files on their product lines (a product with only files still gets a line) and the whole-quote list. */
+export function placeFiles(lines, items, kept, uploaded) {
+  const out = lines.map(l => ({ ...l }));
+  const ids = new Set(items.map(i => i.id));
+  const all = new Set([...Object.keys(kept.byItem), ...Object.keys(uploaded.byItem)]);
+  for (const id of all) {
+    if (!ids.has(id)) continue;
+    let l = out.find(x => x.item_id === id);
+    if (!l) { l = { item_id: id, unit_price: null, note: '' }; out.push(l); }
+    l.file_ids = [...(kept.byItem[id] || []), ...(uploaded.byItem[id] || [])];
+  }
+  return { lines: out, file_ids: [...kept.general, ...uploaded.general] };
 }

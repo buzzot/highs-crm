@@ -32,6 +32,7 @@
             <strong><%= money(c.converted, rfq.currency) %></strong><%= c.price_unit ? ' / ' + c.price_unit : '' %>
             <% if (c.currency !== rfq.currency) { %><div class="muted small">quoted <%= money(c.price, c.currency) %></div><% } %>
             <div class="muted small"><%= [c.moq ? 'MOQ ' + Number(c.moq).toLocaleString('en-US') : '', c.lead_days ? c.lead_days + ' d' : '', c.package_type ? c.package_type + (c.carton_qty ? ' of ' + c.carton_qty : '') : ''].filter(Boolean).join(' · ') %></div>
+            <% (c.file_ids || []).forEach(id => { const d = docs.find(x => x.id === id); if (d) { %><div class="small"><a href="/admin/documents/<%= d.id %>/download" target="_blank" title="<%= d.title %>"><%- icon('file') %>&nbsp;<%= d.title.length > 22 ? d.title.slice(0, 20) + '…' : d.title %></a></div><% } }) %>
           <% } %></td><% }) %>
       </tr>
     <% }) %>

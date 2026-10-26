@@ -10,10 +10,10 @@ import { aiEnabled, reviewRfqFiles } from '../../lib/ai.js';
 import { addUsage } from '../../lib/ai-usage.js';
 import { CHECKABLE, isImage, toReview, unchecked, cleanReview, MAX_FILES, reviewTotals, sendWarning } from '../../lib/rfq-files.js';
 import { back, notFound, getSettings, INCOTERMS } from '../../lib/util.js';
-import { cleanItems, cleanResponse, compare, currentResponses, rfqSupplierEmail, RFQ_STATUS_LABEL, RS_LABEL, RFQ_CURRENCIES } from '../../lib/rfq.js';
+import { answerUpload, uploadAnswerFiles } from '../../lib/rfq-answer-files.js';
+import { keptFiles, placeFiles, cleanItems, cleanResponse, compare, currentResponses, rfqSupplierEmail, RFQ_STATUS_LABEL, RS_LABEL, RFQ_CURRENCIES } from '../../lib/rfq.js';
 
 const r = Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 8 } });
 const filesUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: MAX_FILES } });
 const MIGRATION_FILES = 'Run supabase/migrations/0033_rfq_files.sql in Supabase first (it adds the file columns), then reload the schema cache.';
 const isId = v => /^[0-9a-f-]{36}$/i.test(v || '');
@@ -132,7 +132,7 @@ r.get('/:id', async (req, res) => {
   const x = await load(req.params.id);
   if (!x) return notFound(res, 'RFQ');
   const [settings, { data: all }] = await Promise.all([getSettings(admin), admin.from('suppliers').select('id, name').order('name')]);
-  const fileIds = [...new Set(x.responses.flatMap(p => p.file_ids || []))];
+  const fileIds = [...new Set(x.responses.flatMap(p => [...(p.file_ids || []), ...(p.lines || []).flatMap(l => l.file_ids || [])]))];
   const { data: docs } = fileIds.length ? await admin.from('documents').select('id, title, mime_type').in('id', fileIds) : { data: [] };
   const invited = new Set(x.rs.map(s => s.supplier_id));
   const fids = x.rfq.file_ids || [];
@@ -205,7 +205,7 @@ r.post('/:id/send', async (req, res) => {
 });
 
 // staff enter an answer received outside the portal (WeChat, a phone call, a PDF)
-r.post('/:id/answer/:rs', upload.array('files', 8), async (req, res) => {
+r.post('/:id/answer/:rs', answerUpload(multer), async (req, res) => {
   const x = await load(req.params.id);
   const s = x?.rs.find(v => v.id === req.params.rs);
   if (!s) return notFound(res, 'RFQ');
@@ -213,13 +213,10 @@ r.post('/:id/answer/:rs', upload.array('files', 8), async (req, res) => {
   const declined = req.body.decline === '1';
   const parsed = cleanResponse(req.body, x.rfq.items, x.rfq.currency);
   if (!declined && parsed.problems.length) return back(res, to, { err: parsed.problems.join('; ') });
-  const file_ids = [];
-  for (const file of req.files || []) {
-    const doc = await uploadDocument({ file, entityType: 'supplier', entityId: s.supplier_id, kind: 'other', title: file.originalname, clientVisible: false, uploadedBy: req.user.id });
-    file_ids.push(doc.id);
-  }
+  const prev = currentResponses(x.responses)[s.id];
+  const placed = placeFiles(declined ? [] : parsed.lines, x.rfq.items, keptFiles(prev, req.body.keep), await uploadAnswerFiles(req.files, { supplierId: s.supplier_id, userId: req.user.id, items: x.rfq.items }));
   await admin.from('rfq_responses').insert({ rfq_id: x.rfq.id, rfq_supplier_id: s.id, supplier_id: s.supplier_id, source: 'manual', status: declined ? 'declined' : 'confirmed',
-    lines: declined ? [] : parsed.lines, terms: declined ? {} : parsed.terms, note: String(req.body.note || '').trim().slice(0, 2000) || null, file_ids, created_by: req.user.id });
+    lines: placed.lines, terms: declined ? {} : parsed.terms, note: String(req.body.note || '').trim().slice(0, 2000) || null, file_ids: placed.file_ids, created_by: req.user.id });
   await admin.from('rfq_suppliers').update({ status: declined ? 'declined' : 'replied', replied_at: new Date().toISOString() }).eq('id', s.id);
   back(res, to, { msg: `Answer from ${s.suppliers?.name} saved.` });
 });

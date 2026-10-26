@@ -1451,3 +1451,34 @@ html[lang=ru] .pill::first-letter, html[lang=ru] .badge::first-letter { text-tra
 .supfiles { padding-top: 10px; }
 .fitem.supfile { text-decoration: none; padding-right: 8px; }
 .side nav a .navball { margin-left: auto; }
+
+/* RFQ answer form: one card per product, grouped into Price / Packing / Notes + files */
+.pq { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.pq-h { display: flex; align-items: flex-start; gap: 12px; padding: 14px 18px; background: var(--bg, #f6f7f9); border-bottom: 1px solid var(--line); }
+.pq-no { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--brand, #0f766e); color: #fff; font-size: 13px; font-weight: 600; display: grid; place-items: center; margin-top: 1px; }
+.pq-t { flex: 1; min-width: 0; font-size: 15px; }
+.pq-qty { flex: none; text-align: right; display: grid; line-height: 1.25; }
+.pq-spec { padding: 10px 18px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.pq-spec summary { cursor: pointer; color: var(--muted); }
+.pq-spec dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 10px 0 2px; }
+.pq-spec dt { color: var(--muted); } .pq-spec dd { margin: 0; }
+.pq-sec { padding: 14px 18px; }
+.pq-sec + .pq-sec { border-top: 1px solid var(--line); }
+.pq-sec h4 { margin: 0 0 10px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.pq-grid { display: grid; gap: 12px 14px; }
+.pq-grid.g5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.pq-grid.g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.pq-grid.g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+.pq-grid label, .pq-files .lbl { display: block; min-width: 0; margin: 0; font-size: 13px; }
+.pq-grid input:not([type=file]):not([type=checkbox]), .pq-grid select, .pq-grid textarea { width: 100%; box-sizing: border-box; }
+.pq-grid textarea { resize: vertical; min-height: 118px; }
+.pq-grid .trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.pq-grid .trio input { padding-left: 8px; padding-right: 8px; }
+.pq-files .lbl { margin-bottom: 4px; }
+.pq-files .dropwrap { margin: 0; }
+.pq-files .filedrop.compact { min-height: 84px; padding: 12px; }
+.keepfiles { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+.keepchip { display: inline-flex !important; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 12.5px; margin: 0 !important; }
+.keepchip input { margin: 0; width: auto; }
+.pq-terms .pq-h { background: transparent; }
+@media (max-width: 900px) { .pq-grid.g5, .pq-grid.g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pq-grid.g2 { grid-template-columns: 1fr; } .pq-qty { display: none; } }

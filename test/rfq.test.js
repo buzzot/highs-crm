@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanItems, cleanResponse, compare, currentResponses, rfqSupplierEmail } from '../src/lib/rfq.js';
+import { keptFiles, placeFiles, cleanItems, cleanResponse, compare, currentResponses, rfqSupplierEmail } from '../src/lib/rfq.js';
 
 const items = cleanItems({ item: { 0: { id: 'a', description: ' Lamp ', quantity: '1,000', unit: '' }, 1: { description: '' }, 2: { id: 'b', description: 'Cable', quantity: '-5' } } });
 
@@ -51,4 +51,16 @@ test('cleanResponse keeps the price unit and package type the supplier chose', (
   assert.equal(r.lines[0].package_type, 'Drum / reel');
   assert.equal(r.lines[1].price_unit, 'pcs');   // unknown unit falls back to the unit asked for in the RFQ
   assert.equal(r.lines[1].package_type, '');
+});
+
+test('answer files: kept + new files land on their product, only earlier files can be kept', () => {
+  const items = [{ id: 'a' }, { id: 'b' }];
+  const prev = { file_ids: ['g1', 'g2'], lines: [{ item_id: 'a', file_ids: ['a1', 'a2'] }] };
+  const kept = keptFiles(prev, ['g1', 'a2', 'stranger']);
+  assert.deepEqual(kept, { general: ['g1'], byItem: { a: ['a2'] } });
+  const placed = placeFiles([{ item_id: 'a', unit_price: 2 }], items, kept, { general: ['g3'], byItem: { a: ['a3'], b: ['b1'], zzz: ['x'] } });
+  assert.deepEqual(placed.file_ids, ['g1', 'g3']);
+  assert.deepEqual(placed.lines.find(l => l.item_id === 'a').file_ids, ['a2', 'a3']);
+  assert.deepEqual(placed.lines.find(l => l.item_id === 'b').file_ids, ['b1']);   // a product with only files still gets a line
+  assert.equal(placed.lines.length, 2);
 });

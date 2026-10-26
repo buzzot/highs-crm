@@ -1,51 +1,83 @@
-<%# locals: action, rfq, resp (previous answer or null), multipart (bool), declineLabel %>
+<%# locals: action, rfq, resp (previous answer or null), declineLabel, respDocs|docs (files of the previous answer) %>
 <%
   const prev = resp && resp.status === 'confirmed' ? resp : null;
   const lineOf = id => (prev && prev.lines || []).find(l => l.item_id === id) || {};
   const t = (prev && prev.terms) || {};
   const v = x => (x === null || x === undefined ? '' : x);
-%>
-<form method="post" action="<%= action %>" enctype="multipart/form-data" class="rfqans stack">
-  <% rfq.items.forEach(it => { const l = lineOf(it.id); const n = 'line[' + it.id + ']'; %>
-  <div class="rfqitem">
-    <div class="rfqitem-h"><strong><%= it.description %></strong><% if (it.sku) { %> <span class="muted small"><%= it.sku %></span><% } %>
-      <span class="muted small"><%= it.quantity ? '· ' + Number(it.quantity).toLocaleString('en-US') + ' ' + (it.unit || 'pcs') : '' %></span>
-      <% if (it.notes) { %><div class="muted small"><%= it.notes %></div><% } %>
-      <% const sf = Object.entries({ Category: it.spec && it.spec.category, Materials: it.spec && it.spec.materials, 'Size (cm)': it.spec && it.spec.size, Certifications: it.spec && it.spec.certifications, Packaging: it.spec && it.spec.packaging_type, Incoterm: it.spec && it.spec.incoterm, 'Payment terms': it.spec && it.spec.payment_terms, 'Needed by (ETD)': it.spec && it.spec.etd, 'Quote valid until': it.spec && it.spec.valid_until }).filter(([, v]) => v); if (sf.length) { %><div class="muted small"><%= sf.map(([k, v]) => k + ': ' + v).join(' · ') %></div><% } %></div>
-    <div class="rfqgrid">
-      <label>Unit price<input name="<%= n %>[unit_price]" value="<%= v(l.unit_price) %>" inputmode="decimal"></label>
-      <label>Currency<select name="<%= n %>[currency]"><% ['USD', 'CNY', 'EUR', 'GBP'].forEach(c => { %><option <%= (l.currency || rfq.currency) === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
-      <label>Price is per<select name="<%= n %>[price_unit]"><% const pu = l.price_unit || it.unit || 'pcs'; const pus = RFQ_UNITS.includes(pu) ? RFQ_UNITS : [pu].concat(RFQ_UNITS); pus.forEach(c => { %><option <%= pu === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
-      <label>MOQ<input name="<%= n %>[moq]" value="<%= v(l.moq) %>" inputmode="numeric"></label>
-      <label>Lead time (days)<input name="<%= n %>[lead_days]" value="<%= v(l.lead_days) %>" inputmode="numeric"></label>
-      <label>Package type<select name="<%= n %>[package_type]"><option value="">—</option><% PACKAGE_TYPES.forEach(c => { %><option <%= l.package_type === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
-      <label>Quantity per package<input name="<%= n %>[carton_qty]" value="<%= v(l.carton_qty) %>" inputmode="numeric" placeholder="in the unit above"></label>
-      <label>Package gross weight (kg)<input name="<%= n %>[gross_kg]" value="<%= v(l.gross_kg) %>" inputmode="decimal"></label>
-      <label class="rfq-span2">Package L × W × H (cm)<span class="trio"><input name="<%= n %>[carton_l]" value="<%= v(l.carton_l) %>" inputmode="decimal" aria-label="Length"><input name="<%= n %>[carton_w]" value="<%= v(l.carton_w) %>" inputmode="decimal" aria-label="Width"><input name="<%= n %>[carton_h]" value="<%= v(l.carton_h) %>" inputmode="decimal" aria-label="Height"></span></label>
-      <label class="rfq-wide">Note<input name="<%= n %>[note]" value="<%= v(l.note) %>" placeholder="e.g. price for black colour, logo +0.10"></label>
+  const dl = typeof respDocs !== 'undefined' ? respDocs : (typeof docs !== 'undefined' ? docs : []);
+  const kept = ids => (ids || []).map(id => dl.find(d => d.id === id)).filter(Boolean);
+  const drop = (name, max, hint, files) => { %>
+    <div class="dropwrap">
+      <% if (files.length) { %><div class="keepfiles"><% files.forEach(d => { %><label class="keepchip"><input type="checkbox" name="keep" value="<%= d.id %>" checked><span><%= d.title %></span></label><% }) %><span class="muted small">Untick a file to remove it.</span></div><% } %>
+      <div class="filedrop compact" data-dropzone data-max="<%= max %>" data-max-mb="20" tabindex="0">
+        <input type="file" name="<%= name %>" multiple aria-label="Attach files">
+        <span class="dicon"><%- icon('upload') %></span>
+        <strong data-drop-count>Drag files here or <span class="dlink">browse</span></strong>
+        <span class="muted small dsub"><%= hint %></span>
+      </div>
+      <div class="fgrid" data-drop-list></div>
     </div>
-  </div>
-  <% }) %>
-  <div class="rfqitem">
-    <div class="rfqitem-h"><strong>Terms for the whole quote</strong></div>
-    <div class="rfqgrid">
-      <label>Incoterm<select name="incoterm"><option value="">—</option><% ['EXW', 'FCA', 'FOB', 'CIF', 'CFR', 'CPT', 'DAP', 'DDP'].forEach(c => { %><option <%= t.incoterm === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
-      <label>Port / delivery point<input name="fob_port" value="<%= v(t.fob_port) %>"></label>
-      <label>Payment terms<input name="payment_terms" value="<%= v(t.payment_terms) %>" placeholder="30% deposit, 70% before shipment"></label>
-      <label>Price valid until<input type="date" name="valid_until" value="<%= v(t.valid_until) %>"></label>
-      <label class="rfq-wide">Message<input name="note" value="<%= v(prev && prev.note) %>"></label>
-      <div class="rfq-wide dropwrap">
-        <div class="lbl">Attach files <span class="muted small">— price list, product photos, specs, certificates</span></div>
-        <div class="filedrop compact" data-dropzone data-max="8" data-max-mb="20" tabindex="0">
-          <input type="file" name="files" multiple aria-label="Attach files">
-          <span class="dicon"><%- icon('upload') %></span>
-          <strong data-drop-count>Drag files here or <span class="dlink">browse</span></strong>
-          <span class="muted small dsub">PDF, Excel, Word, photos · up to 8 files, 20 MB each</span>
-        </div>
-        <div class="fgrid" data-drop-list></div>
+<% }; %>
+<form method="post" action="<%= action %>" enctype="multipart/form-data" class="rfqans stack">
+  <% rfq.items.forEach((it, idx) => { const l = lineOf(it.id); const n = 'line[' + it.id + ']';
+     const sf = Object.entries({ Category: it.spec && it.spec.category, Materials: it.spec && it.spec.materials, 'Size (cm)': it.spec && it.spec.size, Certifications: it.spec && it.spec.certifications, Packaging: it.spec && it.spec.packaging_type, Incoterm: it.spec && it.spec.incoterm, 'Payment terms': it.spec && it.spec.payment_terms, 'Needed by (ETD)': it.spec && it.spec.etd, 'Quote valid until': it.spec && it.spec.valid_until }).filter(([, x]) => x); %>
+  <section class="pq">
+    <header class="pq-h">
+      <span class="pq-no"><%= idx + 1 %></span>
+      <div class="pq-t"><strong><%= it.description %></strong><% if (it.sku) { %> <span class="muted small"><%= it.sku %></span><% } %>
+        <% if (it.notes) { %><div class="muted small"><%= it.notes %></div><% } %></div>
+      <% if (it.quantity) { %><span class="pq-qty"><span class="muted small">Quantity wanted</span><strong><%= Number(it.quantity).toLocaleString('en-US') %> <%= it.unit || 'pcs' %></strong></span><% } %>
+    </header>
+    <% if (sf.length) { %><details class="pq-spec"><summary>Specification&nbsp;<span class="muted small">(<%= sf.length %> details)</span></summary>
+      <dl><% sf.forEach(([k, x]) => { %><dt><%= k %></dt><dd><%= x %></dd><% }) %></dl></details><% } %>
+
+    <div class="pq-sec"><h4>Price</h4>
+      <div class="pq-grid g5">
+        <label>Unit price<input name="<%= n %>[unit_price]" value="<%= v(l.unit_price) %>" inputmode="decimal"></label>
+        <label>Currency<select name="<%= n %>[currency]"><% ['USD', 'CNY', 'EUR', 'GBP'].forEach(c => { %><option <%= (l.currency || rfq.currency) === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+        <label>Price is per<select name="<%= n %>[price_unit]"><% const pu = l.price_unit || it.unit || 'pcs'; const pus = RFQ_UNITS.includes(pu) ? RFQ_UNITS : [pu].concat(RFQ_UNITS); pus.forEach(c => { %><option <%= pu === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+        <label>MOQ<input name="<%= n %>[moq]" value="<%= v(l.moq) %>" inputmode="numeric"></label>
+        <label>Lead time (days)<input name="<%= n %>[lead_days]" value="<%= v(l.lead_days) %>" inputmode="numeric"></label>
       </div>
     </div>
-  </div>
+
+    <div class="pq-sec"><h4>Packing</h4>
+      <div class="pq-grid g4">
+        <label>Package type<select name="<%= n %>[package_type]"><option value="">—</option><% PACKAGE_TYPES.forEach(c => { %><option <%= l.package_type === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+        <label>Quantity per package<input name="<%= n %>[carton_qty]" value="<%= v(l.carton_qty) %>" inputmode="numeric" placeholder="in the unit above"></label>
+        <label>Gross weight (kg)<input name="<%= n %>[gross_kg]" value="<%= v(l.gross_kg) %>" inputmode="decimal"></label>
+        <label>Size L × W × H (cm)<span class="trio"><input name="<%= n %>[carton_l]" value="<%= v(l.carton_l) %>" inputmode="decimal" aria-label="Length"><input name="<%= n %>[carton_w]" value="<%= v(l.carton_w) %>" inputmode="decimal" aria-label="Width"><input name="<%= n %>[carton_h]" value="<%= v(l.carton_h) %>" inputmode="decimal" aria-label="Height"></span></label>
+      </div>
+    </div>
+
+    <div class="pq-sec"><h4>Notes and files for this product</h4>
+      <div class="pq-grid g2">
+        <label>Notes<textarea name="<%= n %>[note]" rows="4" placeholder="e.g. price for black colour, logo +0.10; different price above 50,000 m"><%= v(l.note) %></textarea></label>
+        <div class="pq-files"><span class="lbl">Files <span class="muted small">— photos, datasheet, certificate</span></span>
+          <% drop('files_' + it.id, 8, 'up to 8 files, 20 MB each', kept(l.file_ids)) %></div>
+      </div>
+    </div>
+  </section>
+  <% }) %>
+
+  <section class="pq pq-terms">
+    <header class="pq-h"><div class="pq-t"><strong>Terms for the whole quote</strong></div></header>
+    <div class="pq-sec">
+      <div class="pq-grid g4">
+        <label>Incoterm<select name="incoterm"><option value="">—</option><% ['EXW', 'FCA', 'FOB', 'CIF', 'CFR', 'CPT', 'DAP', 'DDP'].forEach(c => { %><option <%= t.incoterm === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+        <label>Port / delivery point<input name="fob_port" value="<%= v(t.fob_port) %>"></label>
+        <label>Payment terms<input name="payment_terms" value="<%= v(t.payment_terms) %>" placeholder="30% deposit, 70% before shipment"></label>
+        <label>Price valid until<input type="date" name="valid_until" value="<%= v(t.valid_until) %>"></label>
+      </div>
+    </div>
+    <div class="pq-sec"><h4>Message and files for the whole quote</h4>
+      <div class="pq-grid g2">
+        <label>Message<textarea name="note" rows="4" placeholder="Anything we should know about this quote"><%= v(prev && prev.note) %></textarea></label>
+        <div class="pq-files"><span class="lbl">Files <span class="muted small">— full price list, catalogue, company certificates</span></span>
+          <% drop('files', 8, 'up to 8 files, 20 MB each', kept(prev && prev.file_ids)) %></div>
+      </div>
+    </div>
+  </section>
   <div class="actions">
     <button class="btn primary"><%= prev ? 'Update answer' : 'Send answer' %></button>
     <button class="btn" name="decline" value="1" formnovalidate onclick="return confirm('Send a message that you can\'t quote this?')"><%= typeof declineLabel === 'undefined' ? "We can't quote" : declineLabel %></button>

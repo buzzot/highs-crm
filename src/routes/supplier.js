@@ -8,7 +8,8 @@ import { signedUrl, uploadDocument, deleteDocument } from '../lib/storage.js';
 import multer from '../lib/multer-utf8.js';
 import { catalogItems, STATUS_LABEL, EDITABLE, fromProduct } from '../lib/supplier-product.js';
 import { clean as cleanProduct, missing, containerFit, CURRENCIES, INCOTERMS, CATEGORIES } from '../lib/supplier-product.js';
-import { cleanResponse, RS_LABEL } from '../lib/rfq.js';
+import { cleanResponse, keptFiles, placeFiles, RS_LABEL } from '../lib/rfq.js';
+import { answerUpload, uploadAnswerFiles } from '../lib/rfq-answer-files.js';
 import { forgetSupplierRfq } from '../lib/supplier-nav.js';
 import { parseQuotation, gaps, MAX_PRODUCTS } from '../lib/supplier-bulk.js';
 import { validateSupplierCompany, COMPANY_TYPES } from '../lib/supplier-company.js';
@@ -162,7 +163,7 @@ r.post('/products/bulk/submit', async (req, res) => {
 });
 
 // ---- RFQs: requests for quotation from Lumi Trade; the supplier answers in the portal ----
-const rfqUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 8 } }).array('files', 8);
+const rfqUpload = answerUpload(multer);
 async function ownRfq(req, id) {
   if (!/^[0-9a-f-]{36}$/i.test(id || '')) return null;
   const { data: rs } = await admin.from('rfq_suppliers').select('*').eq('id', id).eq('supplier_id', req.user.supplier_id).neq('status', 'draft').maybeSingle();
@@ -183,7 +184,9 @@ r.get('/rfqs/:id', async (req, res) => {
   if (!x) return res.status(404).send('Not found');
   const fids = x.rfq.file_ids || [];
   const { data: fdocs } = fids.length ? await admin.from('documents').select('id, title, mime_type').in('id', fids) : { data: [] };
-  res.render('supplier/rfq', { title: x.rfq.ref, ...x, files: fids.map(id => (fdocs || []).find(d => d.id === id)).filter(Boolean), labels: RS_LABEL, err: req.query.err, msg: req.query.msg });
+  const prevIds = x.resp ? [...(x.resp.file_ids || []), ...(x.resp.lines || []).flatMap(l => l.file_ids || [])] : [];
+  const { data: respDocs } = prevIds.length ? await admin.from('documents').select('id, title, mime_type').in('id', prevIds) : { data: [] };
+  res.render('supplier/rfq', { title: x.rfq.ref, ...x, respDocs: respDocs || [], files: fids.map(id => (fdocs || []).find(d => d.id === id)).filter(Boolean), labels: RS_LABEL, err: req.query.err, msg: req.query.msg });
 });
 
 // a file Lumi Trade attached to this RFQ — only for suppliers that were sent the RFQ, and only files listed on it
@@ -204,13 +207,9 @@ r.post('/rfqs/:id', (req, res, next) => rfqUpload(req, res, err => { req.uploadE
   const declined = req.body.decline === '1';
   const parsed = cleanResponse(req.body, x.rfq.items, x.rfq.currency);
   if (!declined && parsed.problems.length) return res.redirect(to + '?err=' + encodeURIComponent(parsed.problems.join('; ')));
-  const file_ids = [];
-  for (const file of req.files || []) {
-    const doc = await uploadDocument({ file, entityType: 'supplier', entityId: req.user.supplier_id, kind: 'other', title: file.originalname, clientVisible: false, uploadedBy: req.user.id });
-    file_ids.push(doc.id);
-  }
+  const placed = placeFiles(declined ? [] : parsed.lines, x.rfq.items, keptFiles(x.resp, req.body.keep), await uploadAnswerFiles(req.files, { supplierId: req.user.supplier_id, userId: req.user.id, items: x.rfq.items }));
   const { error } = await admin.from('rfq_responses').insert({ rfq_id: x.rfq.id, rfq_supplier_id: x.rs.id, supplier_id: req.user.supplier_id, source: 'portal', status: declined ? 'declined' : 'confirmed',
-    lines: declined ? [] : parsed.lines, terms: declined ? {} : parsed.terms, note: String(req.body.note || '').trim().slice(0, 2000) || null, file_ids, created_by: req.user.id });
+    lines: placed.lines, terms: declined ? {} : parsed.terms, note: String(req.body.note || '').trim().slice(0, 2000) || null, file_ids: placed.file_ids, created_by: req.user.id });
   if (error) return res.redirect(to + '?err=' + encodeURIComponent(error.message));
   await admin.from('rfq_suppliers').update({ status: declined ? 'declined' : 'replied', replied_at: new Date().toISOString() }).eq('id', x.rs.id);
   forgetSupplierRfq(req.user.supplier_id);
