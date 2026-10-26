@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { poFromQuote, parseLines, totalOf, poPdf, piPdf, clientLines } from '../src/lib/purchase.js';
-import { wrap, textWidth, toBytes } from '../src/lib/pdf-write.js';
+import { wrap, textWidth, toBytes, toGids } from '../src/lib/pdf-write.js';
 
 const company = { name: 'Lumi Trade', address: 'Ningbo, China', email: 'orders@lumitrade.cc', phone: '', website: '', bank: 'Beneficiary: Lumi Trade', payment_terms: '30% deposit' };
 
@@ -73,7 +73,8 @@ test('packing list PDF: landscape A4 with the embedded font', () => {
   const s = pdf.toString('latin1');
   assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
   assert.match(s, /MediaBox \[0 0 841\.89 595\.28\]/);
-  assert.ok(s.includes('PACKING LIST') && s.includes('FontFile2'));
+  assert.ok(s.includes('FontFile2') && s.includes('Identity-H'));
+  assert.ok(s.includes(toGids('PACKING LIST').map(g => g.toString(16).padStart(4, '0')).join('')));
 });
 
 test('commercial invoice and packing list carry their own sequential number when one is given', () => {
@@ -93,4 +94,12 @@ test('fixName repairs latin-1 mangled Chinese file names and leaves others alone
   assert.equal(fixName(mangled), '纸箱 清单.xlsx');
   assert.equal(fixName('plain name.xlsx'), 'plain name.xlsx');
   assert.equal(fixName('纸箱.xlsx'), '纸箱.xlsx');
+});
+
+test('PDF text: Cyrillic has real glyphs and a width', () => {
+  const g = toGids('ООО «ПРО ЭКСПЕРТ» Канат 12 Г-ВК-Н');
+  assert.equal(g.length, 'ООО «ПРО ЭКСПЕРТ» Канат 12 Г-ВК-Н'.length);
+  assert.ok(!g.includes(toGids('?')[0]));
+  assert.ok(textWidth('Канат', 10) > 20);
+  assert.ok(wrap('Москва, ул. Ленина, д. 5, офис 12 Москва, ул. Ленина', 80, 10).length > 1);
 });
