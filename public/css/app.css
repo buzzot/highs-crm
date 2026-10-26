@@ -1482,3 +1482,8 @@ html[lang=ru] .pill::first-letter, html[lang=ru] .badge::first-letter { text-tra
 .keepchip input { margin: 0; width: auto; }
 .pq-terms .pq-h { background: transparent; }
 @media (max-width: 900px) { .pq-grid.g5, .pq-grid.g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pq-grid.g2 { grid-template-columns: 1fr; } .pq-qty { display: none; } }
+
+/* draft packing list: package type + unit columns (the order packing list keeps its own column rules) */
+.pkgtable td:nth-child(7), .pkgtable th:nth-child(7) { white-space: nowrap; }
+.pkgtable td:nth-child(8), .pkgtable th:nth-child(8) { white-space: nowrap; }
+@media print { .pkgtable td:nth-child(3) { min-width: 0; } .pkgtable td:nth-child(4) { min-width: 150px; } }

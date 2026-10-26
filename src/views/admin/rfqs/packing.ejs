@@ -25,26 +25,26 @@
   <% if (!d.rows.length) { %>
     <p class="muted">Nothing to list yet — see the warnings and the product check below.</p>
   <% } else { %>
-  <table class="tbl pltable">
-    <thead><tr><th>CTN No.</th><th class="right">Ctns</th><th>Description</th><th>Item / SKU</th><th class="right">Pcs/ctn</th><th class="right">Total pcs</th><th class="right">L × W × H cm</th><th class="right">CBM</th><th class="right">GW/ctn kg</th><th class="right">Total GW kg</th><th class="right">Total NW kg</th></tr></thead>
+  <table class="tbl pltable pkgtable">
+    <thead><tr><th>Pkg No.</th><th class="right">Pkgs</th><th>Package</th><th>Description</th><th>Item / SKU</th><th class="right">Qty/pkg</th><th class="right">Total qty</th><th class="right">L × W × H cm</th><th class="right">CBM</th><th class="right">GW/pkg kg</th><th class="right">Total GW kg</th></tr></thead>
     <tbody>
     <% d.rows.forEach(x => { const c = Number(x.cartons || 1); const cbm = x.length_cm && x.width_cm && x.height_cm ? x.length_cm * x.width_cm * x.height_cm / 1e6 * c : null; %>
       <tr>
         <td><%= x.carton_no %></td><td class="right num"><%= c %></td>
+        <td><%= x.package_type || '—' %></td>
         <td><%= x.description || '—' %></td>
         <td><%= x.sku || '' %></td>
-        <td class="right num"><%= n0(x.quantity) %></td><td class="right num"><%= x.quantity != null ? n0(x.quantity * c) : '' %></td>
+        <td class="right num"><%= n0(x.quantity) %> <%= x.unit %></td><td class="right num"><%= x.quantity != null ? n0(x.quantity * c) + ' ' + x.unit : '' %></td>
         <td class="right num"><%= dims(x) %></td><td class="right num"><%= cbm != null ? cbm.toFixed(3) : '' %></td>
         <td class="right num"><%= x.gross_weight_kg != null ? Number(x.gross_weight_kg) : '' %></td>
         <td class="right num"><%= x.gross_weight_kg != null ? n0(Math.round(x.gross_weight_kg * c * 100) / 100) : '' %></td>
-        <td class="right num"><%= x.net_weight_kg != null ? n0(Math.round(x.net_weight_kg * c * 100) / 100) : '' %></td>
       </tr>
     <% }) %>
     </tbody>
-    <tfoot><tr><td>TOTAL</td><td class="right num"><%= d.t.cartons %></td><td></td><td></td><td></td><td class="right num"><%= n0(d.t.pieces) %></td><td></td><td class="right num"><%= d.t.cbm %></td><td></td><td class="right num"><%= n0(d.t.gross) %> kg</td><td class="right num"><%= d.t.net ? n0(d.t.net) + ' kg' : '' %></td></tr></tfoot>
+    <tfoot><tr><td>TOTAL</td><td class="right num"><%= d.t.cartons %></td><td colspan="3"><%= d.t.pkgSummary %></td><td></td><td class="right num"><%= d.t.qtySummary %></td><td></td><td class="right num"><%= d.t.cbm %></td><td></td><td class="right num"><%= n0(d.t.gross) %> kg</td></tr></tfoot>
   </table>
   <div class="plfoot">
-    <div><span class="muted">Note:</span> Estimated from the supplier's quotation (packages = quantity ÷ pieces per package, rounded up). The final packing list will follow.</div>
+    <div><span class="muted">Note:</span> Estimated from the supplier's quotation (packages = quantity ÷ quantity per package, rounded up). The final packing list will follow.</div>
     <div class="muted small">For forwarders: air chargeable ≈ <%= n0(d.t.chargeableAir) %> kg (volumetric <%= n0(d.t.volumetricAir) %> kg at 1:6000) · sea LCL W/M <%= d.t.wm %><%= d.t.missing.length ? ' · missing on some lines: ' + d.t.missing.join(', ') : '' %></div>
   </div>
   <% } %>

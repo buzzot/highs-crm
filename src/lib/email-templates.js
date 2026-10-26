@@ -215,13 +215,14 @@ export function changeDecidedEmail({ request, approved, note, url }) {
 
 // ---- freight quote request to a forwarder (packing list in the body + Excel attached) ----
 export function rfqEmail({ order, info = {}, rows, t, message, senderName, forwarderName }) {
+  const pkg = rows.some(x => x.package_type);   // a draft packing list from an RFQ: packages of a type (Roll, Drum…) with a unit (m, kg…)
   const F = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
   const n = v => (v == null || v === '' ? '' : Number(v).toLocaleString('en-US'));
   const td = (v, right) => `<td style="padding:7px 8px;border-bottom:1px solid #eef0f3;font-size:13px;color:#16202e;${right ? 'text-align:right;' : ''}">${esc(v ?? '')}</td>`;
   const th = (v, right) => `<th style="padding:7px 8px;border-bottom:2px solid #dfe3e8;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#7a8494;text-align:${right ? 'right' : 'left'};">${esc(v)}</th>`;
   const facts = [
     ['Mode', info.mode], ['From', info.pol], ['To', info.pod], ['Incoterm', info.incoterm], ['Cargo ready', info.ready_date],
-    ['Cartons', n(t.cartons)], ['Pieces', n(t.pieces)], ['Gross weight', `${n(t.gross)} kg`], ['Volume', `${t.cbm} cbm`],
+    ...(rows.some(x => x.package_type) ? [['Packages', t.pkgSummary], ['Quantity', t.qtySummary]] : [['Cartons', n(t.cartons)], ['Pieces', n(t.pieces)]]), ['Gross weight', `${n(t.gross)} kg`], ['Volume', `${t.cbm} cbm`],
     ['Shipping marks', info.marks], ['Cargo notes', info.remarks],
   ].filter(([, v]) => v !== undefined && v !== null && v !== '');
   const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:0;background:#f1f3f6;">
@@ -234,9 +235,10 @@ export function rfqEmail({ order, info = {}, rows, t, message, senderName, forwa
   ${message ? `<p style="font-size:15px;line-height:1.6;color:#2f3a4a;white-space:pre-line;">${esc(message)}</p>` : ''}
   <table role="presentation" cellpadding="0" cellspacing="0" style="margin:10px 0 18px;font-size:14px;">${facts.map(([k, v]) => `<tr><td style="padding:3px 18px 3px 0;color:#7a8494;">${esc(k)}</td><td style="padding:3px 0;color:#16202e;">${esc(v)}</td></tr>`).join('')}</table>
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-family:${F};">
-    <tr>${th('CTN No.')}${th('Description')}${th('Ctns', 1)}${th('Pcs/ctn', 1)}${th('L×W×H cm', 1)}${th('GW/ctn kg', 1)}${th('Total CBM', 1)}</tr>
-    ${rows.map(x => `<tr>${td(x.carton_no)}${td([x.description, x.sku].filter(Boolean).join(' · '))}${td(n(x.cartons), 1)}${td(n(x.quantity), 1)}${td(x.length_cm ? `${Number(x.length_cm)}×${Number(x.width_cm)}×${Number(x.height_cm)}` : '', 1)}${td(n(x.gross_weight_kg), 1)}${td(x.length_cm ? (x.length_cm * x.width_cm * x.height_cm / 1e6 * x.cartons).toFixed(3) : '', 1)}</tr>`).join('')}
-    <tr><td style="padding:8px;font-weight:700;font-size:13px;">TOTAL</td><td></td><td style="padding:8px;text-align:right;font-weight:700;font-size:13px;">${n(t.cartons)}</td><td></td><td></td><td style="padding:8px;text-align:right;font-weight:700;font-size:13px;">${n(t.gross)} kg</td><td style="padding:8px;text-align:right;font-weight:700;font-size:13px;">${t.cbm}</td></tr>
+    <tr>${pkg ? th('No.') + th('Package') + th('Description') + th('Pkgs', 1) + th('Qty/pkg', 1) + th('L×W×H cm', 1) + th('GW/pkg kg', 1) + th('Total CBM', 1) : th('CTN No.') + th('Description') + th('Ctns', 1) + th('Pcs/ctn', 1) + th('L×W×H cm', 1) + th('GW/ctn kg', 1) + th('Total CBM', 1)}</tr>
+    ${pkg ? rows.map(x => `<tr>${td(x.carton_no)}${td(x.package_type)}${td([x.description, x.sku].filter(Boolean).join(' · '))}${td(n(x.cartons), 1)}${td(n(x.quantity) + ' ' + (x.unit || ''), 1)}${td(x.length_cm ? `${Number(x.length_cm)}×${Number(x.width_cm)}×${Number(x.height_cm)}` : '', 1)}${td(n(x.gross_weight_kg), 1)}${td(x.length_cm ? (x.length_cm * x.width_cm * x.height_cm / 1e6 * x.cartons).toFixed(3) : '', 1)}</tr>`).join('') : ''}
+    ${pkg ? '' : rows.map(x => `<tr>${td(x.carton_no)}${td([x.description, x.sku].filter(Boolean).join(' · '))}${td(n(x.cartons), 1)}${td(n(x.quantity), 1)}${td(x.length_cm ? `${Number(x.length_cm)}×${Number(x.width_cm)}×${Number(x.height_cm)}` : '', 1)}${td(n(x.gross_weight_kg), 1)}${td(x.length_cm ? (x.length_cm * x.width_cm * x.height_cm / 1e6 * x.cartons).toFixed(3) : '', 1)}</tr>`).join('')}
+    ${pkg ? `<tr><td style="padding:8px;font-weight:700;font-size:13px;">TOTAL</td><td></td><td></td><td style="padding:8px;text-align:right;font-weight:700;font-size:13px;">${n(t.cartons)}</td><td></td><td></td><td style="padding:8px;text-align:right;font-weight:700;font-size:13px;">${n(t.gross)} kg</td><td style="padding:8px;text-align:right;font-weight:700;font-size:13px;">${t.cbm}</td></tr>` : `<tr><td style="padding:8px;font-weight:700;font-size:13px;">TOTAL</td><td></td><td style="padding:8px;text-align:right;font-weight:700;font-size:13px;">${n(t.cartons)}</td><td></td><td></td><td style="padding:8px;text-align:right;font-weight:700;font-size:13px;">${n(t.gross)} kg</td><td style="padding:8px;text-align:right;font-weight:700;font-size:13px;">${t.cbm}</td></tr>`}
   </table>
   <p style="font-size:15px;line-height:1.6;color:#2f3a4a;margin-top:20px;">Please fill in the yellow cells of the quotation form: your contact details, date quoted and validity, main freight (unit price per kg or cbm), documentation and any extra service, the total, shipping date, and whether you pick up from our supplier or the supplier delivers to your warehouse.<br><span style="color:#6b7686;font-size:14px;">请填写报价单黄色部分：联系人信息、报价日期及有效期、主运费单价（按公斤或立方）、文件费及其他服务、总价、开船日期，以及上门提货或送货入仓。</span></p>
   <div style="margin:16px 0 18px;padding:12px 16px;border:1px solid #f1c2c2;border-left:4px solid #c62828;border-radius:8px;background:#fdf3f3;font-size:14px;line-height:1.6;color:#c62828;">

@@ -82,3 +82,17 @@ test('draftPacking: packages from quantity ÷ quantity per package, with warning
   assert.equal(d.t.cartons, 190); assert.equal(d.t.gross, 57000); assert.equal(d.t.cbm, 95);
   assert.equal(d.lines.filter(x => x.problem).length, 2);   // unit mismatch for Cable, no answer for Bag
 });
+
+test('draft packing keeps the package type and unit from the supplier answer', async () => {
+  const { draftPacking, draftPackingText, draftRfqWorkbook } = await import('../src/lib/rfq-packing.js');
+  const { rfqEmail } = await import('../src/lib/email-templates.js');
+  const rfq = { ref: 'R', items: [{ id: 'a', description: 'Rope', quantity: 95000, unit: 'm' }, { id: 'b', description: 'Rope 2', quantity: 8000, unit: 'm' }] };
+  const resp = { lines: [{ item_id: 'a', carton_qty: 500, price_unit: 'm', package_type: 'Roll', carton_l: 60, carton_w: 60, carton_h: 40, gross_kg: 274 }, { item_id: 'b', carton_qty: 500, price_unit: 'm', package_type: 'Drum / reel', carton_l: 95, carton_w: 95, carton_h: 70, gross_kg: 1236 }] };
+  const d = draftPacking({ rfq, resp });
+  assert.equal(d.t.pkgSummary, '190 Roll + 16 Drum / reel');
+  assert.equal(d.t.qtySummary, '103,000 m');
+  assert.match(draftPackingText({ origin: 'Gaoyou, China', d }), /190 × Roll — Rope: 500 m per roll/);
+  const mail = rfqEmail({ order: { order_no: 'FQ-1' }, rows: d.rows, t: d.t, info: {} });
+  assert.match(mail.html, /Roll/); assert.match(mail.html, /500 m/); assert.doesNotMatch(mail.html, /Pcs\/ctn/);
+  assert.ok(draftRfqWorkbook({ order: { order_no: 'FQ-1' }, rows: d.rows, t: d.t, ref: 'FQ-1', token: 'x' }).length > 1000);
+});

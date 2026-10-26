@@ -48,7 +48,7 @@ export function quoteFormSheet({ order, info = {}, t, ref, token }) {
   let r = add([{ v: 'FREIGHT QUOTATION · 运费报价单', s: 'title' }], 26); merges.push(`A${r}:E${r}`);
 
   const route = [info.pol, info.pod].filter(Boolean).join(' → ');
-  const cargo = [`${t.cartons} ctns`, `${t.gross} kg`, `${t.cbm} cbm`, isAir(info.mode) && t.chargeableAir ? `chargeable ${t.chargeableAir} kg` : null].filter(Boolean).join(' · ');
+  const cargo = [`${t.cartons} ${t.pkgWord || 'ctns'}`, `${t.gross} kg`, `${t.cbm} cbm`, isAir(info.mode) && t.chargeableAir ? `chargeable ${t.chargeableAir} kg` : null].filter(Boolean).join(' · ');
   const facts = [
     ['Request 询价', [ref, order.order_no, info.mode].filter(Boolean).join(' · ')],
     ['Route 路线', [route, info.incoterm].filter(Boolean).join(' · ')],

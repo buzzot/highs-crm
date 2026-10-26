@@ -4,7 +4,7 @@ import { admin } from './supabase.js';
 import { sendEmail } from './mailer.js';
 import { replyAddress, subjectTag } from './freight.js';
 import { rfqEmail } from './email-templates.js';
-import { rfqWorkbook } from './quote-form.js';
+import { draftRfqWorkbook } from './rfq-packing.js';
 
 export const FREIGHT_MODES = ['Sea FCL', 'Sea LCL', 'Air', 'Express', 'Rail', 'Truck'];
 const INFO = ['mode', 'pol', 'pod', 'incoterm', 'ready_date', 'remarks'];
@@ -15,7 +15,7 @@ async function createRequest({ rfq, supplierName, d, info, message, userId }) {
   const t = d.t;
   const { data: fr, error } = await admin.from('freight_requests').insert({
     order_id: null, rfq_id: rfq.id, label: [rfq.ref, supplierName].filter(Boolean).join(' · '), cargo: d.rows, info,
-    totals: { cartons: t.cartons, pieces: t.pieces, gross_kg: t.gross, cbm: t.cbm }, message: message || null, created_by: userId,
+    totals: { cartons: t.cartons, pieces: t.pieces, gross_kg: t.gross, cbm: t.cbm, packages: t.pkgSummary, qty: t.qtySummary }, message: message || null, created_by: userId,
   }).select('*').single();
   if (error) throw new Error(/order_id|rfq_id|label|cargo|null value/.test(error.message) ? 'Run supabase/migrations/0034_freight_from_rfq.sql first.' : error.message);
   return fr;
@@ -32,7 +32,7 @@ export async function emailFreightRequest({ rfq, supplierName, d, info, targets,
     try {
       const m = rfqEmail({ order, info, rows: d.rows, t: d.t, message, senderName: user.full_name, forwarderName: tg.fw?.contact_name || tg.fw?.name });
       await sendEmail({ to: tg.email, ...m, subject: `${m.subject} ${subjectTag(fr.ref, row.token)}`, replyTo: replyAddress(row.token, user.email),
-        attachments: [{ filename: `${fr.ref}-quotation-packing-list.xlsx`, content: rfqWorkbook({ order, info, rows: d.rows, t: d.t, ref: fr.ref, token: row.token }) }] });
+        attachments: [{ filename: `${fr.ref}-quotation-packing-list.xlsx`, content: draftRfqWorkbook({ order, info, rows: d.rows, t: d.t, ref: fr.ref, token: row.token }) }] });
       sent.push(tg.fw?.name || tg.email);
     } catch (e) {
       await admin.from('freight_rfqs').delete().eq('id', row.id);

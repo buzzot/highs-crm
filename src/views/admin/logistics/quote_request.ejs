@@ -22,7 +22,7 @@
 </div>
 
 <div class="kpis">
-  <div class="kpi"><span class="n"><%= tt.cartons ?? '—' %></span><span class="l">Cartons · <%= Number(tt.pieces || 0).toLocaleString('en-US') %> pcs</span></div>
+  <div class="kpi"><span class="n"><%= tt.cartons ?? '—' %></span><span class="l"><%= tt.packages ? 'Packages · ' + tt.packages + ' · ' + tt.qty : 'Cartons · ' + Number(tt.pieces || 0).toLocaleString('en-US') + ' pcs' %></span></div>
   <div class="kpi"><span class="n"><%= tt.gross_kg ?? '—' %> kg</span><span class="l">Gross weight</span></div>
   <div class="kpi"><span class="n"><%= tt.cbm ?? '—' %></span><span class="l">CBM</span></div>
   <div class="kpi"><span class="n"><%= rfqs.filter(r => r.quote_amount != null).length %> / <%= rfqs.length %></span><span class="l">Forwarders quoted</span></div>
@@ -73,7 +73,7 @@
       <dt>Route</dt><dd><%= i.pol || '—' %> → <%= i.pod || '—' %></dd>
       <dt>Shipping date (ETD)</dt><dd><input type="date" name="etd" value="<%= etd %>"></dd>
       <dt>ETA</dt><dd><input type="date" name="eta" value="<%= eta %>"></dd>
-      <dt>Weight / volume</dt><dd><%= tt.gross_kg ?? '—' %> kg · <%= tt.cbm ?? '—' %> cbm · <%= tt.cartons ?? '—' %> ctns</dd>
+      <dt>Weight / volume</dt><dd><%= tt.gross_kg ?? '—' %> kg · <%= tt.cbm ?? '—' %> cbm · <%= tt.cartons ?? '—' %> <%= tt.packages ? 'packages' : 'ctns' %></dd>
       <dt>Amount</dt><dd><strong class="okamount"><%= fmt.money(r.quote_amount, r.quote_currency || 'USD') %></strong></dd>
     </dl>
     <p class="muted small"><%= r.channel === 'email' ? 'Submit creates the shipment and emails ' + r.sent_to + ' a booking confirmation, asking for the loading port, direct or transshipment, and the latest date to receive the goods.' : 'Submit creates the shipment. This forwarder was contacted by WeChat, so the booking text will be shown on this page to copy.' %></p>

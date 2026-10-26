@@ -12,6 +12,7 @@ import multer from '../../lib/multer-utf8.js';
 import { uploadDocument, deleteDocument } from '../../lib/storage.js';
 import { getCompany, ciPdf, ciNo, packingListPdf } from '../../lib/purchase.js';
 import { packingData } from '../../lib/packing-store.js';
+import { draftRfqWorkbook, pkgSummary, qtySummary } from '../../lib/rfq-packing.js';
 import { rfqWorkbook } from '../../lib/quote-form.js';
 import { totals as packTotals } from '../../lib/packing.js';
 import { sendEmail } from '../../lib/mailer.js';
@@ -111,7 +112,10 @@ r.get('/quotes/:id/rfq/:rid/form.xlsx', async (req, res) => {
       admin.from('packing_lists').select('*').eq('order_id', rfq.order_id).order('position').order('carton_no'),
     ]);
   } else { order = { order_no: fr.ref }; rows = fr.cargo || []; }   // a draft packing list sent from an RFQ keeps its own lines
-  const buf = rfqWorkbook({ order, info: fr.info || {}, rows: rows || [], t: packTotals(rows || []), ref: fr.ref, token: rfq.token });
+  const tt = packTotals(rows || []);
+  if (!rfq.order_id) { tt.pkgSummary = pkgSummary(rows || []); tt.qtySummary = qtySummary(rows || []); }
+  const buf = rfq.order_id ? rfqWorkbook({ order, info: fr.info || {}, rows: rows || [], t: tt, ref: fr.ref, token: rfq.token })
+    : draftRfqWorkbook({ order, info: fr.info || {}, rows: rows || [], t: tt, ref: fr.ref, token: rfq.token });
   res.set({ 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="${fr.ref}-quotation-packing-list-${order.order_no}.xlsx"` });
   res.send(buf);
 });
