@@ -19,6 +19,7 @@ import { fmt } from './lib/format.js';
 import { admin } from './lib/supabase.js';
 import { icon } from './lib/icons.js';
 import { homeFor } from './lib/util.js';
+import { repairDocumentTitles } from './lib/storage.js';
 import { aiContext, getPrices, usageLine } from './lib/ai-usage.js';
 import { showValue, deliveryLabel } from './lib/request-revisions.js';
 
@@ -151,5 +152,5 @@ export default app;
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const port = process.env.PORT || 3000;
-  app.listen(port, () => console.log(`Lumi Trade CRM listening on :${port}`));
+  app.listen(port, () => { console.log(`Lumi Trade CRM listening on :${port}`); repairDocumentTitles().then(n => n && console.log(`Repaired ${n} garbled document title(s)`)).catch(() => {}); });
 }

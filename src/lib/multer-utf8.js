@@ -1,11 +1,12 @@
 // multer reads uploaded file names as latin-1, so "纸箱.xlsx" arrives as "ç®±.xlsx". This wrapper has the same API as
 // multer but repairs every uploaded file name to the UTF-8 the browser actually sent.
 import multer from 'multer';
+import { healText } from './heal-text.js';
+export { healText };
 
 export function fixName(s) {
   if (typeof s !== 'string' || !s || /[^\x00-\xff]/.test(s)) return s;   // plain ASCII or already real Unicode: leave it
-  const d = Buffer.from(s, 'latin1').toString('utf8');
-  return d.includes('�') ? s : d;
+  return healText(s);
 }
 
 function wrap(mw) {

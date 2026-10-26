@@ -103,3 +103,10 @@ test('PDF text: Cyrillic has real glyphs and a width', () => {
   assert.ok(textWidth('Канат', 10) > 20);
   assert.ok(wrap('Москва, ул. Ленина, д. 5, офис 12 Москва, ул. Ленина', 80, 10).length > 1);
 });
+
+test('healText repairs UTF-8 file names that were read as latin-1, even inside a longer title', async () => {
+  const { healText } = await import('../src/lib/heal-text.js');
+  assert.equal(healText('Supplier packing list — ' + Buffer.from('纸箱.xlsx').toString('latin1')), 'Supplier packing list — 纸箱.xlsx');
+  assert.equal(healText(Buffer.from('Канат.pdf').toString('latin1')), 'Канат.pdf');
+  assert.equal(healText('Café — ok.pdf'), 'Café — ok.pdf');
+});
