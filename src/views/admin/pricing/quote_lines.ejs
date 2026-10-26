@@ -1,0 +1,86 @@
+<%- include('../../partials/head') %>
+<%
+  const min = settings.pricing.min_margin_pct;
+  const money = (v, c) => fmt.money(v, c, 2);
+%>
+<div class="pagehead"><div><a class="back" href="/admin/sourcing/<%= request.id %>">← <%= request.ref %></a>
+  <h1>Quote all products <span class="muted">· <%= lines.length %> product<%= lines.length === 1 ? '' : 's' %></span></h1>
+  <p class="muted"><%= request.organizations?.name || '' %> · <%= request.title %>. One quote line per product — saved as drafts, then you review and send them together.</p></div></div>
+<% if (error) { %><div class="alert err"><%= error %></div><% } %>
+
+<% if (answers.length) { %>
+<div class="card">
+  <form method="get" class="row" style="align-items:end">
+    <label class="grow2">Fill the prices from an RFQ answer
+      <select name="rs" onchange="this.form.submit()"><option value="">— type them in —</option><% answers.forEach(a => { %><option value="<%= a.id %>" <%= answer && answer.id === a.id ? 'selected' : '' %>><%= a.label %></option><% }) %></select></label>
+    <p class="muted small grow2" style="margin:0 0 6px">Factory price, currency and supplier come from the supplier's answer. Anything you typed on this page is replaced.</p>
+  </form>
+</div>
+<% } %>
+
+<form method="post" action="/admin/pricing/requests/<%= request.id %>/quote-lines" id="qlForm" data-min="<%= min %>">
+  <div class="card">
+    <h2>For the whole quotation</h2>
+    <div class="row">
+      <label>Selling currency <select name="sell_currency" id="ql_sell"><% currencies.forEach(c => { %><option <%= c === shared.sell_currency ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+      <label>Incoterm <select name="incoterm"><% incoterms.forEach(i => { %><option <%= i === shared.incoterm ? 'selected' : '' %>><%= i %></option><% }) %></select></label>
+      <label>Lead time (days) <input type="number" name="lead_time_days" min="0" value="<%= shared.lead_time_days %>"></label>
+      <label>Valid until <input type="date" name="valid_until" value="<%= shared.valid_until || '' %>"></label>
+      <label>Freight on the quotation <select name="freight_mode"><option value="separate" <%= shared.freight_mode !== 'included' ? 'selected' : '' %>>Shown as a separate line</option><option value="included" <%= shared.freight_mode === 'included' ? 'selected' : '' %>>Included in the unit prices</option></select></label>
+    </div>
+  </div>
+
+  <% lines.forEach((l, i) => { const it = l.item; const n = 'line[' + i + ']'; %>
+  <section class="pq ql" data-i="<%= i %>">
+    <header class="pq-h">
+      <span class="pq-no"><%= i + 1 %></span>
+      <div class="pq-t"><strong><%= it.name %></strong><% if (it.sku) { %> <span class="muted small"><%= it.sku %></span><% } %>
+        <div class="muted small">Client asks for <%= it.quantity ? Number(it.quantity).toLocaleString('en-US') + ' ' + (it.unit || 'pcs') : 'no quantity' %><%= it.target_unit_price ? ' · target ' + it.target_unit_price + ' each' : '' %></div></div>
+      <span class="pq-qty"><span class="muted small">Sell price each</span><strong class="ql-price">—</strong></span>
+    </header>
+    <div class="pq-sec">
+      <input type="hidden" name="<%= n %>[item_id]" value="<%= it.id %>"><input type="hidden" name="<%= n %>[quote_id]" value="<%= l.quote_id %>">
+      <div class="pq-grid g4">
+        <label>Supplier <select name="<%= n %>[supplier_id]"><option value="">—</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= l.supplier_id === s.id ? 'selected' : '' %>><%= s.name %></option><% }) %></select></label>
+        <label>Catalog product <span class="muted small">optional</span><select name="<%= n %>[product_id]"><option value="">— none —</option><% products.forEach(p => { %><option value="<%= p.id %>" <%= l.product_id === p.id ? 'selected' : '' %>><%= p.name %><%= p.sku ? ' · ' + p.sku : '' %></option><% }) %></select></label>
+        <label>Quantity <input type="number" min="1" name="<%= n %>[quantity]" class="ql-qty" value="<%= l.quantity %>"></label>
+        <label>Freight for this line <span class="muted small" id="ql_fcur<%= i %>"><%= shared.sell_currency %></span><input type="number" step="0.01" min="0" name="<%= n %>[freight]" class="ql-fr" value="<%= l.freight %>"></label>
+      </div>
+      <div class="pq-grid g4" style="margin-top:12px">
+        <label>Factory price <input type="number" step="0.0001" min="0" name="<%= n %>[unit_cost]" class="ql-cost" value="<%= l.unit_cost %>"></label>
+        <label>Currency <select name="<%= n %>[cost_currency]" class="ql-ccur"><% currencies.forEach(c => { %><option <%= c === l.cost_currency ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+        <label>Margin % on cost <span class="muted small">min <%= min %>%</span><input type="number" step="0.1" min="0" name="<%= n %>[margin_pct]" class="ql-mar" value="<%= l.margin_pct %>"></label>
+        <div class="ql-res"><span class="lbl muted small">Line total</span><strong class="ql-total">—</strong><span class="ql-warn small"></span></div>
+      </div>
+      <% if (l.note) { %><p class="small ql-note <%= /check the price|no price/.test(l.note) ? 'bad' : 'muted' %>"><%= l.note %></p><% } %>
+    </div>
+  </section>
+  <% }) %>
+
+  <div class="card ql-sum"><div class="row" style="align-items:center"><strong>Goods total</strong><strong id="ql_goods" style="margin-left:auto">—</strong></div>
+    <p class="muted small" style="margin:6px 0 0">Margin is on the product cost only; freight is passed through. Products without a factory price are skipped — you can add them later.</p></div>
+  <div class="actions"><button class="btn primary">Save quote lines</button><a class="btn" href="/admin/sourcing/<%= request.id %>">Cancel</a></div>
+</form>
+<script type="application/json" id="qlRates"><%- JSON.stringify(rates) %></script>
+<script>
+(function () {
+  const rates = JSON.parse(document.getElementById('qlRates').textContent), form = document.getElementById('qlForm'), min = Number(form.dataset.min);
+  const sell = document.getElementById('ql_sell'), fmt = (v, c) => new Intl.NumberFormat('en-US', { style: 'currency', currency: c, maximumFractionDigits: 2 }).format(v);
+  function calc() {
+    let goods = 0, any = false;
+    form.querySelectorAll('.ql').forEach(sec => {
+      const cost = parseFloat(sec.querySelector('.ql-cost').value), q = parseInt(sec.querySelector('.ql-qty').value, 10) || 0;
+      const mar = parseFloat(sec.querySelector('.ql-mar').value) || 0, cc = sec.querySelector('.ql-ccur').value;
+      const out = sec.querySelector('.ql-price'), tot = sec.querySelector('.ql-total'), warn = sec.querySelector('.ql-warn');
+      sec.querySelector('[id^=ql_fcur]').textContent = sell.value;
+      if (!(cost > 0)) { out.textContent = '—'; tot.textContent = '—'; warn.textContent = ''; return; }
+      const price = cost * ((rates[cc] || {})[sell.value] || 1) * (1 + mar / 100);
+      out.textContent = fmt(price, sell.value); tot.textContent = fmt(price * q, sell.value); goods += price * q; any = true;
+      warn.textContent = mar < min ? ' · margin below ' + min + '%' : ''; warn.style.color = '#b42318';
+    });
+    document.getElementById('ql_goods').textContent = any ? fmt(goods, sell.value) : '—';
+  }
+  form.addEventListener('input', calc); form.addEventListener('change', calc); calc();
+})();
+</script>
+<%- include('../../partials/foot') %>

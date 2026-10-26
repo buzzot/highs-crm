@@ -24,6 +24,7 @@
       <% const selReq = requests.find(r => r.id === q.request_id); const selItems = (selReq?.request_items || []).slice().sort((a, b) => a.position - b.position); %>
       <label id="f_item_wrap" <%= selItems.length ? '' : 'hidden' %>>Product in this request
         <select name="request_item_id" id="f_item"><option value="">— whole request —</option><% selItems.forEach(i => { %><option value="<%= i.id %>" <%= q.request_item_id === i.id ? 'selected' : '' %>><%= i.name %><%= i.quantity ? ' · ' + i.quantity + ' ' + (i.unit || 'pcs') : '' %></option><% }) %></select></label>
+      <p id="f_all" class="small" <%= selItems.length > 1 ? '' : 'hidden' %>>This request has <strong id="f_all_n"><%= selItems.length %></strong> products — <a id="f_all_a" href="/admin/pricing/requests/<%= q.request_id %>/quote-lines"><strong>price them all in one form →</strong></a></p>
       <div class="row">
         <label class="grow2">Product <select data-picker="Product" name="product_id" id="f_product"><option value="">— custom —</option><option value="__new__">＋ New product…</option><% products.forEach(p => { %><option value="<%= p.id %>" <%= q.product_id === p.id ? 'selected' : '' %>><%= p.name %><%= p.sku ? ' · ' + p.sku : '' %></option><% }) %></select></label>
         <label class="grow2">Supplier <span class="muted small" id="f_supplier_note" hidden>from the product</span><select data-picker name="supplier_id" id="f_supplier"><option value="">—</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" data-lead="<%= s.lead_time_days || '' %>" <%= q.supplier_id === s.id ? 'selected' : '' %>><%= s.name %></option><% }) %></select></label>
@@ -112,4 +113,13 @@
   <div class="actions"><button type="button" class="btn" id="np_cancel">Cancel</button><button type="button" class="btn primary" id="np_save">Add product</button></div>
 </dialog>
 <% } %>
+<script>
+  (function () {
+    const sel = document.getElementById('f_request'), box = document.getElementById('f_all'); if (!sel || !box) return;
+    const data = JSON.parse(document.getElementById('pricingData').textContent);
+    const upd = () => { const r = (data.requests || []).find(x => x.id === sel.value); const n = r && r.items ? r.items.length : 0; box.hidden = n < 2;
+      if (n > 1) { document.getElementById('f_all_n').textContent = n; document.getElementById('f_all_a').href = '/admin/pricing/requests/' + r.id + '/quote-lines'; } };
+    sel.addEventListener('change', upd); upd();
+  })();
+</script>
 <script type="module" src="/js/calc.js?v=<%= typeof assetV === 'undefined' ? '' : assetV %>"></script>

@@ -1487,3 +1487,8 @@ html[lang=ru] .pill::first-letter, html[lang=ru] .badge::first-letter { text-tra
 .pkgtable td:nth-child(7), .pkgtable th:nth-child(7) { white-space: nowrap; }
 .pkgtable td:nth-child(8), .pkgtable th:nth-child(8) { white-space: nowrap; }
 @media print { .pkgtable td:nth-child(3) { min-width: 0; } .pkgtable td:nth-child(4) { min-width: 150px; } }
+.ql { margin-bottom: 14px; }
+.ql-res { display: grid; align-content: end; gap: 2px; padding-bottom: 6px; }
+.ql-res strong { font-size: 17px; }
+.ql-note { margin: 8px 0 0; }
+.ql-sum { margin-bottom: 14px; }
