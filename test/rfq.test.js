@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { keptFiles, placeFiles, cleanItems, cleanResponse, compare, currentResponses, rfqSupplierEmail } from '../src/lib/rfq.js';
+import { withQuantities, keptFiles, placeFiles, cleanItems, cleanResponse, compare, currentResponses, rfqSupplierEmail } from '../src/lib/rfq.js';
 
 const items = cleanItems({ item: { 0: { id: 'a', description: ' Lamp ', quantity: '1,000', unit: '' }, 1: { description: '' }, 2: { id: 'b', description: 'Cable', quantity: '-5' } } });
 
@@ -63,4 +63,11 @@ test('answer files: kept + new files land on their product, only earlier files c
   assert.deepEqual(placed.lines.find(l => l.item_id === 'a').file_ids, ['a2', 'a3']);
   assert.deepEqual(placed.lines.find(l => l.item_id === 'b').file_ids, ['b1']);   // a product with only files still gets a line
   assert.equal(placed.lines.length, 2);
+});
+
+test('withQuantities changes only quantity and unit of a sent RFQ', () => {
+  const items = [{ id: 'a', description: 'Rope', quantity: 95000, unit: 'm', sku: 'X' }, { id: 'b', description: 'Cable', quantity: 10, unit: 'pcs' }];
+  const out = withQuantities(items, { 0: { id: 'a', description: 'HACK', quantity: '120,000', unit: 'kg' }, 1: { id: 'b', quantity: 'abc', unit: '' } });
+  assert.equal(out[0].quantity, 120000); assert.equal(out[0].unit, 'kg'); assert.equal(out[0].description, 'Rope');
+  assert.equal(out[1].quantity, 10); assert.equal(out[1].unit, 'pcs');
 });

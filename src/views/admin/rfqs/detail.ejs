@@ -22,7 +22,7 @@
 <div class="card">
   <h2>Comparison <span class="muted small">prices in <%= rfq.currency %> per unit, lowest highlighted</span></h2>
   <div class="tablewrap"><table class="tbl cmp">
-    <thead><tr><th>Product</th><th class="right">Qty</th><% rs.forEach(s => { %><th class="right"><%= s.suppliers.name %><div class="muted small"><%= rsLabels[s.status] %></div></th><% }) %></tr></thead>
+    <thead><tr><th>Product</th><th class="right">Qty <a href="#details" class="small" title="Edit quantities">✎ edit</a></th><% rs.forEach(s => { %><th class="right"><%= s.suppliers.name %><div class="muted small"><%= rsLabels[s.status] %></div></th><% }) %></tr></thead>
     <tbody>
     <% cmp.rows.forEach(row => { %>
       <tr><td><strong><%= row.item.description %></strong><% if (row.item.sku) { %><div class="muted small"><%= row.item.sku %></div><% } %></td>
@@ -130,7 +130,7 @@
 <% }) %>
 
 <form method="post" action="/admin/rfqs/<%= rfq.id %>" class="stack">
-<div class="card">
+<div class="card" id="details">
   <h2>RFQ details</h2>
   <div class="grid2">
     <label>Title<input name="title" value="<%= rfq.title %>" maxlength="200"></label>
@@ -147,15 +147,15 @@
       <tr>
         <td><input type="hidden" name="item[<%= i %>][id]" value="<%= it.id %>"><input type="hidden" name="item[<%= i %>][request_item_id]" value="<%= it.request_item_id || '' %>"><input type="hidden" name="item[<%= i %>][spec]" value="<%= JSON.stringify(it.spec || {}) %>"><input name="item[<%= i %>][description]" value="<%= it.description %>" <%= draft ? '' : 'readonly' %>></td>
         <td><input name="item[<%= i %>][sku]" value="<%= it.sku || '' %>" size="10" <%= draft ? '' : 'readonly' %>></td>
-        <td><input name="item[<%= i %>][quantity]" value="<%= it.quantity ?? '' %>" size="7" class="right" <%= draft ? '' : 'readonly' %>></td>
-        <td><input name="item[<%= i %>][unit]" value="<%= it.unit || 'pcs' %>" size="5" <%= draft ? '' : 'readonly' %>></td>
+        <td><input name="item[<%= i %>][quantity]" value="<%= it.quantity ?? '' %>" size="7" class="right" inputmode="decimal"></td>
+        <td><input name="item[<%= i %>][unit]" value="<%= it.unit || 'pcs' %>" size="5"></td>
         <td><input name="item[<%= i %>][notes]" value="<%= it.notes || '' %>" <%= draft ? '' : 'readonly' %>></td>
         <td><% if (draft) { %><button type="button" class="link small danger" data-rm>Remove</button><% } %></td>
       </tr>
     <% }) %>
     </tbody>
   </table>
-  <% if (draft) { %><p><button type="button" class="btn small" id="addItem">+ Add product</button></p><% } else { %><p class="muted small">Products can't be changed after the RFQ is sent, so everyone answers the same list.</p><% } %>
+  <% if (draft) { %><p><button type="button" class="btn small" id="addItem">+ Add product</button></p><% } else { %><p class="muted small">After sending you can still change the quantity and unit; the products themselves stay the same so every supplier answers the same list. Suppliers see a new quantity straight away, but prices they already gave are not changed — let them know.</p><% } %>
   <div class="actions"><button class="btn primary">Save</button></div>
 </div>
 </form>

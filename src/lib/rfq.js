@@ -130,3 +130,16 @@ export function placeFiles(lines, items, kept, uploaded) {
   }
   return { lines: out, file_ids: [...kept.general, ...uploaded.general] };
 }
+
+/** After an RFQ is sent: take only the new quantity and unit per product (matched by id); everything else stays as sent. */
+export function withQuantities(items = [], form = {}) {
+  const given = {};
+  for (const x of arr(form)) if (x && x.id) given[String(x.id)] = x;
+  return items.map(it => {
+    const x = given[it.id];
+    if (!x) return it;
+    const raw = String(x.quantity ?? '').replace(/[,\s]/g, '');
+    const q = numOrNull(raw);
+    return { ...it, quantity: raw === '' ? null : q > 0 ? q : it.quantity, unit: txt(x.unit, 20) || it.unit };
+  });
+}

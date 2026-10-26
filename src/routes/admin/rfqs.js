@@ -11,7 +11,7 @@ import { addUsage } from '../../lib/ai-usage.js';
 import { CHECKABLE, isImage, toReview, unchecked, cleanReview, MAX_FILES, reviewTotals, sendWarning } from '../../lib/rfq-files.js';
 import { back, notFound, getSettings, INCOTERMS } from '../../lib/util.js';
 import { answerUpload, uploadAnswerFiles } from '../../lib/rfq-answer-files.js';
-import { keptFiles, placeFiles, cleanItems, cleanResponse, compare, currentResponses, rfqSupplierEmail, RFQ_STATUS_LABEL, RS_LABEL, RFQ_CURRENCIES } from '../../lib/rfq.js';
+import { withQuantities, keptFiles, placeFiles, cleanItems, cleanResponse, compare, currentResponses, rfqSupplierEmail, RFQ_STATUS_LABEL, RS_LABEL, RFQ_CURRENCIES } from '../../lib/rfq.js';
 
 const r = Router();
 const filesUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: MAX_FILES } });
@@ -152,6 +152,12 @@ r.post('/:id', async (req, res) => {
     const items = cleanItems(b);
     if (!items.length) return back(res, to, { err: 'Keep at least one product.' });
     patch.items = items; patch.currency = RFQ_CURRENCIES.includes(b.currency) ? b.currency : x.rfq.currency;
+  } else {
+    const items = withQuantities(x.rfq.items, b.item);   // sent RFQ: only quantity and unit can change, same product list
+    if (JSON.stringify(items) !== JSON.stringify(x.rfq.items)) {
+      patch.items = items;
+      await log({ entityType: x.rfq.request_id ? 'request' : 'supplier', entityId: x.rfq.request_id || x.rs[0]?.supplier_id, action: 'rfq_quantity_changed', actorId: req.user.id, detail: { note: x.rfq.ref } }).catch(() => {});
+    }
   }
   await admin.from('rfqs').update(patch).eq('id', x.rfq.id);
   back(res, to, { msg: 'Saved.' });
