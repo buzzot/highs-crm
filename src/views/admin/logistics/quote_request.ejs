@@ -21,6 +21,21 @@
   <% if (fr.orders) { %><div class="actions"><a class="btn" href="/admin/orders/<%= fr.orders.id %>/packing-list">Packing list</a></div><% } %>
 </div>
 
+<% if (!fr.orders && Array.isArray(fr.cargo) && fr.cargo.length) { const nf = v => (v == null || v === '' ? '' : Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 })); %>
+<div class="card" id="packing" style="margin-top:14px"><h2>Packing list <span class="muted small">draft estimate · what the forwarders received</span></h2>
+  <div class="table-scroll"><table class="tbl">
+    <thead><tr><th>Pkg No.</th><th class="right">Pkgs</th><th>Package</th><th>Description</th><th>Item / SKU</th><th class="right">Qty/pkg</th><th class="right">L × W × H cm</th><th class="right">GW/pkg kg</th><th class="right">Total GW kg</th></tr></thead>
+    <tbody><% fr.cargo.forEach(x => { const c = Number(x.cartons || 1); %>
+      <tr><td><%= x.carton_no %></td><td class="right num"><%= c %></td><td><%= x.package_type || '—' %></td><td><%= x.description || '—' %></td><td><%= x.sku || '' %></td>
+        <td class="right num"><%= nf(x.quantity) %> <%= x.unit || '' %></td>
+        <td class="right num"><%= x.length_cm ? `${x.length_cm} × ${x.width_cm} × ${x.height_cm}` : '—' %></td>
+        <td class="right num"><%= nf(x.gross_weight_kg) %></td><td class="right num"><%= x.gross_weight_kg != null ? nf(x.gross_weight_kg * c) : '' %></td></tr>
+    <% }) %></tbody>
+  </table></div>
+  <% if (fr.rfq_id) { %><p class="muted small" style="margin-top:8px">Printable PDF / Excel version: open <a href="/admin/rfqs/<%= fr.rfq_id %>">the RFQ</a> → supplier answer → Draft packing list.</p><% } %>
+</div>
+<% } %>
+
 <div class="kpis">
   <div class="kpi"><span class="n"><%= tt.cartons ?? '—' %></span><span class="l"><%= tt.packages ? 'Packages · ' + tt.packages + ' · ' + tt.qty : 'Cartons · ' + Number(tt.pieces || 0).toLocaleString('en-US') + ' pcs' %></span></div>
   <div class="kpi"><span class="n"><%= tt.gross_kg ?? '—' %> kg</span><span class="l">Gross weight</span></div>

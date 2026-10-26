@@ -48,7 +48,7 @@
          const last = [fr.created_at, ...rs.map(x => x.received_at)].sort().pop();
          const i = fr.info || {}, tt = fr.totals || {}; %>
       <tr>
-        <td><a href="/admin/logistics/quotes/<%= fr.id %>"><%= fr.ref %></a><div class="muted small"><%= fmt.datetime(fr.created_at) %></div></td>
+        <td><a href="/admin/logistics/quotes/<%= fr.id %>"><%= fr.ref %></a><div class="muted small"><%= fmt.datetime(fr.created_at) %></div><div class="small"><a href="<%= fr.orders ? '/admin/orders/' + fr.orders.id + '/packing-list' : '/admin/logistics/quotes/' + fr.id + '#packing' %>">Packing list</a></div></td>
         <td><% if (fr.orders) { %><a href="/admin/orders/<%= fr.orders.id %>/packing-list"><%= fr.orders.order_no %></a><div class="muted small"><%= fr.orders.organizations?.name || '' %></div><% } else if (fr.label) { %><a href="/admin/rfqs/<%= fr.rfq_id %>"><%= fr.label %></a><div class="muted small">draft packing, no order yet</div><% } %></td>
         <td class="small"><%= [i.mode, [i.pol, i.pod].filter(Boolean).join(' → ')].filter(Boolean).join(' · ') || '—' %><div class="muted"><%= tt.cartons ? tt.cartons + ' ctns · ' + tt.gross_kg + ' kg · ' + tt.cbm + ' cbm' : '' %></div></td>
         <td class="small"><%= rf.map(x => x.forwarders?.name || 'other').join(', ') || '—' %></td>
