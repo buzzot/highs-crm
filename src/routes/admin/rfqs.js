@@ -12,7 +12,7 @@ import { CHECKABLE, isImage, toReview, unchecked, cleanReview, MAX_FILES, review
 import { back, notFound, getSettings, INCOTERMS } from '../../lib/util.js';
 import { answerUpload, uploadAnswerFiles } from '../../lib/rfq-answer-files.js';
 import { FREIGHT_MODES, cleanInfo, emailsIn, emailFreightRequest, recordWechatRequest } from '../../lib/freight-from-rfq.js';
-import { draftPacking, draftPackingText, draftPackingWorkbook } from '../../lib/rfq-packing.js';
+import { factoryPlace, draftPacking, draftPackingText, draftPackingWorkbook } from '../../lib/rfq-packing.js';
 import { withQuantities, keptFiles, placeFiles, cleanItems, cleanResponse, compare, currentResponses, rfqSupplierEmail, RFQ_STATUS_LABEL, RS_LABEL, RFQ_CURRENCIES } from '../../lib/rfq.js';
 
 const r = Router();
@@ -124,7 +124,7 @@ async function load(id) {
   const { data: rfq } = await admin.from('rfqs').select('*, requests(id, ref, title)').eq('id', id).maybeSingle();
   if (!rfq) return null;
   const [{ data: rs }, { data: responses }] = await Promise.all([
-    admin.from('rfq_suppliers').select('*, suppliers(id, name, email, contact_name)').eq('rfq_id', id).order('created_at'),
+    admin.from('rfq_suppliers').select('*, suppliers(id, name, email, contact_name, city, country)').eq('rfq_id', id).order('created_at'),
     admin.from('rfq_responses').select('*').eq('rfq_id', id).order('created_at', { ascending: false }),
   ]);
   return { rfq, rs: rs || [], responses: responses || [] };
@@ -161,7 +161,7 @@ r.get('/:id/packing/:rs', async (req, res) => {
     admin.from('forwarders').select('*').order('name'),
     admin.from('freight_requests').select('id, ref, created_at, info, freight_rfqs!freight_rfqs_request_id_fkey(id, status, quote_amount, quote_currency, sent_to, forwarders(name))').eq('rfq_id', p.x.rfq.id).order('created_at', { ascending: false }),
   ]);
-  res.render('admin/rfqs/packing', { title: `Draft packing · ${p.x.rfq.ref}`, rfq: p.x.rfq, s: p.s, resp: p.resp, d, text: draftPackingText({ rfq: p.x.rfq, supplier: p.s.suppliers?.name, d }),
+  res.render('admin/rfqs/packing', { title: `Draft packing · ${p.x.rfq.ref}`, rfq: p.x.rfq, s: p.s, resp: p.resp, d, origin: factoryPlace(p.s.suppliers), text: draftPackingText({ origin: factoryPlace(p.s.suppliers), d }),
     forwarders: forwarders || [], modes: FREIGHT_MODES, sentRequests: sent.error ? [] : sent.data || [], msg: req.query.msg, err: req.query.err });
 });
 // ask forwarders for a freight quote with this draft packing list

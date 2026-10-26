@@ -25,14 +25,17 @@ export function draftPacking({ rfq, resp }) {
   return { lines, rows: norm, t, warnings };
 }
 
-export function draftPackingText({ rfq, supplier, d }) {
+/** Where the goods are: city (and country) of the supplier. Forwarders get this, never the supplier's name. */
+export const factoryPlace = sup => [sup?.city, sup?.country].map(x => String(x || '').trim()).filter(Boolean).join(', ');
+
+export function draftPackingText({ origin, d }) {
   const n = v => (v == null ? '' : Number(v).toLocaleString('en-US'));
-  return [`Draft packing — ${rfq.ref}${supplier ? ' · ' + supplier : ''}`, `Total: ${d.t.cartons} packages · GW ${d.t.gross} kg · ${d.t.cbm} cbm`, '',
-    ...d.rows.map(x => `${x.cartons} × ${x.description}: ${n(x.quantity)} per package · ${x.length_cm ? `${x.length_cm}×${x.width_cm}×${x.height_cm} cm` : 'size ?'} · GW ${n(x.gross_weight_kg)} kg each`)].join('\n');
+  return ['Draft packing list (estimate)', origin ? `Goods location: ${origin}` : null, `Total: ${d.t.cartons} packages · GW ${d.t.gross} kg · ${d.t.cbm} cbm`, '',
+    ...d.rows.map(x => `${x.cartons} × ${x.description}: ${n(x.quantity)} per package · ${x.length_cm ? `${x.length_cm}×${x.width_cm}×${x.height_cm} cm` : 'size ?'} · GW ${n(x.gross_weight_kg)} kg each`)].filter(l => l !== null).join('\n');
 }
 
 export function draftPackingWorkbook({ rfq, d }) {
-  const pl = packingSheet({ order: { order_no: `${rfq.ref} (draft estimate)` }, rows: d.rows, t: d.t });
+  const pl = packingSheet({ order: { order_no: 'Draft estimate' }, rows: d.rows, t: d.t });
   const hdr = pl.findIndex(x => x[0] === 'CTN No.'), tot = pl.findIndex(x => x[0] === 'TOTAL');
   return writeWorkbook([{ name: 'Draft packing list', landscape: true, widths: [10, 8, 34, 14, 12, 9, 10, 8, 8, 8, 9, 10, 11, 12, 11, 12], freeze: hdr + 1,
     rows: pl.map((row, ri) => (row || []).map(v => (ri === hdr ? { v, s: 'header' } : (ri === 0 || ri === tot) && v !== '' && v != null ? { v, s: 'bold' } : v))) }]);

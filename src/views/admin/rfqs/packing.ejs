@@ -6,7 +6,7 @@
 <div class="pagehead noprint">
   <div><a class="back" href="/admin/rfqs/<%= rfq.id %>">← <%= rfq.ref %></a>
     <h1>Draft packing list</h1>
-    <p class="muted"><%= s.suppliers ? s.suppliers.name : '' %> · estimate from the supplier's answer — for freight calculations before there is an order</p></div>
+    <p class="muted"><%= s.suppliers ? s.suppliers.name : '' %> (shown only here — the PDF, Excel and emails show just the goods location) · estimate from the supplier's answer — for freight calculations before there is an order</p></div>
   <div class="actions">
     <a class="btn" href="/admin/rfqs/<%= rfq.id %>/packing/<%= s.id %>/xlsx">⇩ Excel</a>
     <button class="btn" onclick="window.print()">Print / PDF</button>
@@ -18,8 +18,7 @@
   <div class="plhead">
     <div><div class="plbrand">Lumi<span>Trade</span></div><div class="pltitle">PACKING LIST</div><div class="muted small" style="margin-top:4px;letter-spacing:.06em">DRAFT · ESTIMATE FROM SUPPLIER QUOTE</div></div>
     <dl class="plmeta">
-      <dt>Reference</dt><dd><%= rfq.ref %></dd>
-      <% if (s.suppliers) { %><dt>Supplier</dt><dd><%= s.suppliers.name %></dd><% } %>
+            <% if (origin) { %><dt>Goods location</dt><dd><%= origin %></dd><% } %>
       <dt>Date</dt><dd><%= fmt.date(new Date()) %></dd>
     </dl>
   </div>
@@ -84,7 +83,7 @@
       <label>Cargo ready <input type="date" name="ready_date"></label>
     </div>
     <div class="row">
-      <label>Port / city of loading <input name="pol" placeholder="Shenzhen (Yantian)"></label>
+      <label>Port / city of loading <input name="pol" value="<%= origin || '' %>" placeholder="Shenzhen (Yantian)"></label>
       <label>Destination <input name="pod" placeholder="Los Angeles, CA / door address"></label>
     </div>
     <label>Cargo notes <span class="muted small">— battery, fragile, needs pickup…</span><textarea name="remarks" rows="2">Estimated packing from the supplier's quote — the final packing list will follow.</textarea></label>
