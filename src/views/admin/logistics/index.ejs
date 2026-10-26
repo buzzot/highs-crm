@@ -49,7 +49,7 @@
          const i = fr.info || {}, tt = fr.totals || {}; %>
       <tr>
         <td><a href="/admin/logistics/quotes/<%= fr.id %>"><%= fr.ref %></a><div class="muted small"><%= fmt.datetime(fr.created_at) %></div></td>
-        <td><% if (fr.orders) { %><a href="/admin/orders/<%= fr.orders.id %>/packing-list"><%= fr.orders.order_no %></a><div class="muted small"><%= fr.orders.organizations?.name || '' %></div><% } %></td>
+        <td><% if (fr.orders) { %><a href="/admin/orders/<%= fr.orders.id %>/packing-list"><%= fr.orders.order_no %></a><div class="muted small"><%= fr.orders.organizations?.name || '' %></div><% } else if (fr.label) { %><a href="/admin/rfqs/<%= fr.rfq_id %>"><%= fr.label %></a><div class="muted small">draft packing, no order yet</div><% } %></td>
         <td class="small"><%= [i.mode, [i.pol, i.pod].filter(Boolean).join(' → ')].filter(Boolean).join(' · ') || '—' %><div class="muted"><%= tt.cartons ? tt.cartons + ' ctns · ' + tt.gross_kg + ' kg · ' + tt.cbm + ' cbm' : '' %></div></td>
         <td class="small"><%= rf.map(x => x.forwarders?.name || 'other').join(', ') || '—' %></td>
         <td class="right num"><%= quoted.length %> / <%= rf.length %><% if (rs.length) { %><div class="muted small"><%= rs.length %> repl<%= rs.length === 1 ? 'y' : 'ies' %></div><% } %></td>

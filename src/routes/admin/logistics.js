@@ -101,13 +101,16 @@ r.post('/quotes/:id/response', quoteFiles, async (req, res) => {
 
 // the quotation form + packing list for one forwarder (e.g. to send by WeChat) — tagged with their token
 r.get('/quotes/:id/rfq/:rid/form.xlsx', async (req, res) => {
-  const { data: rfq } = await admin.from('freight_rfqs').select('*, freight_requests!freight_rfqs_request_id_fkey(ref, info)').eq('id', req.params.rid).eq('request_id', req.params.id).maybeSingle();
+  const { data: rfq } = await admin.from('freight_rfqs').select('*, freight_requests!freight_rfqs_request_id_fkey(ref, info, cargo)').eq('id', req.params.rid).eq('request_id', req.params.id).maybeSingle();
   if (!rfq) return notFound(res, 'Quote request');
-  const [{ data: order }, { data: rows }] = await Promise.all([
-    admin.from('orders').select('id, order_no').eq('id', rfq.order_id).single(),
-    admin.from('packing_lists').select('*').eq('order_id', rfq.order_id).order('position').order('carton_no'),
-  ]);
   const fr = rfq.freight_requests || {};
+  let order, rows;
+  if (rfq.order_id) {
+    [{ data: order }, { data: rows }] = await Promise.all([
+      admin.from('orders').select('id, order_no').eq('id', rfq.order_id).single(),
+      admin.from('packing_lists').select('*').eq('order_id', rfq.order_id).order('position').order('carton_no'),
+    ]);
+  } else { order = { order_no: fr.ref }; rows = fr.cargo || []; }   // a draft packing list sent from an RFQ keeps its own lines
   const buf = rfqWorkbook({ order, info: fr.info || {}, rows: rows || [], t: packTotals(rows || []), ref: fr.ref, token: rfq.token });
   res.set({ 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="${fr.ref}-quotation-packing-list-${order.order_no}.xlsx"` });
   res.send(buf);
@@ -121,6 +124,7 @@ r.post('/quotes/:id/rfq/:rid/book', async (req, res) => {
   const { data: rfq } = await admin.from('freight_rfqs').select('*, forwarders(id, name, contact_name, email)').eq('id', req.params.rid).eq('request_id', req.params.id).maybeSingle();
   if (!rfq) return notFound(res, 'Quote request');
   if (rfq.status !== 'accepted' || rfq.quote_amount == null) return back(res, to, { err: 'Only an accepted quotation can be booked. Set its status to Accepted first.' });
+  if (!rfq.order_id) return back(res, to, { err: 'This quote was requested from a draft packing list, so there is no order to ship yet. Create the order first.' });
   const [{ data: fr }, { data: order }, { data: rows }, { data: resp }] = await Promise.all([
     admin.from('freight_requests').select('*').eq('id', rfq.request_id).single(),
     admin.from('orders').select('id, order_no, currency').eq('id', rfq.order_id).single(),

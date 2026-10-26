@@ -71,3 +71,14 @@ test('withQuantities changes only quantity and unit of a sent RFQ', () => {
   assert.equal(out[0].quantity, 120000); assert.equal(out[0].unit, 'kg'); assert.equal(out[0].description, 'Rope');
   assert.equal(out[1].quantity, 10); assert.equal(out[1].unit, 'pcs');
 });
+
+test('draftPacking: packages from quantity ÷ quantity per package, with warnings for gaps', async () => {
+  const { draftPacking } = await import('../src/lib/rfq-packing.js');
+  const rfq = { ref: 'R', items: [{ id: 'a', description: 'Rope', quantity: 95000, unit: 'm' }, { id: 'b', description: 'Cable', quantity: 100, unit: 'kg' }, { id: 'c', description: 'Bag', quantity: 10, unit: 'pcs' }] };
+  const resp = { lines: [{ item_id: 'a', carton_qty: 500, price_unit: 'm', package_type: 'Roll', carton_l: 100, carton_w: 100, carton_h: 50, gross_kg: 300 }, { item_id: 'b', carton_qty: 20, price_unit: 'pcs' }] };
+  const d = draftPacking({ rfq, resp });
+  assert.equal(d.rows.length, 1);
+  assert.equal(d.rows[0].cartons, 190);
+  assert.equal(d.t.cartons, 190); assert.equal(d.t.gross, 57000); assert.equal(d.t.cbm, 95);
+  assert.equal(d.lines.filter(x => x.problem).length, 2);   // unit mismatch for Cable, no answer for Bag
+});

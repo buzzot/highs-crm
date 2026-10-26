@@ -17,7 +17,7 @@
 <div class="pagehead">
   <div><a class="back" href="/admin/logistics#quote-requests">← Logistics</a>
     <h1><%= fr.ref %> · freight quote request</h1>
-    <p class="muted"><% if (fr.orders) { %><a href="/admin/orders/<%= fr.orders.id %>/packing-list"><%= fr.orders.order_no %></a> · <%= fr.orders.organizations?.name || '' %> · <% } %>sent <%= fmt.datetime(fr.created_at) %> by <%= fr.profiles?.full_name || fr.profiles?.email || '—' %></p></div>
+    <p class="muted"><% if (fr.orders) { %><a href="/admin/orders/<%= fr.orders.id %>/packing-list"><%= fr.orders.order_no %></a> · <%= fr.orders.organizations?.name || '' %> · <% } else if (fr.label) { %><% if (fr.rfq_id) { %><a href="/admin/rfqs/<%= fr.rfq_id %>"><%= fr.label %></a><% } else { %><%= fr.label %><% } %> · draft packing, no order yet · <% } %>sent <%= fmt.datetime(fr.created_at) %> by <%= fr.profiles?.full_name || fr.profiles?.email || '—' %></p></div>
   <% if (fr.orders) { %><div class="actions"><a class="btn" href="/admin/orders/<%= fr.orders.id %>/packing-list">Packing list</a></div><% } %>
 </div>
 
@@ -48,7 +48,8 @@
           <form method="post" action="/admin/logistics/quotes/<%= fr.id %>/rfq/<%= r.id %>/status" class="autosubmit inline">
             <select name="status" class="pillselect" aria-label="Status"><% Object.entries(RFQ).forEach(([k, l]) => { %><option value="<%= k %>" <%= r.status === k ? 'selected' : '' %>><%= l %></option><% }) %></select>
           </form>
-          <% if (r.status === 'accepted' && r.quote_amount != null) { %>
+          <% if (r.status === 'accepted' && r.quote_amount != null && !fr.order_id) { %><span class="muted small">Create the order to book</span>
+          <% } else if (r.status === 'accepted' && r.quote_amount != null) { %>
             <button type="button" class="btn primary small" data-book="book-<%= r.id %>"><%= r.booking_sent_at ? 'Resend booking' : 'Book' %></button>
             <% if (r.shipment_id) { %><a class="small" href="/admin/logistics/shipments/<%= r.shipment_id %>">Shipment →</a><% } %>
           <% } %>

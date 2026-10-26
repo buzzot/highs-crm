@@ -11,6 +11,8 @@ import { addUsage } from '../../lib/ai-usage.js';
 import { CHECKABLE, isImage, toReview, unchecked, cleanReview, MAX_FILES, reviewTotals, sendWarning } from '../../lib/rfq-files.js';
 import { back, notFound, getSettings, INCOTERMS } from '../../lib/util.js';
 import { answerUpload, uploadAnswerFiles } from '../../lib/rfq-answer-files.js';
+import { FREIGHT_MODES, cleanInfo, emailsIn, emailFreightRequest, recordWechatRequest } from '../../lib/freight-from-rfq.js';
+import { draftPacking, draftPackingText, draftPackingWorkbook } from '../../lib/rfq-packing.js';
 import { withQuantities, keptFiles, placeFiles, cleanItems, cleanResponse, compare, currentResponses, rfqSupplierEmail, RFQ_STATUS_LABEL, RS_LABEL, RFQ_CURRENCIES } from '../../lib/rfq.js';
 
 const r = Router();
@@ -140,6 +142,62 @@ r.get('/:id', async (req, res) => {
   const fileDocs = fids.map(id => (fdocs || []).find(d => d.id === id)).filter(Boolean);
   res.render('admin/rfqs/detail', { fileDocs, fileReview: x.rfq.file_review || {}, sendWarn: sendWarning(reviewTotals(fids, x.rfq.file_review || {})), aiOn: aiEnabled(), maxFiles: MAX_FILES, title: x.rfq.ref, ...x, current: currentResponses(x.responses), cmp: compare({ items: x.rfq.items, suppliers: x.rs, responses: x.responses, currency: x.rfq.currency, settings }),
     docs: docs || [], addable: (all || []).filter(s => !invited.has(s.id)), labels: RFQ_STATUS_LABEL, rsLabels: RS_LABEL, currencies: RFQ_CURRENCIES, incoterms: INCOTERMS, msg: req.query.msg, err: req.query.err });
+});
+
+// draft packing list from a supplier's answer (no order needed): packages, weight and volume for freight calculations
+async function packingOf(req) {
+  const x = await load(req.params.id);
+  const s = x?.rs.find(v => v.id === req.params.rs);
+  if (!s) return null;
+  const resp = currentResponses(x.responses)[s.id];
+  return { x, s, resp: resp && resp.status === 'confirmed' ? resp : null };
+}
+r.get('/:id/packing/:rs', async (req, res) => {
+  const p = await packingOf(req);
+  if (!p) return notFound(res, 'RFQ');
+  if (!p.resp) return back(res, `/admin/rfqs/${p.x.rfq.id}`, { err: 'This supplier has not sent prices yet.' });
+  const d = draftPacking({ rfq: p.x.rfq, resp: p.resp });
+  const [{ data: forwarders }, sent] = await Promise.all([
+    admin.from('forwarders').select('*').order('name'),
+    admin.from('freight_requests').select('id, ref, created_at, info, freight_rfqs!freight_rfqs_request_id_fkey(id, status, quote_amount, quote_currency, sent_to, forwarders(name))').eq('rfq_id', p.x.rfq.id).order('created_at', { ascending: false }),
+  ]);
+  res.render('admin/rfqs/packing', { title: `Draft packing · ${p.x.rfq.ref}`, rfq: p.x.rfq, s: p.s, resp: p.resp, d, text: draftPackingText({ rfq: p.x.rfq, supplier: p.s.suppliers?.name, d }),
+    forwarders: forwarders || [], modes: FREIGHT_MODES, sentRequests: sent.error ? [] : sent.data || [], msg: req.query.msg, err: req.query.err });
+});
+// ask forwarders for a freight quote with this draft packing list
+r.post('/:id/packing/:rs/send', async (req, res) => {
+  const p = await packingOf(req);
+  if (!p || !p.resp) return notFound(res, 'RFQ');
+  const to = `/admin/rfqs/${p.x.rfq.id}/packing/${p.s.id}`;
+  const d = draftPacking({ rfq: p.x.rfq, resp: p.resp });
+  if (!d.rows.length) return back(res, to, { err: 'There is nothing to send yet — the draft packing list is empty.' });
+  const ids = [].concat(req.body.forwarder_ids || []).filter(Boolean);
+  const { data: fws } = ids.length ? await admin.from('forwarders').select('*').in('id', ids) : { data: [] };
+  const targets = [...(fws || []).filter(f => f.email).map(f => ({ fw: f, email: f.email })), ...emailsIn(req.body.extra_emails).map(email => ({ fw: null, email }))];
+  if (!targets.length) return back(res, to, { err: 'Choose a forwarder with an email address, or type an email.' });
+  try {
+    const { fr, sent, failed } = await emailFreightRequest({ rfq: p.x.rfq, supplierName: p.s.suppliers?.name, d, info: cleanInfo(req.body), targets, message: String(req.body.message || '').trim().slice(0, 3000), user: req.user });
+    if (sent.length && !failed.length) return res.redirect(`/admin/logistics/quotes/${fr.id}?msg=` + encodeURIComponent(`${fr.ref} sent to ${sent.join(', ')}.`));
+    back(res, to, { err: `${sent.length ? `${fr.ref} sent to ${sent.join(', ')}. ` : ''}Failed: ${failed.join(' · ')}` });
+  } catch (e) { back(res, to, { err: e.message }); }
+});
+r.post('/:id/packing/:rs/wechat', async (req, res) => {
+  const p = await packingOf(req);
+  if (!p || !p.resp) return notFound(res, 'RFQ');
+  const to = `/admin/rfqs/${p.x.rfq.id}/packing/${p.s.id}`;
+  const d = draftPacking({ rfq: p.x.rfq, resp: p.resp });
+  if (!d.rows.length) return back(res, to, { err: 'There is nothing to send yet — the draft packing list is empty.' });
+  try {
+    const fr = await recordWechatRequest({ rfq: p.x.rfq, supplierName: p.s.suppliers?.name, d, info: cleanInfo(req.body), forwarderId: req.body.forwarder_id || null, user: req.user });
+    res.redirect(`/admin/logistics/quotes/${fr.id}?msg=` + encodeURIComponent(`${fr.ref} recorded as sent by WeChat — paste the reply here when it comes.`));
+  } catch (e) { back(res, to, { err: e.message }); }
+});
+r.get('/:id/packing/:rs/xlsx', async (req, res) => {
+  const p = await packingOf(req);
+  if (!p || !p.resp) return notFound(res, 'RFQ');
+  const d = draftPacking({ rfq: p.x.rfq, resp: p.resp });
+  res.set({ 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="draft-packing-${p.x.rfq.ref}.xlsx"` });
+  res.send(draftPackingWorkbook({ rfq: p.x.rfq, d }));
 });
 
 r.post('/:id', async (req, res) => {

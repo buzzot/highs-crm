@@ -111,7 +111,7 @@
 
 <% rs.filter(s => s.status !== 'draft').forEach(s => { const resp = current[s.id]; %>
 <div class="card">
-  <h2><%= s.suppliers.name %> <span class="pill <%= s.status === 'replied' ? 'accepted' : s.status === 'declined' ? 'declined' : 'quoted' %>"><%= rsLabels[s.status] %></span></h2>
+  <h2><%= s.suppliers.name %> <span class="pill <%= s.status === 'replied' ? 'accepted' : s.status === 'declined' ? 'declined' : 'quoted' %>"><%= rsLabels[s.status] %></span><% if (resp && resp.status === 'confirmed') { %><span class="hactions"><a class="btn small" href="/admin/rfqs/<%= rfq.id %>/packing/<%= s.id %>"><%- icon('file') %> Draft packing list</a></span><% } %></h2>
   <% if (resp && resp.status === 'declined') { %><p class="muted">The supplier can't quote this.<%= resp.note ? ' “' + resp.note + '”' : '' %></p><% } %>
   <% if (resp && resp.status === 'confirmed') { %>
     <p class="small muted">Answered <%= fmt.datetime(resp.created_at) %> · via <%= ({ portal: 'supplier portal', email: 'email', manual: 'entered by staff' })[resp.source] %></p>

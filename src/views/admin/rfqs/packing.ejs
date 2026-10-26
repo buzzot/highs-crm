@@ -1,0 +1,95 @@
+<%- include('../../partials/head') %>
+<%
+  const n0 = v => v == null || v === '' ? '' : Number(v).toLocaleString('en-US');
+  const dims = x => x.length_cm ? `${Number(x.length_cm)} × ${Number(x.width_cm)} × ${Number(x.height_cm)}` : '—';
+%>
+<div class="pagehead noprint">
+  <div><a class="back" href="/admin/rfqs/<%= rfq.id %>">← <%= rfq.ref %></a>
+    <h1>Draft packing list</h1>
+    <p class="muted"><%= s.suppliers ? s.suppliers.name : '' %> · estimate from the supplier's answer — for freight calculations before there is an order</p></div>
+  <div class="actions">
+    <a class="btn" href="/admin/rfqs/<%= rfq.id %>/packing/<%= s.id %>/xlsx">⇩ Excel</a>
+    <button class="btn" onclick="window.print()">Print / PDF</button>
+  </div>
+</div>
+<% if (typeof msg !== 'undefined' && msg) { %><div class="alert ok"><%= msg %></div><% } %><% if (typeof err !== 'undefined' && err) { %><div class="alert err"><%= err %></div><% } %>
+<% d.warnings.forEach(w => { %><div class="alert warn"><%= w %></div><% }) %>
+<div class="card">
+  <h2>Cargo <span class="muted small">a partly filled last package counts as a full one</span></h2>
+  <div class="tablewrap"><table class="tbl">
+    <thead><tr><th>Product</th><th class="right">Quantity</th><th>Package</th><th class="right">Per package</th><th class="right">Packages</th><th class="right">Size L × W × H cm</th><th class="right">CBM</th><th class="right">Gross kg each</th><th class="right">Gross kg total</th></tr></thead>
+    <tbody>
+    <% d.lines.forEach(x => { const l = x.line || {}; const c = x.packages; const cbm = l.carton_l && l.carton_w && l.carton_h ? l.carton_l * l.carton_w * l.carton_h / 1e6 : null; %>
+      <tr>
+        <td><strong><%= x.item.description %></strong><% if (x.item.sku) { %><div class="muted small"><%= x.item.sku %></div><% } %><% if (x.problem) { %><div class="small" style="color:#b45309"><%= x.problem %></div><% } %></td>
+        <td class="right num"><%= n0(x.item.quantity) %> <%= x.item.unit || '' %></td>
+        <td><%= l.package_type || '—' %></td>
+        <td class="right num"><%= n0(l.carton_qty) %> <%= l.carton_qty ? (l.price_unit || x.item.unit || '') : '' %></td>
+        <td class="right num"><strong><%= c != null ? n0(c) : '—' %></strong></td>
+        <td class="right num"><%= dims({ length_cm: l.carton_l, width_cm: l.carton_w, height_cm: l.carton_h }) %></td>
+        <td class="right num"><%= cbm != null && c != null ? (cbm * c).toFixed(3) : '' %></td>
+        <td class="right num"><%= l.gross_kg != null ? n0(l.gross_kg) : '' %></td>
+        <td class="right num"><%= l.gross_kg != null && c != null ? n0(Math.round(l.gross_kg * c * 100) / 100) : '' %></td>
+      </tr>
+    <% }) %>
+    </tbody>
+    <tfoot><tr><td><strong>Total</strong></td><td></td><td></td><td></td><td class="right num"><strong><%= n0(d.t.cartons) %></strong></td><td></td><td class="right num"><strong><%= d.t.cbm %></strong></td><td></td><td class="right num"><strong><%= n0(d.t.gross) %></strong></td></tr></tfoot>
+  </table></div>
+  <p class="muted small">For forwarders: air chargeable ≈ <%= n0(d.t.chargeableAir) %> kg (volumetric <%= n0(d.t.volumetricAir) %> kg at 1:6000) · sea LCL W/M <%= d.t.wm %></p>
+</div>
+<div class="card noprint">
+  <h2>Text to copy <span class="muted small">for WeChat or an email to a forwarder</span></h2>
+  <textarea class="wechat" id="dpText" rows="7" readonly><%= text %></textarea>
+  <div class="actions"><button type="button" class="btn" id="dpCopy">Copy text</button></div>
+</div>
+<div class="card noprint" id="send">
+  <h2>Ask forwarders for a freight quote</h2>
+  <% if (!d.rows.length) { %><p class="muted">There is nothing to send yet — fix the warnings above first.</p><% } else { %>
+  <p class="muted small">Each forwarder gets this packing list as an Excel with a quotation form, and replies by email. Their answers collect under Logistics → Freight quote requests. The cargo is an estimate; say so in the notes.</p>
+  <form method="post" action="/admin/rfqs/<%= rfq.id %>/packing/<%= s.id %>/send" id="freightForm">
+    <div class="row">
+      <label>Mode <select name="mode"><option value="">—</option><% modes.forEach(m => { %><option><%= m %></option><% }) %></select></label>
+      <label>Incoterm <input name="incoterm" placeholder="FOB Shenzhen"></label>
+      <label>Cargo ready <input type="date" name="ready_date"></label>
+    </div>
+    <div class="row">
+      <label>Port / city of loading <input name="pol" placeholder="Shenzhen (Yantian)"></label>
+      <label>Destination <input name="pod" placeholder="Los Angeles, CA / door address"></label>
+    </div>
+    <label>Cargo notes <span class="muted small">— battery, fragile, needs pickup…</span><textarea name="remarks" rows="2">Estimated packing from the supplier's quote — the final packing list will follow.</textarea></label>
+    <% if (!forwarders.length) { %><p class="muted small">No forwarders yet — add them under <a href="/admin/logistics">Logistics</a>, or type email addresses below.</p><% } %>
+    <div class="fwlist">
+      <% forwarders.forEach(f => { %>
+        <label class="fwopt <%= f.email ? '' : 'noemail' %>">
+          <input type="checkbox" name="forwarder_ids" value="<%= f.id %>" <%= f.email ? '' : 'disabled' %>>
+          <span><strong><%= f.name %></strong><small><%= f.email || 'no email — WeChat only' %><%= f.wechat ? ' · WeChat ' + f.wechat : '' %></small></span>
+        </label>
+      <% }) %>
+    </div>
+    <label>Other emails <span class="muted small">— comma separated</span><input name="extra_emails" placeholder="quotes@forwarder.com"></label>
+    <label>Message <textarea name="message" rows="3" placeholder="e.g. Please quote door-to-door incl. US customs clearance. Pickup in Jiangsu."></textarea></label>
+    <div class="actions"><button class="btn primary">✉ Send packing list</button>
+      <span class="muted small">Or by WeChat:</span>
+      <select name="forwarder_id" class="w-auto"><option value="">forwarder…</option><% forwarders.forEach(f => { %><option value="<%= f.id %>"><%= f.name %></option><% }) %></select>
+      <button class="btn small" formaction="/admin/rfqs/<%= rfq.id %>/packing/<%= s.id %>/wechat">Mark as sent by WeChat</button>
+    </div>
+  </form>
+  <% } %>
+  <% if (sentRequests.length) { %>
+  <h3>Already requested <span class="count"><%= sentRequests.length %></span></h3>
+  <table class="tbl"><thead><tr><th>Request</th><th>Sent to</th><th class="right">Best quote</th></tr></thead><tbody>
+  <% sentRequests.forEach(fr => { const rf = fr.freight_rfqs || []; const q = rf.filter(x => x.quote_amount != null).sort((a, b) => Number(a.quote_amount) - Number(b.quote_amount))[0]; %>
+    <tr><td><a href="/admin/logistics/quotes/<%= fr.id %>"><%= fr.ref %></a><div class="muted small"><%= fmt.datetime(fr.created_at) %></div></td>
+      <td class="small"><%= rf.map(x => x.forwarders?.name || x.sent_to).join(', ') %></td>
+      <td class="right num"><%= q ? fmt.money(q.quote_amount, q.quote_currency || 'USD') : '—' %></td></tr>
+  <% }) %></tbody></table>
+  <% } %>
+</div>
+<script>
+  document.getElementById('dpCopy').addEventListener('click', async e => {
+    const t = document.getElementById('dpText');
+    try { await navigator.clipboard.writeText(t.value); } catch { t.select(); document.execCommand('copy'); }
+    e.target.textContent = 'Copied ✓'; setTimeout(() => { e.target.textContent = 'Copy text'; }, 2000);
+  });
+</script>
+<%- include('../../partials/foot') %>

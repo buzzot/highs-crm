@@ -59,11 +59,16 @@ export async function saveResponse({ rfq, channel, from = null, subject = null, 
     form.message = body.slice(0, 2000);
   }
 
-  // 3. keep the files with the order (internal)
+  // 3. keep the files with the order — or with the RFQ when the request came from a draft packing list (internal)
+  let home = rfq.order_id ? { type: 'order', id: rfq.order_id } : null;
+  if (!home) {
+    const { data: frq } = await admin.from('freight_requests').select('rfq_id').eq('id', rfq.request_id).maybeSingle();
+    if (frq?.rfq_id) home = { type: 'rfq', id: frq.rfq_id };
+  }
   const stored = [];
-  for (const f of att) {
+  for (const f of home ? att : []) {
     try {
-      const doc = await uploadDocument({ file: { ...f, size: f.size ?? f.buffer.length }, entityType: 'order', entityId: rfq.order_id, kind: 'other', title: `Freight quote — ${f.originalname}`, clientVisible: false, uploadedBy: userId });
+      const doc = await uploadDocument({ file: { ...f, size: f.size ?? f.buffer.length }, entityType: home.type, entityId: home.id, kind: 'other', title: `Freight quote — ${f.originalname}`, clientVisible: false, uploadedBy: userId });
       stored.push({ id: doc.id, name: f.originalname });
     } catch (e) { notes.push(`${f.originalname} not stored: ${e.message}`); }
   }
@@ -103,6 +108,6 @@ export async function saveResponse({ rfq, channel, from = null, subject = null, 
       transit_days: final.transit_days ?? null, valid_until: isoDate(final.valid_until), quoted_at: new Date().toISOString(),
     }).eq('id', rfq.id);
   }
-  await log({ entityType: 'order', entityId: rfq.order_id, action: 'freight_quote_received', actorId: userId, detail: { note: final.summary || `${channel} reply from ${from || 'forwarder'}` } });
+  if (rfq.order_id) await log({ entityType: 'order', entityId: rfq.order_id, action: 'freight_quote_received', actorId: userId, detail: { note: final.summary || `${channel} reply from ${from || 'forwarder'}` } });
   return { response: resp, extracted: final, usage };
 }
