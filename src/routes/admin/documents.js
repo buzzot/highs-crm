@@ -12,7 +12,7 @@ import { orderLang } from '../../lib/lang.js';
 
 const r = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
-const ENTITIES = ['request', 'quote', 'order', 'shipment', 'product', 'supplier'];
+const ENTITIES = ['request', 'quote', 'order', 'shipment', 'product', 'supplier', 'freight_cost'];
 const safeBack = u => (typeof u === 'string' && u.startsWith('/admin') ? u : '/admin');
 
 // Generic upload used by the documents panel on every detail page

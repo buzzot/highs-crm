@@ -243,6 +243,12 @@ r.get('/shipments/:id', async (req, res) => {
     getSettings(admin),
   ]);
   if (!s) return notFound(res, 'Shipment');
+  // forwarder invoice files, newest first per cost line
+  const costDocs = {};
+  if ((costs || []).length) {
+    const { data: cd } = await admin.from('documents').select('id, title, entity_id, created_at').eq('entity_type', 'freight_cost').in('entity_id', costs.map(c => c.id)).order('created_at', { ascending: false });
+    for (const d of cd || []) (costDocs[d.entity_id] ||= []).push(d);
+  }
   const { data: items } = await admin.from('order_items').select('*').eq('order_id', s.order_id);
   const { data: order } = await admin.from('orders').select('*').eq('id', s.order_id).single();
   // e-mail history of the documents + who the client is (for the "send" dialog)
@@ -261,7 +267,7 @@ r.get('/shipments/:id', async (req, res) => {
   const byType = {};
   (costs || []).forEach(c => { byType[c.type] = (byType[c.type] || 0) + Number(c.amount) * Number(c.fx_to_order || 1); });
   res.render('admin/logistics/shipment', {
-    title: `Shipment · ${s.orders?.order_no}`, s, costs: costs || [], docs: docs || [], sends, clientEmails, totalCost, byType,
+    title: `Shipment · ${s.orders?.order_no}`, s, costs: costs || [], costDocs, docs: docs || [], sends, clientEmails, totalCost, byType,
     land: landed(order || {}, items || []), order: order || {},
     cash: cashProfit({ received: await confirmedReceived(s.order_id, order?.currency), cost: order?.cost_total, freight: order?.freight_total, due: order?.amount_due }),
     freightTypes: FREIGHT_TYPES, statuses: SHIPMENT_STATUSES, currencies: CURRENCIES,

@@ -24,12 +24,12 @@ export function renderDocument(d) {
   const ensure = h => { if (y + h > BOTTOM) { pdf.addPage(); y = M; return true; } return false; };
 
   // header: seller left, title right
-  pdf.text(d.seller.name || 'Lumi Trade', M, y, { size: 17, bold: true, color: BRAND });
-  let sy = y + 24;
-  for (const l of d.seller.lines || []) { for (const w of wrap(l, 260, 9)) { pdf.text(w, M, sy, { size: 9, color: MUTED }); sy += 12; } }
-  pdf.text(d.title, M + W, y, { size: 20, bold: true, align: 'right' });
-  pdf.text(d.no, M + W, y + 28, { size: 11, bold: true, align: 'right' });
-  pdf.text(`Date: ${d.date}`, M + W, y + 44, { size: 9, color: MUTED, align: 'right' });
+  pdf.text(d.seller.name || 'Lumi Trade', M, y, { size: 15, bold: true, color: BRAND });
+  let sy = y + 22;
+  for (const l of d.seller.lines || []) { for (const w of wrap(l, 260, 9)) { pdf.text(w, M, sy, { size: 8.5, color: MUTED }); sy += 11.5; } }
+  pdf.text(d.title, M + W, y, { size: 17, bold: true, align: 'right', color: INK });
+  pdf.text(d.no, M + W, y + 26, { size: 10, bold: true, align: 'right' });
+  pdf.text(`Date: ${d.date}`, M + W, y + 41, { size: 8.5, color: MUTED, align: 'right' });
   if (d.status) pdf.text(d.status, M + W, y + 58, { size: 9, bold: true, color: BRAND, align: 'right' });
   y = Math.max(sy, y + 74) + 8;
   pdf.line(M, y, M + W, y, { width: 1, color: BRAND }); y += 14;
@@ -37,17 +37,17 @@ export function renderDocument(d) {
   // party box (left) and details (right)
   const colW = (W - 20) / 2;
   const boxTop = y;
-  pdf.text(d.partyLabel.toUpperCase(), M, y, { size: 8, bold: true, color: MUTED }); let py = y + 14;
-  pdf.text(d.party.name || '—', M, py, { size: 11, bold: true }); py += 15;
-  for (const l of d.party.lines || []) { for (const w of wrap(l, colW, 9.5)) { pdf.text(w, M, py, { size: 9.5 }); py += 12.5; } }
+  pdf.text(d.partyLabel.toUpperCase(), M, y, { size: 7.5, bold: true, color: MUTED }); let py = y + 14;
+  pdf.text(d.party.name || '—', M, py, { size: 10, bold: true }); py += 14;
+  for (const l of d.party.lines || []) { for (const w of wrap(l, colW, 9)) { pdf.text(w, M, py, { size: 9 }); py += 12; } }
   const rx = M + colW + 20; let ry = y;
-  pdf.text('DETAILS', rx, ry, { size: 8, bold: true, color: MUTED }); ry += 14;
+  pdf.text('DETAILS', rx, ry, { size: 7.5, bold: true, color: MUTED }); ry += 14;
   for (const [k, v] of d.meta || []) {
     if (v == null || v === '') continue;
-    const vl = wrap(String(v), colW - 105, 9.5, true);
-    pdf.text(k, rx, ry, { size: 9.5, color: MUTED });
-    vl.forEach((t, i) => pdf.text(t, rx + 105, ry + i * 12.5, { size: 9.5, bold: true }));
-    ry += Math.max(1, vl.length) * 12.5 + 2;
+    const vl = wrap(String(v), colW - 105, 9);
+    pdf.text(k, rx, ry, { size: 9, color: MUTED });
+    vl.forEach((t, i) => pdf.text(t, rx + 105, ry + i * 12, { size: 9 }));
+    ry += Math.max(1, vl.length) * 12 + 2;
   }
   y = Math.max(py, ry, boxTop + 40) + 14;
 
@@ -56,8 +56,8 @@ export function renderDocument(d) {
   const descW = cols.qty - cols.desc - 38;
   const head = () => {
     pdf.rect(M, y, W, 22, { fill: SOFT });
-    pdf.text('#', cols.n, y + 6, { size: 8.5, bold: true, color: MUTED });
-    pdf.text('DESCRIPTION', cols.desc, y + 6, { size: 8.5, bold: true, color: MUTED });
+    pdf.text('#', cols.n, y + 6, { size: 7.5, bold: true, color: MUTED });
+    pdf.text('DESCRIPTION', cols.desc, y + 6, { size: 7.5, bold: true, color: MUTED });
     pdf.text('QTY', cols.qty + 30, y + 6, { size: 8.5, bold: true, color: MUTED, align: 'right' });
     pdf.text(`PRICE (${d.currency})`, cols.price + 52, y + 6, { size: 8.5, bold: true, color: MUTED, align: 'right' });
     pdf.text('AMOUNT', cols.amt, y + 6, { size: 8.5, bold: true, color: MUTED, align: 'right' });
@@ -68,31 +68,31 @@ export function renderDocument(d) {
   (d.lines || []).forEach((l, i) => {
     const amount = Number(l.quantity || 0) * Number(l.unit_price || 0);
     total += amount;
-    const dl = [...wrap(l.description || '', descW, 9.5, true), ...(l.sku ? [`SKU / part no.: ${l.sku}`] : [])];
-    const h = dl.length * 12.5 + 10;
+    const dl = [...wrap(l.description || '', descW, 9), ...(l.sku ? [`SKU / part no.: ${l.sku}`] : [])];
+    const h = dl.length * 12 + 11;
     if (ensure(h + 4)) head();
-    pdf.text(String(i + 1), cols.n, y, { size: 9.5, color: MUTED });
-    dl.forEach((t, k) => pdf.text(t, cols.desc, y + k * 12.5, { size: 9.5, color: l.sku && k === dl.length - 1 ? MUTED : INK }));
-    pdf.text(`${qtyFmt(l.quantity)}${l.unit ? ' ' + l.unit : ''}`, cols.qty + 30, y, { size: 9.5, align: 'right' });
-    pdf.text(priceFmt(l.unit_price), cols.price + 52, y, { size: 9.5, align: 'right' });
-    pdf.text(money(amount), cols.amt, y, { size: 9.5, bold: true, align: 'right' });
+    pdf.text(String(i + 1), cols.n, y, { size: 9, color: MUTED });
+    dl.forEach((t, k) => pdf.text(t, cols.desc, y + k * 12, { size: k && l.sku && k === dl.length - 1 ? 8 : 9, color: l.sku && k === dl.length - 1 ? MUTED : INK }));
+    pdf.text(`${qtyFmt(l.quantity)}${l.unit ? ' ' + l.unit : ''}`, cols.qty + 30, y, { size: 9, align: 'right' });
+    pdf.text(priceFmt(l.unit_price), cols.price + 52, y, { size: 9, align: 'right' });
+    pdf.text(money(amount), cols.amt, y, { size: 9, bold: true, align: 'right' });
     y += h;
     pdf.line(M, y - 5, M + W, y - 5, { color: LINE });
   });
   ensure(40);
   y += 4;
-  pdf.rect(M + W - 230, y, 230, 26, { fill: BRAND });
-  pdf.text('TOTAL', M + W - 218, y + 8, { size: 10, bold: true, color: [255, 255, 255] });
-  pdf.text(money(total, d.currency), M + W - 10, y + 8, { size: 11, bold: true, color: [255, 255, 255], align: 'right' });
+  pdf.rect(M + W - 210, y, 210, 24, { fill: BRAND });
+  pdf.text('TOTAL', M + W - 200, y + 7, { size: 9, bold: true, color: [255, 255, 255] });
+  pdf.text(money(total, d.currency), M + W - 10, y + 7, { size: 10, bold: true, color: [255, 255, 255], align: 'right' });
   y += 44;
 
   // text sections
   for (const s of d.sections || []) {
     if (!s.text || !String(s.text).trim()) continue;
-    const lines = wrap(String(s.text), W, 9.5);
+    const lines = wrap(String(s.text), W, 9);
     ensure(30);
-    pdf.text(s.heading.toUpperCase(), M, y, { size: 8, bold: true, color: MUTED }); y += 14;
-    for (const t of lines) { if (ensure(14)) { /* continues on next page */ } pdf.text(t, M, y, { size: 9.5 }); y += 12.5; }
+    pdf.text(s.heading.toUpperCase(), M, y, { size: 7.5, bold: true, color: MUTED }); y += 14;
+    for (const t of lines) { if (ensure(14)) { /* continues on next page */ } pdf.text(t, M, y, { size: 9, color: [60, 70, 84] }); y += 12; }
     y += 10;
   }
 

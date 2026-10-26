@@ -1,6 +1,7 @@
 <%- include('../../partials/head') %>
 <%
   const cur = s.orders?.currency || 'USD';
+  const costDocs = (typeof locals !== 'undefined' && locals.costDocs) || {};
   const air = s.mode === 'air' || s.mode === 'express';
   const chg = s.gross_weight_kg || s.volume_cbm ? Math.max(Number(s.gross_weight_kg || 0), Number(s.volume_cbm || 0) * (air ? 167 : 1000)) : 0;
   const unpaid = costs.filter(c => !c.paid).reduce((t, c) => t + Number(c.amount) * Number(c.fx_to_order || 1), 0);
@@ -95,7 +96,7 @@
             <td class="right nowrap"><%= fmt.money(c.amount, c.currency) %></td>
             <td class="right small muted"><%= Number(c.fx_to_order) === 1 ? '' : fmt.num(c.fx_to_order, 4) %></td>
             <td class="right nowrap"><strong><%= fmt.money(Number(c.amount) * Number(c.fx_to_order || 1), cur) %></strong></td>
-            <td class="small"><%= c.invoice_ref || '' %></td>
+            <td class="small nowrap"><% const _inv = (costDocs[c.id] || []); %><% if (_inv.length) { %><a href="/admin/documents/<%= _inv[0].id %>/download" target="_blank" title="Open the invoice file (<%= _inv[0].title %>)">📎 <%= c.invoice_ref || 'Invoice' %></a><% if (_inv.length > 1) { %> <span class="muted">+<%= _inv.length - 1 %></span><% } %> <button type="button" class="link small" title="Add another invoice file" onclick="document.getElementById('inv-<%= c.id %>').showModal()">+</button><% } else { %><button type="button" class="link small" title="No invoice file yet — click to upload" onclick="document.getElementById('inv-<%= c.id %>').showModal()"><%= c.invoice_ref || 'Invoice' %> <span class="muted">· upload</span></button><% } %></td>
             <td><form method="post" action="/admin/logistics/costs/<%= c.id %>/paid" class="inline"><button class="link small <%= c.paid ? 'ok' : 'bad' %>"><%= c.paid ? '✓ ' + fmt.date(c.paid_at) : 'unpaid' %></button></form></td>
             <td class="right nowrap"><button type="button" class="link small" title="Edit this cost" onclick="var r=this.closest('tr').nextElementSibling; r.hidden=!r.hidden">✎</button> <form method="post" action="/admin/logistics/costs/<%= c.id %>/delete" class="inline" onsubmit="return confirm('Delete this cost?')"><button class="link small danger" title="Delete">×</button></form></td>
           </tr>
@@ -196,4 +197,26 @@
   </div>
   <p class="muted small legendline"><span class="sw gcost"></span> what it costs us delivered &nbsp; <span class="sw gsell"></span> what the client pays delivered (logistics passed through)</p>
 </div>
+
+<% costs.forEach(c => { %>
+<dialog id="inv-<%= c.id %>" class="bookdlg">
+  <h2>Invoice file <span class="muted small"><%= c.invoice_ref || fmt.status(c.type) %></span></h2>
+  <form method="post" action="/admin/documents/upload" enctype="multipart/form-data">
+    <input type="hidden" name="entity_type" value="freight_cost"><input type="hidden" name="entity_id" value="<%= c.id %>">
+    <input type="hidden" name="redirect" value="/admin/logistics/shipments/<%= s.id %>#costs"><input type="hidden" name="kind" value="other">
+    <div class="dropwrap">
+      <div class="filedrop compact" data-dropzone data-max="5" data-max-mb="20" tabindex="0">
+        <input type="file" name="files" multiple aria-label="Invoice file">
+        <span class="dicon">⬆</span>
+        <strong data-drop-count>Drop the invoice here, or <span class="dlink">browse</span></strong>
+        <span class="muted small dsub">PDF, image, Excel — up to 20 MB</span>
+      </div>
+      <div class="fgrid" data-drop-list></div>
+    </div>
+    <% (costDocs[c.id] || []).forEach(d => { %><p class="small muted">Already attached: <a href="/admin/documents/<%= d.id %>/download" target="_blank"><%= d.title %></a></p><% }) %>
+    <div class="actions"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn primary">Upload</button></div>
+  </form>
+</dialog>
+<% }) %>
+<script>document.querySelectorAll('dialog.bookdlg').forEach(d => d.addEventListener('click', e => { if (e.target === d) d.close(); }));</script>
 <%- include('../../partials/foot') %>
