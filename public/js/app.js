@@ -66,13 +66,23 @@ const RU = document.documentElement.lang === 'ru';   // Russian client portal: t
       const c = zone.querySelector('[data-drop-count]');
       if (c) { if (files.length) c.textContent = RU ? `Файлов: ${files.length} · перетащите ещё или нажмите` : `${files.length} file${files.length > 1 ? 's' : ''} added · drop more or click to add`; else c.innerHTML = c.dataset.empty; }
     };
-    const add = incoming => {
-      for (const f of incoming) {
+    // each file is copied into memory when it is added: a file that changes or moves on the disk afterwards
+    // (cloud sync, auto-save, a screenshot still being written) would otherwise make the browser refuse the upload
+    const snap = async f => {
+      if (f.size > maxMb * 1048576) return f;
+      try { return new File([await f.arrayBuffer()], f.name, { type: f.type, lastModified: f.lastModified }); } catch (e) { return null; }
+    };
+    const add = async incoming => {
+      const bad = [];
+      for (const f of [...incoming]) {
         if (!ok(f) || files.length >= max) continue;
         if (files.some(x => x.name === f.name && x.size === f.size)) continue;
-        files.push(f);
+        const copy = await snap(f);
+        if (!copy) { bad.push(f.name); continue; }
+        if (files.length < max && !files.some(x => x.name === copy.name && x.size === copy.size)) files.push(copy);
       }
       render();
+      if (bad.length) { const c = zone.querySelector('[data-drop-count]'); if (c) c.textContent = (RU ? 'Не удалось прочитать: ' : 'Could not read: ') + bad.join(', ') + (RU ? ' — выберите файл ещё раз' : ' — please add it again'); }
     };
     const c = zone.querySelector('[data-drop-count]'); if (c) c.dataset.empty = c.innerHTML;
     input.addEventListener('change', () => { const picked = [...input.files]; add(picked); });
