@@ -13,7 +13,7 @@
   <h2><%= (typeof heading !== 'undefined' && heading) || 'Photos & documents' %> <span class="count"><%= docs.length %></span></h2>
 
   <% if (_check.length) { const _req = _check.filter(c => !c.optional); const done = _req.filter(c => _have.has(c.kind)).length; %>
-  <div class="checklist">
+  <div class="checklist doccheck">
     <span class="small muted"><%= done %>/<%= _req.length %> required</span>
     <% const _act = (typeof chipActions !== 'undefined' && chipActions) || {}; %>
     <% _check.forEach(c => { const a = _act[c.kind]; const have = docs.find(d => d.kind === c.kind); %>

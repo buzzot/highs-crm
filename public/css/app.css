@@ -1492,3 +1492,8 @@ html[lang=ru] .pill::first-letter, html[lang=ru] .badge::first-letter { text-tra
 .ql-res strong { font-size: 17px; }
 .ql-note { margin: 8px 0 0; }
 .ql-sum { margin-bottom: 14px; }
+
+/* documents checklist: chips in one line (a later generic .checklist grid rule had stretched them into a column) */
+.checklist.doccheck { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; max-height: none; overflow: visible; margin: 0 0 14px; }
+.checklist.doccheck > .small { margin-right: 4px; white-space: nowrap; }
+.checklist.doccheck > form.inline, .checklist.doccheck > .chk { flex: none; }
