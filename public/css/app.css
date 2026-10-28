@@ -1526,3 +1526,11 @@ html[lang=ru] .pill::first-letter, html[lang=ru] .badge::first-letter { text-tra
 .filedrop.slim.has { padding: 8px 14px; }
 .upload .upfoot { margin-top: 8px; }
 @media (max-width: 560px) { .upload .uprow { grid-template-columns: minmax(0, 1fr); } }
+
+/* order page: "record a payment" — fields and button on one baseline */
+details > summary + form.payrec { margin-top: 12px; }
+form.payrec { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) auto; gap: 12px; align-items: end; }
+form.payrec label { display: grid; gap: 4px; margin: 0; min-width: 0; }
+form.payrec input { width: 100%; box-sizing: border-box; height: 40px; }
+form.payrec .btn { height: 40px; padding-top: 0; padding-bottom: 0; }
+@media (max-width: 800px) { form.payrec { grid-template-columns: 1fr 1fr; } form.payrec .btn { grid-column: 1 / -1; } }
