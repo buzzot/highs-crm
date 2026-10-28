@@ -1536,9 +1536,10 @@ form.payrec .btn { height: 40px; padding-top: 0; padding-bottom: 0; }
 @media (max-width: 800px) { form.payrec { grid-template-columns: 1fr 1fr; } form.payrec .btn { grid-column: 1 / -1; } }
 
 /* access levels: owner box on record pages, level picker on the Staff page */
-.ownerbox { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 14px; padding: 8px 12px; border: 1px solid var(--line-2, #e5e8ec); border-radius: 10px; background: #fff; }
-.ownerbox select { height: 32px; padding: 0 8px; min-width: 200px; }
-.ownerbox .ownerform { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* record owner: a small note line under the title */
+.ownerbox { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: -10px 0 14px; font-size: 12.5px; }
+.ownerbox select { height: 24px; font-size: 12.5px; padding: 0 22px 0 8px; min-width: 0; width: auto; max-width: 220px; border-radius: 999px; background-color: #fff; }
+.ownerbox .ownerform { display: inline-flex; margin: 0; }
 select.lvlsel { height: 30px; font-size: 13px; padding: 0 6px; }
 .payfiles { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
 

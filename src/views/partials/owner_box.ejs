@@ -1,18 +1,17 @@
 <%# Owner of a record (clients, requests, quotes, RFQs, orders, shipments). Rendered only when the access-levels migration (0036) is in place. %>
 <% if (typeof ownerBox !== 'undefined' && ownerBox) { const ob = ownerBox; %>
 <div class="ownerbox">
-  <span class="muted small">Owner</span>
+  <span class="muted">Owner:</span>
   <% if (canAssign) { %>
   <form method="post" action="/admin/owner" class="inline ownerform">
     <input type="hidden" name="table" value="<%= ob.table %>"><input type="hidden" name="id" value="<%= ob.id %>"><input type="hidden" name="redirect" value="<%= ob.redirect %>">
-    <select name="owner_id" aria-label="Owner">
-      <option value="">— nobody (Admin / Director only) —</option>
-      <% ob.staff.forEach(p => { %><option value="<%= p.id %>" <%= p.id === ob.ownerId ? 'selected' : '' %>><%= p.full_name || p.email %> · <%= p.role === 'admin' ? 'Admin' : p.staff_level === 'manager' ? 'Manager' : 'Director' %></option><% }) %>
+    <% if (['organizations', 'requests', 'orders'].includes(ob.table)) { %><input type="hidden" name="cascade" value="1"><% } %>
+    <select name="owner_id" aria-label="Owner" title="Change owner (also moves what belongs to this record)" onchange="this.form.submit()">
+      <option value="">— nobody —</option>
+      <% ob.staff.forEach(p => { %><option value="<%= p.id %>" <%= p.id === ob.ownerId ? 'selected' : '' %>><%= p.full_name || p.email %></option><% }) %>
     </select>
-    <% if (['organizations', 'requests', 'orders'].includes(ob.table)) { %><label class="check small"><input type="checkbox" name="cascade" value="1" checked> also what belongs to it</label><% } %>
-    <button class="btn small">Save</button>
   </form>
-  <% } else { %><strong class="small"><%= ob.ownerName || '—' %></strong><% } %>
-  <% if (ob.createdByName) { %><span class="muted small">· created by <%= ob.createdByName %></span><% } %>
+  <% } else { %><strong><%= ob.ownerName || '—' %></strong><% } %>
+  <% if (ob.createdByName) { %><span class="muted">· created by <%= ob.createdByName %></span><% } %>
 </div>
 <% } %>
