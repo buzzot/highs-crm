@@ -10,6 +10,10 @@
       <div class="who">
         <div class="name"><%= m.full_name || m.email %><% if (typeof showRole !== 'undefined' && showRole && m.role) { %> <span class="tag"><%= m.role === 'admin' ? 'Admin' : m.staff_level === 'manager' ? 'Manager' : m.role === 'staff' ? 'Director' : m.role %></span><% } %></div>
         <% if (m.full_name) { %><div class="muted small"><%= m.email %></div><% } %>
+        <% if (m.id && typeof levelAction !== 'undefined' && levelAction && m.state === 'accepted') { %><button type="button" class="link small" onclick="document.getElementById('nm-<%= m.id %>').showModal()"><%= m.full_name ? 'Rename' : '+ Add name' %></button>
+          <dialog id="nm-<%= m.id %>" class="bookdlg"><h2>Name</h2><p class="muted small">Shown as the owner of records instead of the email.</p>
+            <form method="post" action="<%= levelAction %>/<%= m.id %>/name"><label>Full name <input name="full_name" value="<%= m.full_name || '' %>" maxlength="80" required autocomplete="off"></label>
+              <div class="actions"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn primary">Save</button></div></form></dialog><% } %>
         <div class="istate small">
           <% if (m.state === 'accepted') { %>
             <% if (m.active === false) { %><span class="badge">Disabled</span><% } else { %><span class="badge ok">✓ Active</span><% } %> <span class="muted">joined <%= fmt.date(m.accepted_at) %> · <%= m.last_login_at ? 'last sign-in ' + fmt.datetime(m.last_login_at) : 'not signed in yet' %></span>

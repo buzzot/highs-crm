@@ -8,6 +8,7 @@
   <div class="card">
     <h2>Invite a team member</h2>
     <form method="post" action="/admin/clients/staff/invite">
+      <label>Name <input name="full_name" maxlength="80" placeholder="e.g. Anna Lee" autocomplete="off"></label>
       <label>Email <input type="email" name="email" required></label>
       <label>Access level <select name="role">
         <option value="director">Director — sees everything, deletes only what they created</option>

@@ -32,10 +32,21 @@ r.post('/staff/invite', requireAdmin, async (req, res) => {
       const { error } = await admin.from('profiles').update({ staff_level: pick }).ilike('email', String(req.body.email).trim());
       if (error && pick === 'manager') throw new Error(`Invitation sent, but the Manager level could not be saved — run supabase/migrations/0036_access_levels.sql first. (${error.message})`);
     }
+    const nm = String(req.body.full_name || '').trim().slice(0, 80);
+    if (nm) await admin.from('profiles').update({ full_name: nm }).ilike('email', String(req.body.email).trim()).is('full_name', null);
     res.redirect('/admin/clients/staff/list?msg=' + encodeURIComponent(`Invitation sent to ${req.body.email} — valid 14 days.`));
   } catch (e) { res.redirect('/admin/clients/staff/list?err=' + encodeURIComponent(e.message)); }
 });
 
+
+// rename a team member (the name is what shows as the owner of records)
+r.post('/staff/:uid/name', requireAdmin, async (req, res) => {
+  const name = String(req.body.full_name || '').trim().slice(0, 80);
+  const to = '/admin/clients/staff/list';
+  if (!name) return res.redirect(`${to}?err=${encodeURIComponent('Enter a name.')}`);
+  const { error } = await admin.from('profiles').update({ full_name: name }).eq('id', req.params.uid).in('role', ['admin', 'staff']);
+  res.redirect(`${to}?${error ? 'err=' + encodeURIComponent(error.message) : 'msg=' + encodeURIComponent('Name saved.')}`);
+});
 
 // change a team member's access level (Admin / Director / Manager)
 r.post('/staff/:uid/level', requireAdmin, async (req, res) => {
