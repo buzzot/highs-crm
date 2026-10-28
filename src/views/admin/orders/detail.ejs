@@ -193,15 +193,19 @@
         </div>
         <% (pz.payment_schedule || []).forEach(x => { %><div class="muted small"><%= x.label %> <%= Number(x.percent) %>% · <%= fmt.money(x.amount, order.currency) %><%= x.due ? ' · due ' + fmt.date(x.due) : '' %></div><% }) %>
       <% } %>
-      <% payL.forEach(x => { %>
-        <div class="quote">
-          <div class="qhead"><strong><%= fmt.money(x.amount, x.currency) %></strong> <span class="muted small"><%= x.label || '' %> · paid <%= fmt.date(x.paid_on || x.created_at) %><%= x.reference ? ' · ref ' + x.reference : '' %></span>
-            <span class="pill <%= ({ submitted: 'pending', confirmed: 'ok', rejected: 'bad' })[x.status] %>"><%= ({ submitted: 'To confirm', confirmed: 'Confirmed', rejected: 'Rejected' })[x.status] %></span></div>
-          <% if (x.note) { %><p class="muted small">Client: <%= x.note %></p><% } %>
-          <% if (x.admin_note) { %><p class="muted small">Note: <%= x.admin_note %></p><% } %>
-          <div class="payfiles"><% (x.proof_doc_ids || []).forEach(did => { const dd = docs.find(z => z.id === did); if (dd) { %><a class="fchip" href="/admin/documents/<%= dd.id %>/download" target="_blank" title="<%= dd.title %>"><%- icon('file') %>&nbsp;Proof</a> <% } }) %><button type="button" class="link small" onclick="document.getElementById('payd-<%= x.id %>').showModal()">+ Proof</button></div>
+      <div class="paylist">
+      <% payL.forEach(x => { const pf = (x.proof_doc_ids || []).map(did => docs.find(z => z.id === did)).filter(Boolean); %>
+        <div class="payrow <%= x.status === 'rejected' ? 'dim' : '' %>">
+          <div class="payline">
+            <strong class="payamt"><%= fmt.money(x.amount, x.currency) %></strong>
+            <span class="paymeta"><b><%= x.label || 'Payment' %></b><span><%= fmt.date(x.paid_on || x.created_at) %><%= x.reference ? ' · ref ' + x.reference : '' %></span></span>
+            <span class="pill <%= ({ submitted: 'pending', confirmed: 'ok', rejected: 'bad' })[x.status] %>"><%= ({ submitted: 'To confirm', confirmed: 'Confirmed', rejected: 'Rejected' })[x.status] %></span>
+            <span class="payfiles"><% pf.forEach((dd, i) => { %><a class="fchip" href="/admin/documents/<%= dd.id %>/download" target="_blank" title="<%= dd.title %>"><%- icon('file') %>&nbsp;Proof<%= pf.length > 1 ? ' ' + (i + 1) : '' %></a><% }) %><button type="button" class="link small" onclick="document.getElementById('payd-<%= x.id %>').showModal()"><%= pf.length ? '+' : '+ Proof' %></button></span>
+            <button type="button" class="link small payedit" title="Edit this payment" onclick="document.getElementById('paye-<%= x.id %>').showModal()">Edit</button>
+          </div>
+          <% if (x.note || x.admin_note) { %><div class="paynote muted small"><%= x.note ? 'Client: ' + x.note : '' %><%= x.note && x.admin_note ? ' · ' : '' %><%= x.admin_note ? 'Note: ' + x.admin_note : '' %></div><% } %>
           <% if (x.status === 'submitted') { %>
-            <form method="post" action="/admin/orders/<%= order.id %>/payments/<%= x.id %>" class="actions">
+            <form method="post" action="/admin/orders/<%= order.id %>/payments/<%= x.id %>" class="actions payact">
               <input name="note" placeholder="Note to the client (required if rejecting)">
               <button class="btn primary" name="decision" value="confirm">Confirm received</button>
               <button class="btn" name="decision" value="reject">Reject</button>
@@ -209,15 +213,30 @@
           <% } %>
         </div>
       <% }) %>
-      <details><summary class="muted small">Record a payment received outside the portal</summary>
-        <form method="post" action="/admin/orders/<%= order.id %>/payments" class="payrec">
+      </div>
+      <button type="button" class="btn primary payadd" onclick="document.getElementById('payrec-dlg').showModal()">+ Record a payment received outside the portal</button>
+      <dialog id="payrec-dlg" class="bookdlg">
+        <h2>Record a payment</h2>
+        <form method="post" action="/admin/orders/<%= order.id %>/payments" class="payrec dlg">
           <label>Amount (<%= order.currency %>) <input name="amount" type="number" step="0.01" min="0.01" required></label>
           <label>Date <input name="paid_on" type="date" value="<%= new Date().toISOString().slice(0, 10) %>"></label>
           <label>Instalment <input name="label" placeholder="Deposit / Balance" autocomplete="off"></label>
           <label>Reference <input name="reference"></label>
-          <button class="btn">Record</button>
+          <div class="actions"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn primary">Record</button></div>
         </form>
-      </details>
+      </dialog>
+      <% payL.forEach(x => { %>
+      <dialog id="paye-<%= x.id %>" class="bookdlg">
+        <h2>Edit payment</h2>
+        <form method="post" action="/admin/orders/<%= order.id %>/payments/<%= x.id %>/edit" class="payrec dlg">
+          <label>Amount (<%= x.currency %>) <input name="amount" type="number" step="0.01" min="0.01" required value="<%= x.amount %>"></label>
+          <label>Date <input name="paid_on" type="date" value="<%= String(x.paid_on || x.created_at || '').slice(0, 10) %>"></label>
+          <label>Instalment <input name="label" value="<%= x.label || '' %>" autocomplete="off"></label>
+          <label>Reference <input name="reference" value="<%= x.reference || '' %>"></label>
+          <div class="actions"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn primary">Save</button></div>
+        </form>
+      </dialog>
+      <% }) %>
 
     <% payL.forEach(x => { %>
     <dialog id="payd-<%= x.id %>" class="bookdlg">

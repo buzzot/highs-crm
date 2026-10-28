@@ -1566,3 +1566,23 @@ select.lvlsel { height: 30px; font-size: 13px; padding: 0 6px; }
 .rep .pos { color: var(--accent); }
 .rep .neg, .repsum .neg { color: #b42318; }
 .repsum .pos { color: var(--accent); }
+
+/* ---------- order payments list: one payment = one line ---------- */
+.paylist { display: grid; gap: 8px; margin: 12px 0; }
+.payrow { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+.payline { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.payamt { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; min-width: 110px; }
+.paymeta { display: flex; flex-direction: column; flex: 1; min-width: 150px; line-height: 1.25; }
+.paymeta b { font-weight: 500; font-size: 13.5px; }
+.paymeta span { font-size: 12px; font-weight: 300; color: var(--muted); }
+.payline .payfiles { margin: 0; display: inline-flex; gap: 6px; align-items: center; }
+.payline .payedit { margin-left: 2px; }
+.payrow .paynote { margin-top: 4px; }
+.payrow .payact { margin-top: 8px; }
+.payrow.dim { opacity: .6; }
+.payadd { margin-top: 4px; }
+form.payrec.dlg { grid-template-columns: 1fr 1fr; margin-top: 12px; }
+form.payrec.dlg .actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; }
+.payline { display: grid; grid-template-columns: 120px minmax(140px, 1fr) 96px 190px auto; gap: 14px; align-items: center; }
+.payline .payfiles { justify-content: flex-start; }
+@media (max-width: 760px) { .payline { grid-template-columns: 1fr 1fr; } }

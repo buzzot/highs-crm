@@ -162,6 +162,23 @@ r.post('/:id/payments/:pid/files', packUpload.array('files', 10), async (req, re
   back(res, to, { msg: `${req.files.length} proof file${req.files.length === 1 ? '' : 's'} added.` });
 });
 
+// edit a recorded payment (amount, date, instalment, reference)
+r.post('/:id/payments/:pid/edit', async (req, res) => {
+  const id = req.params.id, to = `/admin/orders/${id}#payments`;
+  const { data: pay } = await admin.from('order_payments').select('id, amount, currency').eq('id', req.params.pid).eq('order_id', id).maybeSingle();
+  if (!pay) return notFound(res, 'Payment');
+  const amount = Math.round(Number(String(req.body.amount || '').replace(',', '.')) * 100) / 100;
+  if (!(amount > 0)) return back(res, to, { err: 'Enter the amount.' });
+  const paidOn = /^\d{4}-\d{2}-\d{2}$/.test(req.body.paid_on || '') ? req.body.paid_on : null;
+  const upd = { amount, label: String(req.body.label || '').trim().slice(0, 40) || null, reference: String(req.body.reference || '').trim().slice(0, 120) || null };
+  if (paidOn) upd.paid_on = paidOn;
+  const { error } = await admin.from('order_payments').update(upd).eq('id', pay.id);
+  if (error) return back(res, to, { err: error.message });
+  await recalcOrder(id);
+  await log({ entityType: 'order', entityId: id, action: 'payment_edited', actorId: req.user.id, clientVisible: false, detail: { note: `${Number(pay.amount).toFixed(2)} → ${amount.toFixed(2)} ${pay.currency}` } });
+  back(res, to, { msg: 'Payment updated.' });
+});
+
 r.post('/:id/payments', async (req, res) => {
   const id = req.params.id;
   const { data: o } = await admin.from('orders').select('id, org_id, currency, amount_due').eq('id', id).single();
