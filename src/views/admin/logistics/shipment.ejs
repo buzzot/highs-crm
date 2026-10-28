@@ -96,8 +96,9 @@
             <td class="right nowrap"><%= fmt.money(c.amount, c.currency) %></td>
             <td class="right small muted"><%= Number(c.fx_to_order) === 1 ? '' : fmt.num(c.fx_to_order, 4) %></td>
             <td class="right nowrap"><strong><%= fmt.money(Number(c.amount) * Number(c.fx_to_order || 1), cur) %></strong></td>
-            <td class="small nowrap"><% const _inv = (costDocs[c.id] || []); %><% if (_inv.length) { %><a href="/admin/documents/<%= _inv[0].id %>/download" target="_blank" title="Open the invoice file (<%= _inv[0].title %>)">📎 <%= c.invoice_ref || 'Invoice' %></a><% if (_inv.length > 1) { %> <span class="muted">+<%= _inv.length - 1 %></span><% } %> <button type="button" class="link small" title="Add another invoice file" onclick="document.getElementById('inv-<%= c.id %>').showModal()">+</button><% } else { %><button type="button" class="link small" title="No invoice file yet — click to upload" onclick="document.getElementById('inv-<%= c.id %>').showModal()"><%= c.invoice_ref || 'Invoice' %> <span class="muted">· upload</span></button><% } %></td>
-            <td><form method="post" action="/admin/logistics/costs/<%= c.id %>/paid" class="inline"><button class="link small <%= c.paid ? 'ok' : 'bad' %>"><%= c.paid ? '✓ ' + fmt.date(c.paid_at) : 'unpaid' %></button></form></td>
+            <td class="small nowrap"><% const _inv = (costDocs[c.id] || []).filter(x => x.kind !== 'payment_proof'); %><% if (_inv.length) { %><a href="/admin/documents/<%= _inv[0].id %>/download" target="_blank" title="Open the invoice file (<%= _inv[0].title %>)">📎 <%= c.invoice_ref || 'Invoice' %></a><% if (_inv.length > 1) { %> <span class="muted">+<%= _inv.length - 1 %></span><% } %> <button type="button" class="link small" title="Add another invoice file" onclick="document.getElementById('inv-<%= c.id %>').showModal()">+</button><% } else { %><button type="button" class="link small" title="No invoice file yet — click to upload" onclick="document.getElementById('inv-<%= c.id %>').showModal()"><%= c.invoice_ref || 'Invoice' %> <span class="muted">· upload</span></button><% } %></td>
+            <td class="nowrap"><form method="post" action="/admin/logistics/costs/<%= c.id %>/paid" class="inline"><button class="link small <%= c.paid ? 'ok' : 'bad' %>"><%= c.paid ? '✓ ' + fmt.date(c.paid_at) : 'unpaid' %></button></form>
+              <% const _pf = (costDocs[c.id] || []).filter(x => x.kind === 'payment_proof'); %><% if (_pf.length) { %> <a class="small" href="/admin/documents/<%= _pf[0].id %>/download" target="_blank" title="Open payment proof (<%= _pf[0].title %>)">📎 proof</a><% if (_pf.length > 1) { %> <span class="muted small">+<%= _pf.length - 1 %></span><% } %> <button type="button" class="link small" title="Add another payment proof" onclick="document.getElementById('pay-<%= c.id %>').showModal()">+</button><% } else { %> <button type="button" class="link small muted" title="Attach the payment proof (bank slip, screenshot)" onclick="document.getElementById('pay-<%= c.id %>').showModal()">+ proof</button><% } %></td>
             <td class="right nowrap"><button type="button" class="link small" title="Edit this cost" onclick="var r=this.closest('tr').nextElementSibling; r.hidden=!r.hidden">✎</button> <form method="post" action="/admin/logistics/costs/<%= c.id %>/delete" class="inline" onsubmit="return confirm('Delete this cost?')"><button class="link small danger" title="Delete">×</button></form></td>
           </tr>
           <tr class="editrow" hidden><td colspan="8">
@@ -199,24 +200,26 @@
 </div>
 
 <% costs.forEach(c => { %>
-<dialog id="inv-<%= c.id %>" class="bookdlg">
-  <h2>Invoice file <span class="muted small"><%= c.invoice_ref || fmt.status(c.type) %></span></h2>
+<% [{ id: 'inv-', kind: 'other', title: 'Invoice file', hint: 'The forwarder\'s invoice', pick: x => x.kind !== 'payment_proof' }, { id: 'pay-', kind: 'payment_proof', title: 'Payment proof', hint: 'Bank slip or payment screenshot', pick: x => x.kind === 'payment_proof' }].forEach(t => { %>
+<dialog id="<%= t.id + c.id %>" class="bookdlg">
+  <h2><%= t.title %> <span class="muted small"><%= c.invoice_ref || fmt.status(c.type) %></span></h2>
   <form method="post" action="/admin/documents/upload" enctype="multipart/form-data">
     <input type="hidden" name="entity_type" value="freight_cost"><input type="hidden" name="entity_id" value="<%= c.id %>">
-    <input type="hidden" name="redirect" value="/admin/logistics/shipments/<%= s.id %>#costs"><input type="hidden" name="kind" value="other">
+    <input type="hidden" name="redirect" value="/admin/logistics/shipments/<%= s.id %>#costs"><input type="hidden" name="kind" value="<%= t.kind %>">
     <div class="dropwrap">
       <div class="filedrop compact" data-dropzone data-max="5" data-max-mb="20" tabindex="0">
-        <input type="file" name="files" multiple aria-label="Invoice file">
+        <input type="file" name="files" multiple aria-label="<%= t.title %>">
         <span class="dicon">⬆</span>
-        <strong data-drop-count>Drop the invoice here, or <span class="dlink">browse</span></strong>
-        <span class="muted small dsub">PDF, image, Excel — up to 20 MB</span>
+        <strong data-drop-count>Drop the file here, or <span class="dlink">browse</span></strong>
+        <span class="muted small dsub"><%= t.hint %> · PDF, image, Excel — up to 20 MB · paste a screenshot with ⌘/Ctrl V</span>
       </div>
       <div class="fgrid" data-drop-list></div>
     </div>
-    <% (costDocs[c.id] || []).forEach(d => { %><p class="small muted">Already attached: <a href="/admin/documents/<%= d.id %>/download" target="_blank"><%= d.title %></a></p><% }) %>
+    <% (costDocs[c.id] || []).filter(t.pick).forEach(d => { %><p class="small muted">Already attached: <a href="/admin/documents/<%= d.id %>/download" target="_blank"><%= d.title %></a></p><% }) %>
     <div class="actions"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn primary">Upload</button></div>
   </form>
 </dialog>
+<% }) %>
 <% }) %>
 <script>document.querySelectorAll('dialog.bookdlg').forEach(d => d.addEventListener('click', e => { if (e.target === d) d.close(); }));</script>
 <%- include('../../partials/foot') %>

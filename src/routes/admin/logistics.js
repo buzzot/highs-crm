@@ -246,7 +246,7 @@ r.get('/shipments/:id', async (req, res) => {
   // forwarder invoice files, newest first per cost line
   const costDocs = {};
   if ((costs || []).length) {
-    const { data: cd } = await admin.from('documents').select('id, title, entity_id, created_at').eq('entity_type', 'freight_cost').in('entity_id', costs.map(c => c.id)).order('created_at', { ascending: false });
+    const { data: cd } = await admin.from('documents').select('id, title, kind, entity_id, created_at').eq('entity_type', 'freight_cost').in('entity_id', costs.map(c => c.id)).order('created_at', { ascending: false });
     for (const d of cd || []) (costDocs[d.entity_id] ||= []).push(d);
   }
   const { data: items } = await admin.from('order_items').select('*').eq('order_id', s.order_id);

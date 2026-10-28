@@ -56,7 +56,7 @@ export const REQUEST_STATUSES = ['new', 'reviewing', 'quoted', 'accepted', 'decl
 export const SHIPMENT_STATUSES = ['planned', 'booked', 'picked_up', 'departed', 'arrived', 'customs', 'delivered'];
 export const SHIPMENT_MODES = ['sea_fcl', 'sea_lcl', 'air', 'rail', 'truck', 'express'];
 export const FREIGHT_TYPES = ['origin_handling', 'export_declaration', 'main_freight', 'insurance', 'destination_handling', 'import_duty', 'import_vat', 'customs_brokerage', 'last_mile', 'other'];
-export const DOC_KINDS = ['product_photo', 'packing_photo', 'proforma_invoice', 'commercial_invoice', 'packing_list', 'bill_of_lading', 'airway_bill', 'export_declaration', 'certificate', 'qc_report', 'cargo_photo', 'cargo_draft', 'other'];
+export const DOC_KINDS = ['product_photo', 'packing_photo', 'proforma_invoice', 'commercial_invoice', 'packing_list', 'bill_of_lading', 'airway_bill', 'export_declaration', 'certificate', 'qc_report', 'cargo_photo', 'cargo_draft', 'payment_proof', 'other'];
 // internal-only kinds: never client-visible, whatever the form says
 export const INTERNAL_KINDS = ['cargo_photo', 'cargo_draft'];
 export const INCOTERMS = ['EXW', 'FOB', 'FCA', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DDP'];

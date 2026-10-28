@@ -100,7 +100,8 @@ const RU = document.documentElement.lang === 'ru';   // Russian client portal: t
     if (!zones.size || (ev.target.closest && ev.target.closest('input:not([type=file]), textarea'))) return;
     const pasted = [...(ev.clipboardData?.files || [])];
     if (!pasted.length) return;
-    const z = activeZone && document.contains(activeZone) ? activeZone : [...zones].find(x => document.contains(x));
+    const dlg = document.querySelector('dialog[open]');   // inside an open popup the paste goes to that popup's zone
+    const z = dlg ? [...zones].find(x => dlg.contains(x)) : activeZone && document.contains(activeZone) ? activeZone : [...zones].find(x => document.contains(x));
     if (z) { ev.preventDefault(); z.add(pasted); z.scrollIntoView({ block: 'nearest' }); }
   });
   // fade flash messages
