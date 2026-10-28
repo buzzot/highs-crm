@@ -1,0 +1,63 @@
+<%- include('../../partials/head') %>
+<div class="pagehead">
+  <div><a class="muted small" href="/admin/pricing">← Pricing</a><h1>Compare scenarios</h1>
+    <p class="muted">Same quantity, different ways to buy and ship it. Put up to four options side by side — supplier, air / rail / sea, with or without duty — and see which is cheapest for the client and which earns more. Duty is estimated on the sell value; confirm the final figures with your customs broker.</p></div>
+</div>
+
+<form method="post" action="/admin/pricing/compare" class="card cmp">
+  <div class="row">
+    <label>Product <span class="muted small">(optional — fills option A)</span>
+      <select name="product_id" onchange="if(this.value){location.href='/admin/pricing/compare?product_id='+this.value+'&quantity='+encodeURIComponent(this.form.quantity.value)+'&sell_currency='+this.form.sell_currency.value}">
+        <option value="">— none —</option><% products.forEach(p => { %><option value="<%= p.id %>" <%= common.product_id === p.id ? 'selected' : '' %>><%= p.name %><%= p.sku ? ' · ' + p.sku : '' %></option><% }) %></select></label>
+    <label>Quantity <input type="number" name="quantity" min="1" step="1" value="<%= common.quantity %>" required></label>
+    <label>Client pays in <select name="sell_currency"><% currencies.forEach(c => { %><option <%= c === common.sell_currency ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+  </div>
+
+  <div class="cmpgrid">
+    <% scenarios.forEach((s, i) => { const p = 's' + i + '_'; %>
+    <fieldset class="cmpcol">
+      <legend>Option <%= 'ABCD'[i] %></legend>
+      <label>Name <input name="<%= p %>label" value="<%= s.label %>" placeholder="e.g. Supplier A · rail"></label>
+      <div class="row2"><label>Supplier cost / unit <input name="<%= p %>unitCost" inputmode="decimal" value="<%= s.unitCost %>"></label>
+        <label>Currency <select name="<%= p %>costCurrency"><% currencies.forEach(c => { %><option <%= c === (s.costCurrency || 'CNY') ? 'selected' : '' %>><%= c %></option><% }) %></select></label></div>
+      <div class="row2"><label>Margin % <input name="<%= p %>marginPct" inputmode="decimal" value="<%= s.marginPct %>"></label>
+        <label>Lead time (days) <input name="<%= p %>leadDays" inputmode="numeric" value="<%= s.leadDays %>"></label></div>
+      <div class="row2"><label>Freight total (<%= common.sell_currency %>) <input name="<%= p %>freightTotal" inputmode="decimal" value="<%= s.freightTotal %>"></label>
+        <label>Other costs (<%= common.sell_currency %>) <input name="<%= p %>otherTotal" inputmode="decimal" value="<%= s.otherTotal %>"></label></div>
+      <div class="row2"><label>Duty % <input name="<%= p %>dutyPct" inputmode="decimal" value="<%= s.dutyPct %>"></label>
+        <label title="Only fill in if we pay the VAT and pass it on to the client">VAT % (if we pay) <input name="<%= p %>vatPct" inputmode="decimal" value="<%= s.vatPct %>"></label></div>
+      <label>Duty charged on <select name="<%= p %>dutyBase"><option value="goods" <%= s.dutyBase !== 'cif' ? 'selected' : '' %>>goods value</option><option value="cif" <%= s.dutyBase === 'cif' ? 'selected' : '' %>>goods + freight (CIF)</option></select></label>
+    </fieldset>
+    <% }) %>
+  </div>
+  <div class="actions"><button class="btn primary">Compare</button><span class="muted small">Leave an option's cost empty to skip it. Minimum margin is <%= minMargin %>%.</span></div>
+</form>
+
+<% if (result) { const M = (v, d) => fmt.money(v, common.sell_currency, d); const rows = result.rows; %>
+<div class="card">
+  <h2>Result <span class="muted small">per unit unless marked · <%= result.quantity.toLocaleString("en-US") %> units · <%= common.sell_currency %></span></h2>
+  <% if (!rows.length) { %><p class="muted">Enter a supplier cost for at least one option.</p><% } else { %>
+  <div class="table-scroll"><table class="tbl cmptable">
+    <thead><tr><th></th><% rows.forEach(x => { %><th class="right"><%= x.label %><div class="cmpbadges"><% if (x.cheapestForClient) { %><span class="badge good">Lowest for client</span><% } %><% if (x.mostProfit) { %><span class="badge good">Most profit</span><% } %><% if (x.fastest) { %><span class="badge">Fastest</span><% } %></div></th><% }) %></tr></thead>
+    <tbody>
+      <tr><td>Product cost</td><% rows.forEach(x => { %><td class="right num"><%= M(x.unitCostSell, 4) %></td><% }) %></tr>
+      <tr><td>Sell price (goods, before logistics)</td><% rows.forEach(x => { %><td class="right num"><%= M(x.unitPrice, 4) %></td><% }) %></tr>
+      <tr class="sub"><td>Freight</td><% rows.forEach(x => { %><td class="right num"><%= M(x.freight / result.quantity, 4) %></td><% }) %></tr>
+      <tr class="sub"><td>Duty</td><% rows.forEach(x => { %><td class="right num"><%= M(x.duty / result.quantity, 4) %></td><% }) %></tr>
+      <tr class="sub"><td>VAT</td><% rows.forEach(x => { %><td class="right num"><%= x.vat ? M(x.vat / result.quantity, 4) : '—' %></td><% }) %></tr>
+      <tr class="sub"><td>Other costs</td><% rows.forEach(x => { %><td class="right num"><%= x.other ? M(x.other / result.quantity, 4) : '—' %></td><% }) %></tr>
+      <tr class="key"><td>Client landed price</td><% rows.forEach(x => { %><td class="right num"><strong><%= M(x.landedUnitPrice, 4) %></strong><% if (!x.cheapestForClient && x.vsCheapest > 0) { %><div class="muted small">+<%= M(x.vsCheapest, 4) %> vs lowest</div><% } %></td><% }) %></tr>
+      <tr><td>Landed total</td><% rows.forEach(x => { %><td class="right num"><%= M(x.landedTotal, 0) %></td><% }) %></tr>
+      <tr class="key"><td>Our profit (total)</td><% rows.forEach(x => { %><td class="right num"><strong><%= M(x.grossProfit, 0) %></strong></td><% }) %></tr>
+      <tr><td>Margin on cost</td><% rows.forEach(x => { %><td class="right num <%= x.meetsMinimum ? '' : 'bad' %>"><%= x.effectiveMarginPct %>%</td><% }) %></tr>
+      <tr><td>Profit as % of client total</td><% rows.forEach(x => { %><td class="right num"><%= x.profitOnLanded %>%</td><% }) %></tr>
+      <tr><td>Logistics + duty share of client price</td><% rows.forEach(x => { %><td class="right num"><%= x.landedUnitPrice > 0 ? (x.logisticsPerUnit / x.landedUnitPrice * 100).toFixed(1) + '%' : '—' %></td><% }) %></tr>
+      <tr><td>Lead time</td><% rows.forEach(x => { %><td class="right num"><%= x.leadDays != null ? x.leadDays + ' days' : '—' %></td><% }) %></tr>
+      <% if (rows.some(x => x.warnings.length)) { %><tr><td>Warnings</td><% rows.forEach(x => { %><td class="right small bad"><%= x.warnings.join(' ') %></td><% }) %></tr><% } %>
+    </tbody>
+  </table></div>
+  <p class="muted small">Logistics and duty are passed through to the client, so they change the client's price but not your profit; margin is on product cost only. Duty is taken on the sell value of the goods (plus freight when CIF).</p>
+  <% } %>
+</div>
+<% } %>
+<%- include('../../partials/foot') %>

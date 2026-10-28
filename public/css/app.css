@@ -1497,3 +1497,32 @@ html[lang=ru] .pill::first-letter, html[lang=ru] .badge::first-letter { text-tra
 .checklist.doccheck { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; max-height: none; overflow: visible; margin: 0 0 14px; }
 .checklist.doccheck > .small { margin-right: 4px; white-space: nowrap; }
 .checklist.doccheck > form.inline, .checklist.doccheck > .chk { flex: none; }
+
+/* pricing: compare scenarios */
+.cmp .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin-bottom: 14px; }
+.cmp .row > label { flex: 1 1 200px; }
+.cmpgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.cmpcol { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px 12px; display: grid; gap: 8px; min-width: 0; }
+.cmpcol legend { font-weight: 700; padding: 0 6px; color: var(--accent); }
+.cmpcol label { display: grid; gap: 3px; font-size: 12.5px; }
+.cmpcol .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.cmptable th, .cmptable td { white-space: nowrap; }
+.cmptable tr.sub td { color: var(--muted); font-size: 13px; }
+.cmptable tr.key td { background: var(--accent-soft, #f4faf8); }
+.cmpbadges { display: flex; gap: 4px; justify-content: flex-end; flex-wrap: wrap; margin-top: 4px; }
+.cmpbadges .badge { font-size: 10.5px; padding: 2px 7px; border-radius: 999px; background: #eceff3; color: #475467; font-weight: 600; }
+.cmpbadges .badge.good { background: #e1f4ec; color: #17794f; }
+@media (max-width: 1100px) { .cmpgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .cmpgrid { grid-template-columns: minmax(0, 1fr); } }
+
+/* documents panel: compact one-line drop zone next to the type picker */
+.upload .uprow { display: grid; grid-template-columns: minmax(130px, 190px) minmax(0, 1fr); gap: 10px; align-items: end; }
+.upload .uptype { display: grid; gap: 3px; }
+.upload .upzone { min-width: 0; }
+.filedrop.slim { flex-direction: row; justify-content: center; gap: 10px; padding: 8px 14px; min-height: 42px; border-width: 1.5px; border-radius: 10px; }
+.filedrop.slim .dicon { width: 24px; height: 24px; border-radius: 7px; }
+.filedrop.slim .dicon svg { width: 14px; height: 14px; }
+.filedrop.slim strong { font-size: 13px; font-weight: 600; }
+.filedrop.slim.has { padding: 8px 14px; }
+.upload .upfoot { margin-top: 8px; }
+@media (max-width: 560px) { .upload .uprow { grid-template-columns: minmax(0, 1fr); } }

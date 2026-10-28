@@ -16,6 +16,7 @@ import { clean, bool, back, notFound, getSettings, clearSettingsCache, fxRate, I
 import { localizeEmail } from '../../lib/i18n.js';
 import { orgLang } from '../../lib/lang.js';
 import { currentResponses } from '../../lib/rfq.js';
+import { compareScenarios } from '../../lib/scenarios.js';
 
 const r = Router();
 const QUOTE_FIELDS = ['request_id', 'request_item_id', 'product_id', 'supplier_id', 'quantity', 'unit_cost', 'cost_currency', 'fx_rate', 'margin_pct', 'sell_currency',
@@ -81,6 +82,33 @@ r.post('/check', async (req, res) => {
 // ---- one quote for several products (picked on the Products list), possibly from different suppliers ----
 const refIRQ = () => `IRQ-${new Date().toISOString().slice(2, 7).replace('-', '')}-${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`;
 const productIds = v => [...new Set([].concat(v || []).join(',').split(',').map(x => x.trim()).filter(x => /^[0-9a-f-]{36}$/i.test(x)))].slice(0, 30);
+
+// ---- compare scenarios side by side (supplier / freight mode / duty) ----
+const SC = 4;
+const scenarioFields = i => ['label', 'unitCost', 'costCurrency', 'marginPct', 'freightTotal', 'otherTotal', 'dutyPct', 'vatPct', 'dutyBase', 'leadDays'].reduce((o, k) => { o[k] = ''; return o; }, { key: i });
+async function comparePage(req, res, post) {
+  const settings = await getSettings(admin);
+  const lists = await formLists();
+  const b = post ? req.body : req.query;
+  const sellCurrency = CURRENCIES.includes(b.sell_currency) ? b.sell_currency : (res.locals.defCur || 'USD');
+  const margin = settings.pricing.default_margin_pct;
+  const scenarios = Array.from({ length: SC }, (_, i) => {
+    const s = scenarioFields(i);
+    for (const k of Object.keys(s)) if (k !== 'key' && b[`s${i}_${k}`] != null) s[k] = String(b[`s${i}_${k}`]);
+    if (!post) { s.costCurrency ||= 'CNY'; s.marginPct ||= String(margin); s.dutyBase ||= 'goods'; }
+    return s;
+  });
+  const product = lists.products.find(p => p.id === b.product_id);
+  if (!post && product && !scenarios[0].unitCost) Object.assign(scenarios[0], { label: scenarios[0].label || 'Current supplier', unitCost: String(product.unit_cost ?? ''), costCurrency: product.cost_currency || 'CNY' });
+  const common = { product_id: b.product_id || '', quantity: b.quantity || '', sell_currency: sellCurrency };
+  let result = null;
+  if (post || (b.quantity && scenarios.some(s => Number(s.unitCost) > 0))) {
+    result = compareScenarios({ quantity: common.quantity || 1, minMarginPct: settings.pricing.min_margin_pct, fxOf: c => fxRate(settings, c, sellCurrency), scenarios });
+  }
+  res.render('admin/pricing/compare', { title: 'Compare scenarios', scenarios, common, result, product, settings, ...lists, currencies: CURRENCIES, minMargin: settings.pricing.min_margin_pct });
+}
+r.get('/compare', (req, res) => comparePage(req, res, false));
+r.post('/compare', (req, res) => comparePage(req, res, true));
 
 r.get('/quotes/multi', async (req, res) => {
   const ids = productIds(req.query.ids);

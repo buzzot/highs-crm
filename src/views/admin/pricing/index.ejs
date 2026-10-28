@@ -1,7 +1,7 @@
 <%- include('../../partials/head') %>
 <div class="pagehead">
   <div><h1>Pricing</h1><p class="muted">Margin is on product cost only (min <%= settings.pricing.min_margin_pct %>%). Logistics is added on top to give the landed price.</p></div>
-  <div class="actions"><% if (user.role === 'admin') { %><a class="btn" href="/admin/pricing/settings">FX & margin settings</a><% } %><a class="btn primary" href="/admin/pricing/quotes/new">+ New quote</a></div>
+  <div class="actions"><% if (user.role === 'admin') { %><a class="btn" href="/admin/pricing/settings">FX & margin settings</a><% } %><a class="btn" href="/admin/pricing/compare">Compare scenarios</a><a class="btn primary" href="/admin/pricing/quotes/new">+ New quote</a></div>
 </div>
 <div class="card">
   <h2>Calculator</h2>

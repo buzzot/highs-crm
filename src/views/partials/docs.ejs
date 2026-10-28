@@ -72,11 +72,18 @@
     <input type="hidden" name="entity_type" value="<%= entityType %>">
     <input type="hidden" name="entity_id" value="<%= entityId %>">
     <input type="hidden" name="redirect" value="<%= redirect %>">
-    <div class="row">
-      <label>Type <select name="kind"><% _kinds.forEach(k => { %><option value="<%= k %>" <%= (typeof defaultKind !== 'undefined' && defaultKind === k) ? 'selected' : '' %>><%= fmt.status(k) %></option><% }) %></select></label>
-      <label>Files <input type="file" name="files" multiple required></label>
+    <div class="uprow">
+      <label class="uptype">Type <select name="kind"><% _kinds.forEach(k => { %><option value="<%= k %>" <%= (typeof defaultKind !== 'undefined' && defaultKind === k) ? 'selected' : '' %>><%= fmt.status(k) %></option><% }) %></select></label>
+      <div class="dropwrap upzone">
+        <div class="filedrop slim" data-dropzone data-max="20" data-max-mb="25" tabindex="0">
+          <input type="file" name="files" multiple aria-label="Files to upload">
+          <span class="dicon"><%- icon('upload') %></span>
+          <strong data-drop-count>Drop files here or <span class="dlink">browse</span></strong>
+        </div>
+        <div class="fgrid" data-drop-list></div>
+      </div>
     </div>
-    <div class="row between">
+    <div class="row between upfoot">
       <label class="check"><input type="checkbox" name="client_visible" <%= (typeof defaultVisible === 'undefined' || defaultVisible) ? 'checked' : '' %>> Visible to client</label>
       <button class="btn">Upload</button>
     </div>

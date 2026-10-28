@@ -55,3 +55,24 @@ test('landed cost spreads actual logistics by quantity', () => {
   assert.equal(l.landedCostTotal, 1200);
   assert.equal(l.landedSellTotal, 1450);
 });
+
+import { compareScenarios, dutyOf } from '../src/lib/scenarios.js';
+test('duty is on the sell value (+ freight when CIF), VAT on value + duty', () => {
+  assert.deepEqual(dutyOf({ goodsTotal: 10000, freightTotal: 1000, dutyPct: 10, vatPct: 20, base: 'goods' }), { customsValue: 10000, duty: 1000, vat: 2200, total: 3200 });
+  assert.deepEqual(dutyOf({ goodsTotal: 10000, freightTotal: 1000, dutyPct: 10, vatPct: 0, base: 'cif' }), { customsValue: 11000, duty: 1100, vat: 0, total: 1100 });
+});
+test('scenario comparison ranks cheapest for the client, most profit and fastest', () => {
+  const fxOf = c => (c === 'CNY' ? 0.14 : 1);
+  const { rows } = compareScenarios({ quantity: 1000, fxOf, scenarios: [
+    { label: 'Air', unitCost: 100, costCurrency: 'CNY', marginPct: 25, freightTotal: 2000, dutyPct: 5, leadDays: 20 },
+    { label: 'Rail', unitCost: 100, costCurrency: 'CNY', marginPct: 25, freightTotal: 500, dutyPct: 5, leadDays: 35 },
+    { label: 'Blank', unitCost: '' } ] });
+  assert.equal(rows.length, 2);                                   // empty column ignored
+  const [air, rail] = rows;
+  assert.equal(air.unitPrice, 17.5); assert.equal(air.duty, 875);
+  assert.equal(rail.cheapestForClient, true); assert.equal(air.cheapestForClient, false);
+  assert.equal(air.fastest, true); assert.equal(rail.fastest, false);
+  assert.equal(air.grossProfit, rail.grossProfit);                // same margin, logistics is pass-through
+  assert.ok(!air.mostProfit && !rail.mostProfit);                 // a tie highlights nobody
+  assert.ok(rail.vsCheapest === 0 && air.vsCheapest > 0);
+});
