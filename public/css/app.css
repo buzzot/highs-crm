@@ -1540,3 +1540,4 @@ form.payrec .btn { height: 40px; padding-top: 0; padding-bottom: 0; }
 .ownerbox select { height: 32px; padding: 0 8px; min-width: 200px; }
 .ownerbox .ownerform { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 select.lvlsel { height: 30px; font-size: 13px; padding: 0 6px; }
+.payfiles { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; }

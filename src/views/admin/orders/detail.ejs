@@ -199,7 +199,7 @@
             <span class="pill <%= ({ submitted: 'pending', confirmed: 'ok', rejected: 'bad' })[x.status] %>"><%= ({ submitted: 'To confirm', confirmed: 'Confirmed', rejected: 'Rejected' })[x.status] %></span></div>
           <% if (x.note) { %><p class="muted small">Client: <%= x.note %></p><% } %>
           <% if (x.admin_note) { %><p class="muted small">Note: <%= x.admin_note %></p><% } %>
-          <% (x.proof_doc_ids || []).forEach(did => { const dd = docs.find(z => z.id === did); if (dd) { %><a class="fchip" href="/admin/documents/<%= dd.id %>/download" target="_blank"><%- icon('file') %>&nbsp;Proof of payment</a> <% } }) %>
+          <div class="payfiles"><% (x.proof_doc_ids || []).forEach(did => { const dd = docs.find(z => z.id === did); if (dd) { %><a class="fchip" href="/admin/documents/<%= dd.id %>/download" target="_blank" title="<%= dd.title %>"><%- icon('file') %>&nbsp;Proof</a> <% } }) %><button type="button" class="link small" onclick="document.getElementById('payd-<%= x.id %>').showModal()">+ Proof</button></div>
           <% if (x.status === 'submitted') { %>
             <form method="post" action="/admin/orders/<%= order.id %>/payments/<%= x.id %>" class="actions">
               <input name="note" placeholder="Note to the client (required if rejecting)">
@@ -218,6 +218,25 @@
           <button class="btn">Record</button>
         </form>
       </details>
+
+    <% payL.forEach(x => { %>
+    <dialog id="payd-<%= x.id %>" class="bookdlg">
+      <h2>Proof of payment <span class="muted small"><%= fmt.money(x.amount, x.currency) %> · <%= x.label || 'payment' %></span></h2>
+      <form method="post" action="/admin/orders/<%= order.id %>/payments/<%= x.id %>/files" enctype="multipart/form-data">
+        <div class="dropwrap">
+          <div class="filedrop compact" data-dropzone data-max="10" data-max-mb="20" tabindex="0">
+            <input type="file" name="files" multiple aria-label="Proof of payment">
+            <span class="dicon"><%- icon('upload') %></span>
+            <strong data-drop-count>Drop files here, or <span class="dlink">browse</span></strong>
+            <span class="muted small dsub">Bank slip, transfer confirmation, screenshot · up to 10 files, 20 MB each · paste a screenshot with ⌘/Ctrl V</span>
+          </div>
+          <div class="fgrid" data-drop-list></div>
+        </div>
+        <div class="actions"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn primary">Upload</button></div>
+      </form>
+    </dialog>
+    <% }) %>
+    <script>document.querySelectorAll('dialog.bookdlg').forEach(d => d.addEventListener('click', e => { if (e.target === d) d.close(); }));</script>
     </div>
 
     <% const piList = typeof pis !== 'undefined' ? pis : []; const poL = typeof pos !== 'undefined' ? pos : []; %>

@@ -147,6 +147,21 @@ r.post('/:id/payments/:pid', async (req, res) => {
   back(res, `/admin/orders/${id}`, { msg: (confirm ? 'Payment confirmed.' : 'Payment rejected.') + sent });
 });
 
+// proof of payment (bank slip, transfer confirmation) — dropped, picked or pasted in the popup
+r.post('/:id/payments/:pid/files', packUpload.array('files', 10), async (req, res) => {
+  const id = req.params.id, to = `/admin/orders/${id}#payments`;
+  const { data: pay } = await admin.from('order_payments').select('id, proof_doc_ids, orders(order_no)').eq('id', req.params.pid).eq('order_id', id).maybeSingle();
+  if (!pay) return notFound(res, 'Payment');
+  if (!req.files?.length) return back(res, to, { err: 'Choose at least one file.' });
+  const ids = [...(pay.proof_doc_ids || [])];
+  for (const file of req.files) {
+    try { ids.push((await uploadDocument({ file, entityType: 'order', entityId: id, kind: 'payment_proof', title: file.originalname, clientVisible: false, uploadedBy: req.user.id })).id); }
+    catch (e) { return back(res, to, { err: `${file.originalname}: ${e.message}` }); }
+  }
+  await admin.from('order_payments').update({ proof_doc_ids: ids }).eq('id', pay.id);
+  back(res, to, { msg: `${req.files.length} proof file${req.files.length === 1 ? '' : 's'} added.` });
+});
+
 r.post('/:id/payments', async (req, res) => {
   const id = req.params.id;
   const { data: o } = await admin.from('orders').select('id, org_id, currency, amount_due').eq('id', id).single();
