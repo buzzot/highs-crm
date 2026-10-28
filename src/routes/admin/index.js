@@ -19,6 +19,7 @@ import purchasing from './purchasing.js';
 import rfqs from './rfqs.js';
 import documents from './documents.js';
 import orders from './orders.js';
+import report from './report.js';
 import { po as poRoutes, pi as piRoutes } from './po.js';
 import { FEATURES, costOf, clearPriceCache, getPrices } from '../../lib/ai-usage.js';
 
@@ -212,6 +213,7 @@ r.use('/logistics', logistics);
 r.use('/pricing', pricing);
 r.use('/documents', documents);
 r.use('/orders', orders);
+r.use('/report', report);
 r.use('/po', poRoutes);
 r.use('/pi', piRoutes);
 

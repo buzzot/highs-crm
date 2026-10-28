@@ -28,6 +28,7 @@
       <a href="/admin/purchasing" class="<%= path.startsWith('/admin/purchasing') ? 'on' : '' %>">Purchasing<% if (typeof navPending !== 'undefined' && navPending.purchasing > 0) { %><span class="navball" title="<%= navPending.purchasing %> supplier repl<%= navPending.purchasing > 1 ? 'ies' : 'y' %> to check"><%= navPending.purchasing > 99 ? '99+' : navPending.purchasing %></span><% } %></a>
       <a href="/admin/logistics" class="<%= path.startsWith('/admin/logistics') ? 'on' : '' %>">Logistics</a>
       <a href="/admin/pricing" class="<%= path.startsWith('/admin/pricing') ? 'on' : '' %>">Pricing</a>
+      <% if (!(user.role === 'staff' && user.staff_level === 'manager')) { %><a href="/admin/report" class="<%= path.startsWith('/admin/report') ? 'on' : '' %>">Report</a><% } %>
     <% } else { %>
       <a href="/portal" class="<%= path === '/portal' ? 'on' : '' %>">Overview</a>
       <a href="/portal/requests" class="<%= path.startsWith('/portal/requests') ? 'on' : '' %>">Requests</a>

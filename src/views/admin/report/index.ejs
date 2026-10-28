@@ -1,0 +1,47 @@
+<%- include('../../partials/head') %>
+<div class="pagehead">
+  <h1>Report</h1>
+  <div class="muted small">All orders · money in, money out and balance · shown in <%= cur %></div>
+</div>
+<div class="card">
+  <form class="row tight" method="get">
+    <input name="q" value="<%= query.q || '' %>" placeholder="Order no, client, supplier…">
+    <select name="status">
+      <% [['active', 'Active (no cancelled)'], ['all', 'All'], ['confirmed', 'Confirmed'], ['in_production', 'In production'], ['shipped', 'Shipped'], ['delivered', 'Delivered'], ['closed', 'Closed'], ['cancelled', 'Cancelled']].forEach(s => { %><option value="<%= s[0] %>" <%= status === s[0] ? 'selected' : '' %>><%= s[1] %></option><% }) %>
+    </select>
+    <label class="small muted">From <input type="date" name="from" value="<%= query.from || '' %>"></label>
+    <label class="small muted">To <input type="date" name="to" value="<%= query.to || '' %>"></label>
+    <button class="btn">Filter</button>
+  </form>
+  <div class="repsum">
+    <div><span>Income</span><b class="pos"><%= fmt.money(totals.income, cur, 0) %></b></div>
+    <div><span>Expenses</span><b><%= fmt.money(totals.expense, cur, 0) %></b></div>
+    <div><span>Balance</span><b class="<%= totals.balance < 0 ? 'neg' : 'pos' %>"><%= fmt.money(totals.balance, cur, 0) %></b></div>
+    <div><span>Orders</span><b><%= rows.length %></b></div>
+  </div>
+  <div class="repwrap">
+  <table class="tbl rep">
+    <thead><tr><th class="c-order">Order</th><th class="c-staff">Staff</th><th>Income</th><th>Expenses</th><th class="right c-bal">Balance</th></tr></thead>
+    <tbody>
+    <% if (!rows.length) { %><tr><td colspan="5" class="muted">No orders.</td></tr><% } %>
+    <% rows.forEach(r => { const o = r.order; %>
+      <tr class="<%= r.cancelled ? 'dim' : '' %>">
+        <td class="c-order"><a href="/admin/orders/<%= o.id %>" class="repno"><%= o.order_no %></a><div class="repsub"><%= o.client_name %></div><div class="repsub"><%= fmt.date(o.created_at) %><% if (r.cancelled) { %> · cancelled<% } %></div></td>
+        <td class="c-staff repsmall"><%= r.staff || '—' %></td>
+        <td><div class="repcells">
+          <% if (!r.incomes.length) { %><span class="repnone">—</span><% } %>
+          <% r.incomes.forEach(i => { %><div class="repcell <%= i.pending ? 'pend' : '' %>" title="<%= i.label %><%= i.pending ? ' · waiting for confirmation' : '' %>"><b class="pos"><%= fmt.money(i.amount, i.currency, 0) %></b><span><%= fmt.date(i.date) %></span></div><% }) %>
+        </div></td>
+        <td><div class="repcells">
+          <% if (!r.expenses.length) { %><span class="repnone">—</span><% } %>
+          <% r.expenses.forEach(e => { %><div class="repcell <%= e.kind %> <%= e.est ? 'pend' : '' %>" title="<%= e.kind === 'freight' ? 'Logistics' : 'Supplier' %><%= e.est ? ' · estimate from order cost' : '' %><%= e.kind === 'freight' && !e.paid ? ' · not paid yet' : '' %>"><b><%= fmt.money(e.amount, e.currency, 0) %></b><span><%= e.name %></span></div><% }) %>
+        </div></td>
+        <td class="right c-bal"><b class="repbal <%= r.balance < 0 ? 'neg' : (r.balance > 0 ? 'pos' : '') %>"><%= fmt.money(r.balance, cur, 0) %></b></td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table>
+  </div>
+  <p class="muted small">Income = confirmed client payments (faded = waiting for confirmation, not in the balance). Expenses = supplier orders sent/confirmed (faded = estimate from the order cost) plus logistics costs. Balance = income − expenses.</p>
+</div>
+<%- include('../../partials/foot') %>
