@@ -6,6 +6,7 @@
     <p class="muted"><%= q.requests?.organizations?.name %> · <%= q.suppliers?.name || 'no supplier' %> · created <%= fmt.date(q.created_at) %></p></div>
   <span class="pill lg <%= q.status %>"><%= fmt.status(q.status) %></span>
 </div>
+<%- include('../../partials/owner_box') %>
 
 <div class="grid2 wide-left">
   <div class="card">

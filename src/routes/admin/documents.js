@@ -1,6 +1,7 @@
 import { Router } from '../../lib/router.js';
 import multer from '../../lib/multer-utf8.js';
-import { admin } from '../../lib/supabase.js';
+import { admin, rawDb } from '../../lib/supabase.js';
+import { isManager, levelOf } from '../../lib/access.js';
 import { uploadDocument, signedUrl, deleteDocument, downloadDocument } from '../../lib/storage.js';
 import { sendEmail } from '../../lib/mailer.js';
 import { documentsEmail } from '../../lib/email-templates.js';
@@ -80,7 +81,21 @@ r.post('/send', async (req, res) => {
 // a document's file never changes, so its path and a signed link are remembered for 5 minutes — a page with many thumbnails
 // then costs one lookup per picture at most once, and the browser keeps the redirect for a few minutes too
 const linkCache = new Map();
+const DOC_TABLE = { order: 'orders', request: 'requests', quote: 'quotes', shipment: 'shipments', rfq: 'rfqs' };
+/** A Manager reaches a file only through a record that is theirs (everything else, e.g. product photos, is shared). */
+async function docAllowed(user, id) {
+  if (!isManager(user)) return true;
+  const { data: d } = await rawDb.from('documents').select('entity_type, entity_id').eq('id', id).maybeSingle();
+  if (!d) return false;
+  let type = d.entity_type, eid = d.entity_id;
+  if (type === 'freight_cost') { const { data: c } = await rawDb.from('freight_costs').select('shipment_id').eq('id', eid).maybeSingle(); if (!c) return false; type = 'shipment'; eid = c.shipment_id; }
+  const table = DOC_TABLE[type];
+  if (!table) return true;
+  const { data } = await rawDb.from(table).select('id').eq('id', eid).eq('owner_id', user.id).maybeSingle();
+  return !!data;
+}
 r.get('/:id/download', async (req, res) => {
+  if (!(await docAllowed(req.user, req.params.id))) return res.status(404).send('Not found');
   const hit = linkCache.get(req.params.id);
   let url = hit && hit.until > Date.now() ? hit.url : null;
   if (!url) {
@@ -101,6 +116,11 @@ r.post('/:id/toggle', async (req, res) => {
 });
 
 r.post('/:id/delete', async (req, res) => {
+  if (levelOf(req.user) !== 'admin') {   // only an Admin deletes what somebody else uploaded
+    const { data: d } = await rawDb.from('documents').select('uploaded_by').eq('id', req.params.id).maybeSingle();
+    if (!(await docAllowed(req.user, req.params.id))) return res.status(404).send('Not found');
+    if (d && d.uploaded_by !== req.user.id) return back(res, safeBack(req.body.redirect), { err: 'You can only delete files you uploaded yourself. Ask an Admin.' });
+  }
   await deleteDocument(req.params.id);
   linkCache.delete(req.params.id);
   back(res, safeBack(req.body.redirect), { msg: 'File deleted.' });

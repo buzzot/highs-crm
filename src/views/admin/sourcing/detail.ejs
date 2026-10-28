@@ -4,6 +4,7 @@
     <p class="muted"><a href="/admin/clients/<%= request.organizations.id %>"><%= request.organizations.name %></a> · submitted by <%= request.creator?.full_name || request.creator?.email || '—' %> · <%= fmt.date(request.created_at) %></p></div>
   <span class="pill lg <%= request.status %>"><%= fmt.status(request.status) %></span>
 </div>
+<%- include('../../partials/owner_box') %>
 <% const rfqList = typeof rfqs !== 'undefined' ? rfqs : []; %>
 <div class="card">
   <h2>Ask suppliers for a price <% if (rfqList.length) { %><span class="count"><%= rfqList.length %></span><% } %></h2>

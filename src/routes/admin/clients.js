@@ -24,13 +24,29 @@ r.get('/staff/list', requireAdmin, async (req, res) => {
 });
 r.post('/staff/invite', requireAdmin, async (req, res) => {
   try {
-    const role = req.body.role === 'admin' ? 'admin' : req.body.role === 'staff' ? 'staff' : null;
+    const pick = String(req.body.role || '');
+    const role = pick === 'admin' ? 'admin' : ['staff', 'director', 'manager'].includes(pick) ? 'staff' : null;   // Director / Manager are both role 'staff' with a staff_level
     const { data: cur } = role ? { data: null } : await admin.from('invitations').select('role').ilike('email', String(req.body.email).trim()).order('created_at', { ascending: false }).limit(1).maybeSingle();
     await inviteUser({ email: req.body.email, role: role || cur?.role || 'staff', invitedBy: req.user.id });
+    if (['director', 'manager'].includes(pick)) {   // needs migration 0036; ignored (everyone is a Director) until it has been run
+      const { error } = await admin.from('profiles').update({ staff_level: pick }).ilike('email', String(req.body.email).trim());
+      if (error && pick === 'manager') throw new Error(`Invitation sent, but the Manager level could not be saved — run supabase/migrations/0036_access_levels.sql first. (${error.message})`);
+    }
     res.redirect('/admin/clients/staff/list?msg=' + encodeURIComponent(`Invitation sent to ${req.body.email} — valid 14 days.`));
   } catch (e) { res.redirect('/admin/clients/staff/list?err=' + encodeURIComponent(e.message)); }
 });
 
+
+// change a team member's access level (Admin / Director / Manager)
+r.post('/staff/:uid/level', requireAdmin, async (req, res) => {
+  const to = '/admin/clients/staff/list';
+  const level = String(req.body.level || '');
+  if (!['admin', 'director', 'manager'].includes(level)) return res.redirect(`${to}?err=${encodeURIComponent('Unknown level.')}`);
+  if (req.params.uid === req.user.id && level !== 'admin') return res.redirect(`${to}?err=${encodeURIComponent('You cannot lower your own access — ask another Admin.')}`);
+  const patch = level === 'admin' ? { role: 'admin' } : { role: 'staff', staff_level: level };
+  const { error } = await admin.from('profiles').update(patch).eq('id', req.params.uid).in('role', ['admin', 'staff']);
+  res.redirect(`${to}?${error ? 'err=' + encodeURIComponent(/staff_level/.test(error.message) ? 'Run supabase/migrations/0036_access_levels.sql first.' : error.message) : 'msg=' + encodeURIComponent('Access level changed — it applies from their next page load.')}`);
+});
 
 r.get('/', async (req, res) => {
   const { data } = await admin.from('organizations').select('*, profiles!profiles_org_id_fkey(count), orders(count), requests(count)').order('name');

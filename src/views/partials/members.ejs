@@ -8,7 +8,7 @@
     <li class="<%= m.active === false && m.state === 'accepted' ? 'dim' : '' %>">
       <span class="avatar <%= m.state %>"><%= (m.full_name || m.email || '?').trim().charAt(0).toUpperCase() %></span>
       <div class="who">
-        <div class="name"><%= m.full_name || m.email %><% if (typeof showRole !== 'undefined' && showRole && m.role) { %> <span class="tag"><%= m.role %></span><% } %></div>
+        <div class="name"><%= m.full_name || m.email %><% if (typeof showRole !== 'undefined' && showRole && m.role) { %> <span class="tag"><%= m.role === 'admin' ? 'Admin' : m.staff_level === 'manager' ? 'Manager' : m.role === 'staff' ? 'Director' : m.role %></span><% } %></div>
         <% if (m.full_name) { %><div class="muted small"><%= m.email %></div><% } %>
         <div class="istate small">
           <% if (m.state === 'accepted') { %>
@@ -28,6 +28,9 @@
           <% if (typeof cancelAction !== 'undefined' && cancelAction) { %>
           <form method="post" action="<%= cancelAction %>" class="inline" onsubmit="return confirm('Cancel the invitation for <%= m.email %>?')"><input type="hidden" name="email" value="<%= m.email %>"><button class="link small danger">Cancel</button></form>
           <% } %>
+        <% } else if (m.id && typeof levelAction !== 'undefined' && levelAction && m.state === 'accepted' && ['admin', 'staff'].includes(m.role)) { const _lv = m.role === 'admin' ? 'admin' : m.staff_level === 'manager' ? 'manager' : 'director'; %>
+          <form method="post" action="<%= levelAction %>/<%= m.id %>/level" class="inline"><select name="level" class="lvlsel" aria-label="Access level" onchange="this.form.submit()"><option value="admin" <%= _lv === 'admin' ? 'selected' : '' %>>Admin</option><option value="director" <%= _lv === 'director' ? 'selected' : '' %>>Director</option><option value="manager" <%= _lv === 'manager' ? 'selected' : '' %>>Manager</option></select></form>
+          <% if (typeof toggleBase !== 'undefined' && toggleBase) { %><form method="post" action="<%= toggleBase %>/<%= m.id %>/toggle" class="inline"><button class="link small"><%= m.active === false ? 'Enable' : 'Disable' %></button></form><% } %>
         <% } else if (m.id && typeof toggleBase !== 'undefined' && toggleBase) { %>
           <form method="post" action="<%= toggleBase %>/<%= m.id %>/toggle" class="inline"><button class="link small"><%= m.active === false ? 'Enable' : 'Disable' %></button></form>
         <% } %>

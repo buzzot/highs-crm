@@ -47,7 +47,7 @@
 <div class="card"><div class="actions">
   <% if (draft) { %><button class="btn" formaction="/admin/purchasing/<%= po.id %>">Save</button><% } %>
   <% if (['draft', 'sent', 'replied'].includes(po.status)) { %><button class="btn primary" formaction="/admin/purchasing/<%= po.id %>/send" onclick="return confirm('Email this purchase order to the supplier now?')"><%= draft ? 'Send to supplier' : 'Send again' %></button><% } %>
-  <% if (draft) { %><button class="btn danger" formaction="/admin/purchasing/<%= po.id %>/delete" onclick="return confirm('Delete this draft?')">Delete draft</button><% } %>
+  <% if (draft && (typeof canDelete !== 'function' || canDelete(po))) { %><button class="btn danger" formaction="/admin/purchasing/<%= po.id %>/delete" onclick="return confirm('Delete this draft?')">Delete draft</button><% } %>
 </div></div>
 </form>
 

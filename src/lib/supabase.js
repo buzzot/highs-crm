@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { countingFetch } from './perf.js';
+import { scopeTable, setProbe, scopeReady } from './access.js';
 
 // Tidy up values pasted into hosting dashboards: stray quotes/spaces, missing https://,
 // a bare project ref ("abcd1234") or a dashboard link instead of the API URL.
@@ -35,8 +36,20 @@ const opts = { auth: { autoRefreshToken: false, persistSession: false }, global:
 const safeUrl = url || 'http://localhost';
 
 /** Service-role client: bypasses RLS. Use only in admin routes and auth plumbing. */
-export const admin = createClient(safeUrl, serviceKey || 'x', opts);
-admin.isServiceClient = true; // lets shared caches tell it from a per-user client
+const rawAdmin = createClient(safeUrl, serviceKey || 'x', opts);
+rawAdmin.isServiceClient = true; // lets shared caches tell it from a per-user client
+/** The same client, but tables that carry owner_id are limited to what the signed-in staff member's access level allows (see access.js). */
+export const admin = new Proxy(rawAdmin, {
+  get(t, prop) {
+    if (prop === 'from') return table => scopeTable(t.from(table), table);
+    const v = Reflect.get(t, prop);
+    return typeof v === 'function' ? v.bind(t) : v;
+  },
+});
+/** The unrestricted client, for access checks themselves. */
+export const rawDb = rawAdmin;
+setProbe(async () => { const { error } = await rawAdmin.from('orders').select('owner_id').limit(1); return !error ? true : /owner_id|column|schema cache/i.test(error.message) ? false : null; });
+scopeReady();
 
 /** Anonymous client for sign-in flows. */
 export const anon = createClient(safeUrl, anonKey || 'x', opts);

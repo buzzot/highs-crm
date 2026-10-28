@@ -3,7 +3,8 @@ import { requireAdmin } from '../../middleware/auth.js';
 import { sendEmail, emailDiagnostics } from '../../lib/mailer.js';
 import { codeEmail } from '../../lib/email-templates.js';
 import { requireStaff } from '../../middleware/auth.js';
-import { admin } from '../../lib/supabase.js';
+import { admin, rawDb } from '../../lib/supabase.js';
+import { levelOf, isManager, canDelete, canAssign, guardFor, LEVEL_LABEL } from '../../lib/access.js';
 import { defaultCurrency, sumIn } from '../../lib/currency.js';
 import { getSettings } from '../../lib/util.js';
 import { applyCashProfit } from '../../lib/order-profit.js';
@@ -25,6 +26,81 @@ const r = Router();
 r.use(requireStaff);
 r.use(async (req, res, next) => { res.locals.defCur = await defaultCurrency(admin); next(); }); // the company's default currency, for forms and totals
 
+// access levels: who the user is, a Manager only reaches their own records, and only an Admin deletes what somebody else created
+const DELETE_ROUTES = [
+  { re: /^\/rfqs\/([0-9a-f-]{36})\/delete$/, table: 'rfqs' },
+  { re: /^\/logistics\/shipments\/([0-9a-f-]{36})\/delete$/, table: 'shipments' },
+  { re: /^\/purchasing\/([0-9a-f-]{36})\/delete$/, table: 'supplier_pos' },
+];
+const denied = (res, status, message) => res.status(status).render('error', { title: status === 404 ? 'Not found' : 'Not allowed', message });
+r.use(async (req, res, next) => {
+  const u = req.user, lvl = levelOf(u);
+  Object.assign(res.locals, { level: lvl, levelLabel: LEVEL_LABEL[lvl], isManager: isManager(u), canDelete: rec => canDelete(u, rec), canAssign: canAssign(u) });
+  if (isManager(u)) {
+    const g = guardFor(req.path);
+    if (g) {
+      const { data } = await rawDb.from(g.table).select('id').eq('id', g.id).eq('owner_id', u.id).maybeSingle();
+      if (!data) return denied(res, 404, 'This record does not exist, or it belongs to someone else.');
+    }
+  }
+  if (req.method === 'POST' && lvl !== 'admin') {
+    const d = DELETE_ROUTES.map(x => ({ x, m: req.path.match(x.re) })).find(y => y.m);
+    if (d) {
+      const { data } = await rawDb.from(d.x.table).select('created_by').eq('id', d.m[1]).maybeSingle();
+      if (data && data.created_by !== u.id) return denied(res, 403, 'You can only delete records you created yourself. Ask an Admin.');
+    }
+  }
+  next();
+});
+
+// owner box on the main page of a record: who owns it, and (Admin / Director) a way to hand it to someone else
+const OWNER_PAGE = [
+  { re: /^\/clients\/([0-9a-f-]{36})$/, table: 'organizations' }, { re: /^\/sourcing\/([0-9a-f-]{36})$/, table: 'requests' },
+  { re: /^\/orders\/([0-9a-f-]{36})$/, table: 'orders' }, { re: /^\/rfqs\/([0-9a-f-]{36})$/, table: 'rfqs' },
+  { re: /^\/logistics\/shipments\/([0-9a-f-]{36})$/, table: 'shipments' }, { re: /^\/pricing\/quotes\/([0-9a-f-]{36})$/, table: 'quotes' },
+];
+r.use(async (req, res, next) => {
+  if (req.method !== 'GET') return next();
+  const o = OWNER_PAGE.map(x => ({ x, m: req.path.match(x.re) })).find(y => y.m);
+  if (!o) return next();
+  try {
+    const [{ data: rec, error }, { data: staff }] = await Promise.all([
+      rawDb.from(o.x.table).select('owner_id, created_by').eq('id', o.m[1]).maybeSingle(),
+      rawDb.from('profiles').select('id, full_name, email, role, staff_level').in('role', ['admin', 'staff']).eq('active', true).order('email'),
+    ]);
+    if (!error) {
+      const name = id => { const p = (staff || []).find(x => x.id === id); return p ? (p.full_name || p.email) : null; };
+      res.locals.ownerBox = { table: o.x.table, id: o.m[1], ownerId: rec?.owner_id || null, ownerName: name(rec?.owner_id), createdByName: name(rec?.created_by), staff: staff || [], redirect: req.originalUrl.split('?')[0] };
+    }
+  } catch { /* migration 0036 not applied yet: no owner box */ }
+  next();
+});
+
+// hand a record (and what belongs to it) to another team member — Admin / Director only
+const OWNER_TABLES = ['organizations', 'requests', 'quotes', 'orders', 'shipments', 'rfqs'];
+r.post('/owner', async (req, res) => {
+  const back = u => res.redirect(u);
+  const to = typeof req.body.redirect === 'string' && req.body.redirect.startsWith('/admin') ? req.body.redirect : '/admin';
+  if (!canAssign(req.user)) return denied(res, 403, 'Only an Admin or Director can assign records.');
+  const { table, id } = req.body;
+  if (!OWNER_TABLES.includes(table) || !/^[0-9a-f-]{36}$/.test(String(id))) return back(`${to}?err=${encodeURIComponent('Unknown record.')}`);
+  const owner = req.body.owner_id ? String(req.body.owner_id) : null;
+  if (owner) { const { data: p } = await rawDb.from('profiles').select('id').eq('id', owner).in('role', ['admin', 'staff']).maybeSingle(); if (!p) return back(`${to}?err=${encodeURIComponent('Choose a team member.')}`); }
+  const set = (t, col, val) => rawDb.from(t).update({ owner_id: owner }).eq(col, val);
+  const { error } = await set(table, 'id', id);
+  if (error) return back(`${to}?err=${encodeURIComponent(/owner_id/.test(error.message) ? 'Run supabase/migrations/0036_access_levels.sql first.' : error.message)}`);
+  if (req.body.cascade) {   // what belongs to it follows
+    const ids = async (t, col, val) => ((await rawDb.from(t).select('id').eq(col, val)).data || []).map(x => x.id);
+    if (table === 'organizations') for (const t of ['requests', 'orders']) await set(t, 'org_id', id);
+    const reqIds = table === 'organizations' ? await ids('requests', 'org_id', id) : table === 'requests' ? [id] : [];
+    for (const rid of reqIds) for (const t of ['quotes', 'rfqs', 'orders']) await set(t, 'request_id', rid);
+    const orderIds = table === 'orders' ? [id] : table === 'organizations' || table === 'requests' ? (await Promise.all((reqIds.length ? reqIds : [id]).map(rid => ids('orders', 'request_id', rid)))).flat() : [];
+    for (const oid of orderIds) await set('shipments', 'order_id', oid);
+    if (table === 'organizations') for (const oid of await ids('orders', 'org_id', id)) await set('shipments', 'order_id', oid);
+  }
+  back(`${to}?msg=${encodeURIComponent(owner ? 'Owner changed.' : 'Owner removed — only Admin and Director can see it now.')}`);
+});
+
 r.get('/', async (req, res) => {
   const since30 = new Date(Date.now() - 30 * 864e5).toISOString();
   const [settings, defCur] = await Promise.all([getSettings(admin), defaultCurrency(admin)]);
@@ -32,7 +108,7 @@ r.get('/', async (req, res) => {
     admin.from('requests').select('id, ref, title, status, created_at, organizations(name)').order('created_at', { ascending: false }).limit(8),
     admin.from('order_overview').select('*').order('created_at', { ascending: false }),
     admin.from('shipments').select('id, status, eta, mode, tracking_no, orders(order_no, organizations(name))').not('status', 'in', '("delivered")').order('eta').limit(8),
-    admin.from('activity_log').select('*, profiles(full_name, email)').order('created_at', { ascending: false }).limit(10),
+    (isManager(req.user) ? admin.from('activity_log').select('*, profiles(full_name, email)').eq('actor_id', req.user.id) : admin.from('activity_log').select('*, profiles(full_name, email)')).order('created_at', { ascending: false }).limit(10),
     admin.from('organizations').select('id', { count: 'exact', head: true }).eq('active', true),
     // shipped without a government export declaration number on file
     admin.from('shipments').select('id, status, orders(order_no)').eq('export_official', true).is('export_declaration_no', null)

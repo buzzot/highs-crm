@@ -8,6 +8,7 @@
       <% if (order.quote_id) { %> · <a href="/admin/pricing/quotes/<%= order.quote_id %>">quote</a><% } %></p></div>
   <span class="pill lg <%= order.status %>"><%= fmt.status(order.status) %></span>
 </div>
+<%- include('../../partials/owner_box') %>
 
 <div class="card">
   <ol class="steps"><% steps.forEach((s, i) => { %><li class="<%= i < idx ? 'done' : i === idx ? 'now' : '' %>"><%= fmt.status(s) %></li><% }) %></ol>

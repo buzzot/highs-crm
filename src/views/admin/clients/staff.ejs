@@ -3,16 +3,20 @@
 <div class="grid2">
   <div class="card">
     <h2>Team <span class="count"><%= staff.filter(m => m.state === 'accepted').length %> active</span></h2>
-    <%- include('../../partials/members', { members: staff, inviteAction: '/admin/clients/staff/invite', showRole: true }) %>
+    <%- include('../../partials/members', { members: staff, inviteAction: '/admin/clients/staff/invite', showRole: true, levelAction: '/admin/clients/staff' }) %>
   </div>
   <div class="card">
     <h2>Invite a team member</h2>
     <form method="post" action="/admin/clients/staff/invite">
       <label>Email <input type="email" name="email" required></label>
-      <label>Role <select name="role"><option value="staff">Staff — full workspace, no settings</option><option value="admin">Admin — also staff & pricing settings</option></select></label>
+      <label>Access level <select name="role">
+        <option value="director">Director — sees everything, deletes only what they created</option>
+        <option value="manager">Manager — sees only their own records</option>
+        <option value="admin">Admin — full access, settings and staff</option></select></label>
       <button class="btn primary">Send invite</button>
     </form>
     <p class="muted small">The link in the email is valid for 14 days.</p>
+    <p class="muted small">A Manager sees the clients, requests, quotes, RFQs, orders and shipments they created or that an Admin / Director assigned to them. Records without an owner are visible to Admin and Director only — open a record and choose its owner.</p>
   </div>
 </div>
 <%- include('../../partials/foot') %>

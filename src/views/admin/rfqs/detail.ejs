@@ -15,6 +15,7 @@
     <span class="pill lg <%= rfq.status === 'open' ? 'quoted' : rfq.status === 'closed' ? 'closed' : 'new' %>"><%= labels[rfq.status] %></span>
   </div>
 </div>
+<%- include('../../partials/owner_box') %>
 <% if (msg) { %><div class="alert ok"><%= msg %></div><% } %>
 <% if (err) { %><div class="alert err"><%= err %></div><% } %>
 
@@ -161,7 +162,7 @@
 </form>
 <div class="actions">
   <% if (rfq.status !== 'draft') { %><form method="post" action="/admin/rfqs/<%= rfq.id %>/status" class="inline"><input type="hidden" name="status" value="<%= rfq.status === 'closed' ? 'open' : 'closed' %>"><button class="btn"><%= rfq.status === 'closed' ? 'Reopen RFQ' : 'Close RFQ' %></button></form><% } %>
-  <% if (rs.every(s => s.status === 'draft')) { %><form method="post" action="/admin/rfqs/<%= rfq.id %>/delete" class="inline" onsubmit="return confirm('Delete this RFQ?')"><button class="btn danger">Delete</button></form><% } %>
+  <% if (rs.every(s => s.status === 'draft') && (typeof canDelete !== 'function' || canDelete(rfq))) { %><form method="post" action="/admin/rfqs/<%= rfq.id %>/delete" class="inline" onsubmit="return confirm('Delete this RFQ?')"><button class="btn danger">Delete</button></form><% } %>
 </div>
 <script src="/js/rfq-new.js?v=<%= typeof assetV === 'undefined' ? '' : assetV %>"></script>
 <%- include('../../partials/foot') %>

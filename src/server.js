@@ -8,6 +8,7 @@ import { RFQ_UNITS, PACKAGE_TYPES } from './lib/rfq.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadUser } from './middleware/auth.js';
+import { store } from './lib/access.js';
 import { compress, staticGzip } from './lib/compress.js';
 import { requestTiming } from './lib/perf.js';
 import authRoutes from './routes/auth.js';
@@ -63,6 +64,7 @@ app.use((req, res, next) => {
   next();
 });
 app.use(loadUser);
+app.use((req, res, next) => store.run({ user: req.user }, next));   // every database call in this request knows who is asking (see lib/access.js)
 // interface language. A client sees their own choice, else their company's; people who are not signed in follow the cookie
 // (set from the invitation or the switch). Only Russian is translated, and only then does a page get touched.
 app.get('/lang/:code', async (req, res) => {
