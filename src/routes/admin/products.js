@@ -5,7 +5,8 @@ import { clean, notFound, getSettings, fxRate, back } from '../../lib/util.js';
 import { log } from '../../lib/activity.js';
 import { canAssign } from '../../lib/access.js';
 import { clean as cleanSub, missing as subMissing, toProduct, containerFit, changes, fromProduct } from '../../lib/supplier-product.js';
-import { productMetrics } from '../../lib/product-metrics.js';
+import { productMetrics, fxToUsdStrict } from '../../lib/product-metrics.js';
+import { SORT_DEFS, PAGE_SIZE, filterProducts, paginate } from '../../lib/product-list.js';
 import { compareProducts, extractProductCard, aiEnabled } from '../../lib/ai.js';
 import { uploadDocument, deleteDocument } from '../../lib/storage.js';
 
@@ -58,52 +59,51 @@ async function formData() {
 }
 
 // ---------- list (filters, sort, estimates), CSV export and comparison ----------
-const SORTS = {
-  name: ['Name A–Z', (a, b) => a.name.localeCompare(b.name)],
-  newest: ['Newest first', (a, b) => String(b.created_at).localeCompare(String(a.created_at))],
-  price: ['Factory price ↑', (a, b) => nz(a.m.priceUsd) - nz(b.m.priceUsd)],
-  price_desc: ['Factory price ↓', (a, b) => nz(b.m.priceUsd, -1) - nz(a.m.priceUsd, -1)],
-  landed: ['Landed ↑', (a, b) => nz(a.m.landedUsd) - nz(b.m.landedUsd)],
-  moq: ['MOQ ↑', (a, b) => nz(a.moq) - nz(b.moq)],
-  per40: ['Units / 40HQ ↓', (a, b) => nz(b.m.unitsPer40hq, -1) - nz(a.m.unitsPer40hq, -1)],
-  issues: ['Most issues', (a, b) => b.m.issues.length - a.m.issues.length],
-};
-const nz = (v, empty = Infinity) => (v == null ? empty : Number(v));
+// every row, page by page — the API returns at most 1000 rows per request, so a big catalogue must never be cut short
+async function fetchAll(make) {
+  const out = [];
+  for (let from = 0; from < 200000; from += 1000) {
+    const { data, error } = await make().range(from, from + 999);
+    if (error || !data) break;
+    out.push(...data);
+    if (data.length < 1000) break;
+  }
+  return out;
+}
 
 async function listProducts(query) {
   const settings = await getSettings(admin);
-  const toUsd = c => fxRate(settings, c, 'USD');
-  const [{ data }, suppliers] = await Promise.all([
-    admin.from('products').select('*, suppliers(id, name, rating, lead_time_days, can_export_official, company_type, city)').order('name'),
+  const toUsd = fxToUsdStrict(settings);
+  const [data, suppliers] = await Promise.all([
+    fetchAll(() => admin.from('products').select('*, suppliers(id, name, rating, lead_time_days, can_export_official, company_type, city)').order('name').order('id')),
     formData(),
   ]);
   const all = (data || []).map(p => ({ ...p, m: productMetrics(p, toUsd, settings.container) }));
   const categories = [...new Set(all.map(p => p.category).filter(Boolean))].sort();
-  const q = String(query.q || '').trim().toLowerCase();
-  let rows = all.filter(p => (!q || [p.name, p.sku, p.supplier_sku, p.hs_code, p.category, p.description, p.suppliers?.name].some(x => String(x || '').toLowerCase().includes(q)))
-    && (!query.category || p.category === query.category)
-    && (!query.supplier || p.supplier_id === query.supplier)
-    && (!query.issues || p.m.issues.length > 0));
-  const sort = SORTS[query.sort] ? query.sort : 'name';
-  rows = rows.sort(SORTS[sort][1]);
+  const { rows, sort } = filterProducts(all, query);
   return { rows, total: all.length, categories, suppliers, settings, sort };
 }
 
 async function firstPhotos(ids) {
-  if (!ids.length) return {};
-  const { data } = await admin.from('documents').select('id, entity_id').eq('entity_type', 'product').eq('kind', 'product_photo').in('entity_id', ids).order('created_at');
   const out = {}, count = {};
-  (data || []).forEach(d => { out[d.entity_id] ||= d.id; count[d.entity_id] = (count[d.entity_id] || 0) + 1; });
+  for (let i = 0; i < ids.length; i += 100) {
+    const { data } = await admin.from('documents').select('id, entity_id').eq('entity_type', 'product').eq('kind', 'product_photo').in('entity_id', ids.slice(i, i + 100)).order('created_at');
+    (data || []).forEach(d => { out[d.entity_id] ||= d.id; count[d.entity_id] = (count[d.entity_id] || 0) + 1; });
+  }
   return { first: out, count };
 }
 
 r.get('/', async (req, res) => {
   const { rows, total, categories, suppliers, settings, sort } = await listProducts(req.query);
-  const photos = await firstPhotos(rows.map(p => p.id));
+  const { pages, page, shown } = paginate(rows, req.query.page, PAGE_SIZE);
+  const photos = await firstPhotos(shown.map(p => p.id));
   const { count: pendingSubs } = await admin.from('supplier_products').select('id', { count: 'exact', head: true }).in('status', ['submitted', 'edit_requested', 'updated']); // null before migration 0028
+  const cur = [...new Set(rows.map(p => p.cost_currency).filter(c => c && c !== 'USD'))].sort();
+  const fxToUsd = fxToUsdStrict(settings);
   res.render('admin/products/index', { pendingSubs: pendingSubs || 0,
-    title: 'Products', products: rows, total, categories, suppliers, thumb: photos.first || {}, photoCount: photos.count || {},
-    sorts: Object.fromEntries(Object.entries(SORTS).map(([k, [label]]) => [k, label])), sort, container: settings.container,
+    title: 'Products', products: shown, total, matched: rows.length, page, pages, pageSize: PAGE_SIZE, categories, suppliers, thumb: photos.first || {}, photoCount: photos.count || {},
+    sorts: Object.fromEntries(Object.entries(SORT_DEFS).map(([k, [label]]) => [k, label])), sort, container: settings.container,
+    view: req.query.view === 'costing' ? 'costing' : 'catalog', fxList: cur.map(c => [c, fxToUsd(c)]), canDelete: canAssign(req.user), msg: req.query.msg, err: req.query.err,
   });
 });
 
@@ -112,7 +112,8 @@ r.get('/export.csv', async (req, res) => {
   const cols = [['Name', p => p.name], ['SKU', p => p.sku], ['Supplier SKU', p => p.supplier_sku], ['Supplier', p => p.suppliers?.name], ['Category', p => p.category],
     ['Factory price', p => p.unit_cost], ['Currency', p => p.cost_currency], ['Factory price USD', p => p.m.priceUsd], ['Landed USD (FCL 40HQ)', p => p.m.landedUsd],
     ['Suggested wholesale USD', p => p.m.wholesaleUsd], ['MOQ', p => p.moq], ['Units per 40HQ', p => p.m.unitsPer40hq], ['HS code', p => p.hs_code],
-    ['Pcs per carton', p => p.carton_qty], ['Carton cbm', p => p.carton_cbm], ['Carton kg', p => p.carton_weight_kg], ['Missing data', p => p.m.issues.join('; ')]];
+    ['Pcs per carton', p => p.carton_qty], ['Carton cbm', p => p.carton_cbm], ['Carton kg', p => p.carton_weight_kg], ['Missing data', p => p.m.issues.join('; ')],
+    ['Wholesale markup %', p => p.m.wholesaleUsd != null ? p.m.markupPct : ''], ['Landed basis', p => (p.m.landedBasis === 'volume' ? 'volume only (no carton weight)' : p.m.landedBasis === 'full' ? 'volume and weight' : '')], ['Critical missing', p => p.m.critical.map(g => g.label).join('; ')]];
   const cell = v => { const t = v == null ? '' : String(v); return /[",\n;]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
   const csv = '﻿' + [cols.map(c => c[0]).join(','), ...rows.map(p => cols.map(c => cell(c[1](p))).join(','))].join('\r\n');
   res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="lumi-trade-products-${new Date().toISOString().slice(0, 10)}.csv"` });
@@ -124,7 +125,7 @@ r.get('/compare', async (req, res) => {
   const ids = [...new Set([].concat(req.query.ids || []).flatMap(x => String(x).split(',')).filter(x => /^[0-9a-f-]{36}$/i.test(x)))].slice(0, 6);
   if (ids.length < 2) return res.redirect('/admin/products?err=' + encodeURIComponent('Tick at least two products to compare (up to six).'));
   const settings = await getSettings(admin);
-  const toUsd = c => fxRate(settings, c, 'USD');
+  const toUsd = fxToUsdStrict(settings);
   const { data } = await admin.from('products').select('*, suppliers(id, name, rating, lead_time_days, can_export_official, company_type, city, country)').in('id', ids);
   const products = ids.map(id => (data || []).find(p => p.id === id)).filter(Boolean).map(p => ({ ...p, m: productMetrics(p, toUsd, settings.container) }));
   const photos = await firstPhotos(products.map(p => p.id));

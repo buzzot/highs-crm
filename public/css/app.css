@@ -2231,3 +2231,64 @@ details.grp ul{list-style:none;margin:6px 0 0;padding:6px 10px;background:#f7f9f
 .cd-card .cd-sub:last-child{margin:12px 0 0}
 .sd-prod+.muted,.tblwrap+.cd-sub{margin-top:12px}
 @media (max-width:560px){.sd-docs th:nth-child(2),.sd-docs td:nth-child(2),.sd-docs th:nth-child(3),.sd-docs td:nth-child(3){display:none}}
+
+/* products directory: Catalog / Costing */
+.pd-views{margin:0 0 14px}
+.pd-card{padding:16px 20px}
+.pd-sel{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#f2faf8;border:1px solid #cfe9e3;border-radius:10px;padding:8px 12px;margin:0 0 12px}
+.pd-sel[hidden]{display:none}
+.pd-selcount{font-size:14px;margin-right:4px}
+.pd-sel .btn:disabled{opacity:.45;cursor:not-allowed}
+.pd-tbl{table-layout:auto}
+.pd-tbl th.c-sel,.pd-tbl td.c-sel{width:32px;padding-left:4px;padding-right:4px}
+.pd-tbl td{height:56px}
+.pd-tbl .num{white-space:nowrap}
+.pd-tbl .c-prod{min-width:220px;max-width:360px}
+.pd-tbl .c-name a.pd-id{display:flex;align-items:center;gap:10px;max-width:100%;color:inherit;text-decoration:none}
+.pd-tbl .c-name a.pd-id:hover .nm{text-decoration:underline}
+.pd-img{flex:none;width:40px;height:40px;border-radius:6px;border:1px solid var(--line);background:#f4f6f8;object-fit:contain;display:block}
+.pd-img.none{background:#f4f6f8 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23b5bcc7' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='5' width='18' height='14' rx='2'/%3E%3Ccircle cx='9' cy='11' r='1.6'/%3E%3Cpath d='m21 16-5-5-8 8'/%3E%3C/svg%3E") center/20px no-repeat}
+.pd-txt{min-width:0;display:block}
+.pd-txt .nm{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.pd-txt .cl-sub{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pd-tbl .c-name .tip{left:50px}
+.pd-mob{display:none}
+.pd-tbl .clip{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:170px}
+.pd-tbl .c-cat,.pd-tbl .c-sup{max-width:180px}
+.pd-tbl td.r .cl-sub,.pd-tbl td .cl-sub{font-size:12px}
+.pd-tbl .c-landed strong{font-weight:600}
+.pd-tbl .c-data{white-space:nowrap}
+.pd-ok{font-size:12.5px;color:var(--muted)}
+.pd-badge{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;font-weight:500;padding:2px 9px;border-radius:99px;cursor:pointer;list-style:none;white-space:nowrap;border:1px solid transparent}
+.pd-badge::-webkit-details-marker{display:none}
+.pd-badge::after{content:'▾';font-size:9px;opacity:.55}
+.pd-badge.crit{background:var(--warn-soft);color:#8a5a00}
+.pd-badge.opt{background:#eef1f5;color:var(--ink-2)}
+.pd-badge:hover{border-color:#cfd6df}.pd-badge:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pd-gap .menu{width:300px;max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);overflow-y:auto;padding:8px;display:block;box-sizing:border-box}
+.pd-gap .gi>span{min-width:0;white-space:normal;overflow-wrap:anywhere}
+.pd-gap .gh{font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding:6px 8px 4px}
+.pd-gap .gi{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 8px;border-radius:6px;color:var(--ink);text-decoration:none}
+.pd-gap .gi:hover,.pd-gap .gi:focus-visible{background:var(--line-2);outline:none;text-decoration:none}
+.pd-gap .gi b{display:block;font-weight:600;font-size:13.5px}.pd-gap .gi small{display:block;font-size:12px;color:var(--muted);font-weight:400}
+.pd-gap .gi i{font-style:normal;font-size:12.5px;color:var(--accent);white-space:nowrap}
+.pd-assume{width:360px;max-width:calc(100vw - 32px);left:auto;right:0;display:block;font-size:13px;line-height:1.45}
+.pd-assume p{margin:0 0 8px}.pd-assume dl{margin:0 0 8px;display:grid;gap:6px}.pd-assume dt{font-weight:600;font-size:12.5px;margin:0}.pd-assume dd{margin:0;color:var(--ink-2)}
+.sp-assume .menu{left:auto;right:0}
+.pd-flash{animation:pdflash 2.2s ease-out}@keyframes pdflash{0%,40%{background:#fff6d6}100%{background:transparent}}
+.pd-tbl.h-cat [data-c=cat],.pd-tbl.h-sup [data-c=sup],.pd-tbl.h-moq [data-c=moq],.pd-tbl.h-hs [data-c=hs],.pd-tbl.h-units [data-c=units],.pd-tbl.h-pcs [data-c=pcs],.pd-tbl.h-freight [data-c=freight]{display:none}
+@media (max-width:1180px){.pd-tbl .c-pcs,.pd-tbl .c-hs{display:none}}
+@media (max-width:980px){.pd-tbl .c-units,.pd-tbl .c-freight,.pd-tbl .c-cat,.pd-tbl .c-sup{display:none}.pd-costing .c-moq{display:none}.pd-mob{display:inline}.pd-tbl .c-prod{max-width:300px}.pd-costing .c-prod{max-width:230px;min-width:180px}}
+@media (max-width:760px){.pd-tbl .c-sup,.pd-tbl .c-moq,.pd-tbl .c-whole{display:none}.pd-mob{display:inline}.pd-tbl .c-prod{min-width:0}.pd-card{padding:14px}}
+@media (max-width:560px){.pd-tbl td,.pd-tbl th{padding-left:6px;padding-right:6px}.pd-tbl .c-data .pd-ok{font-size:0}.pd-tbl .c-data .pd-ok::before{content:'✓';font-size:14px}.pd-sel .link{margin-left:auto}.pd-views{display:flex}.pd-views a{flex:1;justify-content:center}}
+@media (max-width:1240px){.pd-costing .c-units,.pd-costing .c-cat,.pd-costing .c-moq{display:none}}
+@media (max-width:1100px){.pd-costing .c-sup{display:none}.pd-mob{display:inline}}
+@media (max-width:1100px){.pd-tbl .c-sup{display:none}.pd-mob{display:inline}}
+@media (max-width:1340px){.pd-costing .c-hs,.pd-costing .c-units{display:none}}
+@media (max-width:560px){.pd-tbl .c-prod,.pd-costing .c-prod{max-width:calc(100vw - 210px);min-width:0}}
+@media (max-width:1100px){.pd-costing .c-prod{max-width:230px;min-width:180px}.pd-costing .c-freight{display:none}}
+@media (max-width:560px){.pd-costing .c-prod{max-width:calc(100vw - 280px)}.pd-costing .c-landed{white-space:normal;max-width:100px}}
+@media (max-width:560px){.pd-badge .pd-w{display:none}.pd-badge{min-width:26px;text-align:center}.pd-tbl .c-prod,.pd-costing .c-prod{max-width:calc(100vw - 250px)}.pd-costing .c-landed{max-width:96px}}
+@media (min-width:561px) and (max-width:900px){.pd-costing .c-prod{max-width:200px;min-width:150px}}
+@media (max-width:560px){.pd-tbl .c-prod,.pd-costing .c-prod{min-width:0}}
+@media (max-width:560px){.pd-costing .c-prod{max-width:170px}.pd-costing .c-price .cl-sub{display:none}}

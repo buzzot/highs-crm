@@ -47,7 +47,8 @@
     <% } %>
 
     <label>Specifications <span class="muted small">— one per line, "Key: value"</span>
-      <textarea name="spec" rows="4" placeholder="Material: 304 stainless steel&#10;Capacity: 500 ml&#10;Colour: matte black"><%= specText || '' %></textarea></label>
+      <textarea name="spec" rows="4" placeholder="Material: 304 stainless steel&#10;Capacity: 500 ml&#10;Colour: matte black"><%= specText || '' %></textarea>
+      <span class="muted small">For a service or freight item add the line <code>Type: Service</code> — it is then left out of carton and container costing.</span></label>
     <h3>Supply</h3>
     <div class="row">
       <label class="grow2">Supplier <select data-picker name="supplier_id"><option value="">—</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= p.supplier_id === s.id ? 'selected' : '' %>><%= s.name %></option><% }) %><option value="__new">+ Add new supplier…</option></select></label>
@@ -207,5 +208,15 @@
     });
     sel.form.addEventListener('submit', () => { if (sel.value === '__new') sel.value = prev; });
   })();
+</script>
+
+<script>
+// opened from the "missing data" menu: #f=carton_qty jumps to that field
+(function () {
+  var m = /^#f=([a-z_]+)$/.exec(location.hash); if (!m) return;
+  var el = document.querySelector('[name="' + m[1] + '"]'); if (!el) return;
+  var box = el.closest('details'); if (box) box.open = true;
+  el.scrollIntoView({ block: 'center' }); el.focus(); var l = el.closest('label'); if (l) l.classList.add('pd-flash');
+})();
 </script>
 <%- include('../../partials/foot') %>

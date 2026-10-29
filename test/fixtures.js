@@ -10,6 +10,8 @@ import { cargoLine, cargoTotals } from '../src/lib/cargo.js';
 import { fmt } from '../src/lib/format.js';
 import { buildSuppliers } from '../src/lib/suppliers.js';
 import { purchasingRows } from '../src/lib/supplier-detail.js';
+import { fxToUsdStrict } from '../src/lib/product-metrics.js';
+import { filterProducts, paginate, SORT_DEFS } from '../src/lib/product-list.js';
 import { icon } from '../src/lib/icons.js';
 import { showValue, deliveryLabel, snapshot, diff } from '../src/lib/request-revisions.js';
 import { productMetrics } from '../src/lib/product-metrics.js';
@@ -208,6 +210,31 @@ function supIdx(query = {}, over = {}) {
   return base(staffUser, '/admin/suppliers', { title: 'Suppliers', ...list, status: query.status || '', today: day(0), crmStatuses: CRM, query: { q: query.q || '', status: query.status || '', portal: query.portal || '' } });
 }
 
+
+// the Products page, built with the real filter / sort / paging code
+const PROD_SORTS = Object.fromEntries(Object.entries(SORT_DEFS).map(([k, [l]]) => [k, l]));
+export function prodRows(n = 6) {
+  const toUsd = fxToUsdStrict(settings);
+  const base = [
+    { ...prod, suppliers: { id: 's1', name: sup.name } },
+    { ...prod2, suppliers: { id: 's2', name: 'Shanghai Home Co.' } },
+    { ...prod, id: 'p3', sku: null, supplier_sku: 'KS209-CWBC', name: 'battery contacts, battery holder (держатель батарей)', category: null, unit_cost: 0.4, moq: null, hs_code: null, carton_qty: null, carton_cbm: null, carton_weight_kg: null, supplier_id: 's2', suppliers: { id: 's2', name: 'Luminaton LLC' } },
+    { ...prod, id: 'p4', sku: null, supplier_sku: null, name: '12mm Steel wire rope with polymer core, LK-R 6x19 (1+6+6/6) — extra long product name for truncation testing in the table', category: null, unit_cost: 4.05, supplier_id: null, suppliers: null, carton_qty: null, carton_cbm: null, carton_weight_kg: null, moq: null, hs_code: null },
+    { ...prod, id: 'p5', sku: 'EU-1', name: 'Imported euro item', unit_cost: 9.5, cost_currency: 'EUR', carton_weight_kg: null },
+    { ...prod, id: 'p6', sku: 'SVC-1', name: 'Customer package (only delivery)', category: 'Service', unit_cost: 0, supplier_id: null, suppliers: null, spec: { Type: 'Service' }, carton_qty: null, carton_cbm: null, carton_weight_kg: null, hs_code: null, moq: null },
+    { ...prod, id: 'p7', sku: 'GBP-1', name: 'Pound-priced item', unit_cost: 5, cost_currency: 'GBP' },
+  ].slice(0, n);
+  return base.map(p => ({ ...p, m: productMetrics(p, toUsd, settings.container) }));
+}
+export function prodIdx(query = {}, over = {}) {
+  const all = over.all || prodRows();
+  const { rows, sort } = filterProducts(all, query);
+  const { pages, page, shown } = paginate(rows, query.page, over.size || 100);
+  return base(staffUser, '/admin/products', { title: 'Products', total: all.length, matched: rows.length, page, pages, pageSize: over.size || 100, sort, sorts: PROD_SORTS, container: settings.container,
+    view: query.view === 'costing' ? 'costing' : 'catalog', fxList: [['CNY', 0.138], ['EUR', 1.08], ['GBP', null]], canDelete: true, photoCount: { p1: 3 }, products: shown, categories: ['Houseware', 'Lighting'], suppliers: lists.suppliers, thumb: { p1: 'doc1' },
+    query, pendingSubs: 0, ...over.locals });
+}
+
 export const pages = {
   // ---- admin ----
   'admin/dashboard': base(staffUser, '/admin', dashFx('normal')),
@@ -235,7 +262,7 @@ export const pages = {
   'admin/suppliers/form_manual': ['admin/suppliers/form', base(staffUser, '/admin/suppliers/new', { title: 'New supplier', s: { country: 'China' }, error: null, mode: 'manual', inv: {} })],
   'admin/suppliers/form_edit': ['admin/suppliers/form', base(staffUser, '/admin/suppliers/s1/edit', { title: 'Edit supplier', s: { ...sup, company_type: 'factory', main_products: 'LED lamps' }, error: null, mode: 'manual', inv: {} })],
   'admin/suppliers/detail': base(staffUser, '/admin/suppliers/s1', { aiUse: { ready: true, current: { calls: 3, input: 9000, output: 1200, total: 10200 }, all: { calls: 14, input: 41000, output: 5200, total: 46200 }, months: [{ key: '2026-10', label: 'October 2026', calls: 3, input: 9000, output: 1200, total: 10200 }, { key: '2026-09', label: 'September 2026', calls: 11, input: 32000, output: 4000, total: 36000 }] }, aiPrices: { input_per_m: 3, output_per_m: 15 }, title: sup.name, photoOf: { [prod.id]: 'ph1' }, portalBlocked: false, crmStatuses: { prospect: 'Prospect', contacted: 'Contacted', active: 'Active supplier', blocked: 'Blocked' }, activityTypes: { call: 'Call', wechat: 'WeChat', visit: 'Factory visit', note: 'Note' }, events: [{ id: 1, action: 'crm_call', detail: { note: 'Agreed new price for 3000 pcs.\nSamples by Friday.', date: day(-1), follow_up: day(3) }, created_at: d(-1), profiles: { full_name: 'Anna Lee' } }, { id: 2, action: 'details_completed', detail: null, created_at: d(-4), profiles: { full_name: 'Li Kuan' } }, { id: 3, action: 'invite_accepted', detail: { note: 'marsel@lulyboo.com' }, created_at: d(-4), profiles: null }], types: { factory: 'Factory / manufacturer' }, members: [{ id: 'u7', email: 'marsel@lulyboo.com', full_name: 'Li Kuan', job_title: 'Sales manager', state: 'accepted', active: true, accepted_at: d(-4), last_login_at: d(-1) }, { id: null, email: 'sales@brightway.example', state: 'pending', sent_at: d(-1), days_left: 13 }], s: { ...sup, company_type: 'factory', main_products: 'LED desk lamps', details_completed_at: d(-4), crm_status: 'active', next_follow_up: day(3) }, products: [prod], purch: purchasingRows(spPoRows, spPiRows, spPayRows), nSubmitted: 2, isAdmin: true, edit: null, act: null, openDlg: null, eventLimit: 200, docs: [{ id: 'd9', kind: 'certificate', title: 'BSCI-2025.pdf', mime_type: 'application/pdf', client_visible: false, created_at: d(-60) }, { id: 'd10', kind: 'other', title: 'Export licence 2026.pdf', mime_type: 'application/pdf', client_visible: true, created_at: d(-20) }], invShow: { email: 'sales@brightway.example', link: 'https://lumitrade.cc/invite/tok123', code: '482913', mailed: false, err: null } }),
-  'admin/products/index': base(staffUser, '/admin/products', { title: 'Products', total: 2, sort: 'name', sorts: { name: 'Name A–Z', landed: 'Landed ↑' }, container: settings.container, photoCount: { p1: 3 }, products: [{ ...prod, suppliers: { id: 's1', name: sup.name }, m: productMetrics(prod, c => (c === 'CNY' ? 0.138 : 1), settings.container) }, { ...prod2, suppliers: null, m: productMetrics({ ...prod2, carton_weight_kg: null, hs_code: null }, c => (c === 'CNY' ? 0.138 : 1), settings.container) }], categories: ['Houseware', 'Lighting'], suppliers: lists.suppliers, thumb: { p1: 'doc1' } }),
+  'admin/products/index': prodIdx(),
   'admin/products/compare': base(staffUser, '/admin/products/compare', { title: 'Compare products', container: settings.container, purpose: '', aiError: null, thumb: { p1: 'doc1' }, specKeys: ['Material', 'Power'],
     products: [{ ...prod, spec: { Material: 'Aluminium', Power: '10 W' }, suppliers: { id: 's1', name: sup.name, rating: 4, lead_time_days: 30, can_export_official: true, city: 'Shenzhen', country: 'China' }, m: productMetrics(prod, c => (c === 'CNY' ? 0.138 : 1), settings.container) },
                { ...prod2, spec: { Material: 'Steel' }, suppliers: { id: 's2', name: 'Yiwu Sunhome Houseware', rating: 3, lead_time_days: 25, can_export_official: false, city: 'Yiwu', country: 'China' }, m: productMetrics(prod2, c => (c === 'CNY' ? 0.138 : 1), settings.container) }],
@@ -420,3 +447,17 @@ export const pages = {
   v('nofollow', {}, { suppliers: ['a', 'b', 'c'].map((x, i) => ({ id: 'n' + x, name: 'Plain Supplier ' + x, country: 'China', city: 'Ningbo', crm_status: 'active', created_at: d(-5), details_completed_at: d(-4), contact_name: 'Contact ' + x, email: x + '@plain.example' })), portal: {}, products: [], pos: [], people: [] });
 }
 pages['admin/purchasing/index#supplier'] = ['admin/purchasing/index', { ...pages['admin/purchasing/index'], supplier: { id: 's1', name: 'Shenzhen Brightway Electronics' } }];
+
+// ---- products directory variants (built with the real filter / sort / paging code) ----
+{
+  const v = (name, q, over) => { pages['admin/products/index#' + name] = ['admin/products/index', prodIdx(q, over)]; };
+  v('costing', { view: 'costing' });
+  v('search', { q: 'tumbler' });
+  v('nomatch', { q: 'zzzz' });
+  v('critical', { issues: 'critical' });
+  v('filtered', { category: 'Lighting', supplier: 's1', view: 'costing', sort: 'landed' });
+  v('empty', {}, { all: [], locals: { total: 0 } });
+  const many = Array.from({ length: 450 }, (_, i) => ({ ...prod, id: 'x' + i, sku: 'X-' + i, name: (i % 3 === 0 ? 'Очень длинное название изделия для проверки ' : i % 3 === 1 ? '深圳市明亮电子科技有限公司 LED灯具 ' : 'Long English product name for the large dataset test ') + i, unit_cost: 1 + (i % 50) / 7, cost_currency: i % 4 ? 'CNY' : 'USD', suppliers: { id: 's1', name: sup.name } })).map(p => ({ ...p, m: productMetrics(p, fxToUsdStrict(settings), settings.container) }));
+  v('large', { page: '2' }, { all: many });
+  v('largecosting', { view: 'costing', sort: 'landed_desc', page: '4' }, { all: many });
+}
