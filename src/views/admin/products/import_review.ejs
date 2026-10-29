@@ -141,11 +141,11 @@
             <input type="hidden" name="rows[<%= i %>][match_supplier_id]" value="<%= p.match.supplier_id %>">
             <span class="badge <%= p.match.status === 'sku' ? 'info' : 'warn' %>"><%= p.match.status === 'sku' ? 'Same SKU exists' : 'Possible duplicate' %></span>
             <div class="small"><a href="/admin/products/<%= p.match.product.id %>" target="_blank"><%= p.match.product.name %></a>
-              <% if (p.match.product.unit_cost != null) { %><span class="muted">· now <%= fmt.money(p.match.product.unit_cost, p.match.product.cost_currency || 'CNY') %></span><% } %></div>
+              <% if (p.match.product.unit_cost != null) { %><span class="muted">· now <%= fmt.money(p.match.product.unit_cost, p.match.product.cost_currency || 'CNY') %></span><% } %><% if (p.unit_price != null && p.unit_price !== '') { %><span class="muted"> · file <%= fmt.money(p.unit_price, p.currency || 'CNY') %></span><% } %></div>
             <select name="rows[<%= i %>][action]">
-              <option value="update" <%= (p.action || 'update') === 'update' ? 'selected' : '' %>>Update existing</option>
+              <option value="skip" <%= (p.action || 'skip') === 'skip' ? 'selected' : '' %>>Keep existing (skip)</option>
+              <option value="update" <%= p.action === 'update' ? 'selected' : '' %>>Update existing with file values</option>
               <option value="new" <%= p.action === 'new' ? 'selected' : '' %>>Add as new product</option>
-              <option value="skip" <%= p.action === 'skip' ? 'selected' : '' %>>Skip</option>
             </select>
           <% } else { %>
             <span class="badge ok">New</span>

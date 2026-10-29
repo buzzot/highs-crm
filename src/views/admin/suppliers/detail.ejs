@@ -6,155 +6,525 @@
   const acts = typeof activityTypes !== 'undefined' ? activityTypes : {};
   const evs = typeof events !== 'undefined' ? events : [];
   const photos = typeof photoOf !== 'undefined' ? photoOf : {};
+  const P = typeof purch !== 'undefined' ? purch : { rows: [], owed: {}, open: 0, nLive: 0 };
+  const PAYL = { no_pi: 'No PI yet', pi_draft: 'PI not confirmed', unpaid: 'Unpaid', partial: 'Part paid', paid: 'Paid', over: 'Overpaid' };
+  const PIL = { none: 'No PI', draft: 'PI draft', confirmed: 'PI confirmed' };
+  const SPOL = { draft: 'Draft', sent: 'Sent', replied: 'Replied', confirmed: 'Confirmed', declined: 'Declined', cancelled: 'Cancelled' };
+  const E = typeof edit !== 'undefined' ? edit : null, A = typeof act !== 'undefined' ? act : null, OPEN = typeof openDlg !== 'undefined' ? openDlg : null, TAB = typeof tab !== 'undefined' ? tab : null;
+  const evCap = typeof eventLimit !== 'undefined' ? eventLimit : 200, nSub = typeof nSubmitted !== 'undefined' ? nSubmitted : 0;
+  const mayDelete = typeof isAdmin !== 'undefined' ? isAdmin : user.role === 'admin';
   const placeholder = /^\(.*\)$/.test(s.name || '');
   const today = new Date().toISOString().slice(0, 10);
   const overdue = s.next_follow_up && s.next_follow_up < today;
-  const v = k => s[k] ?? '';
-  const isAdmin = user.role === 'admin';
-  const ago = d => { if (!d) return '—'; const days = Math.floor((Date.now() - new Date(d)) / 864e5); return days <= 0 ? 'today' : days === 1 ? 'yesterday' : days < 30 ? days + ' days ago' : fmt.date(d); };
-  const evLabel = e => {
-    if (e.action.startsWith('crm_')) return acts[e.action.slice(4)] || 'Note';
-    return ({ supplier_invited: 'Supplier added by invitation', invite_accepted: 'Invitation accepted', details_completed: 'Company details completed by supplier', details_updated: 'Company details updated by supplier', portal_blocked: 'Portal access blocked', portal_restored: 'Portal access restored' })[e.action] || fmt.status(e.action);
-  };
+  const v = f => (E ? E.vals[f] : s[f]) ?? '';
+  const ee = f => (E && E.errors && E.errors[f]) || '';
+  const place = [s.city, s.country].filter(Boolean).join(', ');
+  const asDate = d => d ? fmt.date(d) : '—';
+  const daysLate = d => Math.max(0, Math.round((Date.parse(today) - Date.parse(d)) / 864e5));
+  // portal people: active / pending invitation / expired invitation / disabled (a separate thing from the relationship status)
+  const mst = m => m.state === 'accepted' ? (m.active === false ? 'disabled' : 'active') : m.state;
+  const uc = { active: 0, pending: 0, expired: 0, disabled: 0 }; mem.forEach(m => { const x = mst(m); if (x in uc) uc[x]++; });
+  const portalTxt = uc.active ? 'Portal: active' : uc.pending ? 'Portal: invited' : uc.expired ? 'Portal: invitation expired' : uc.disabled ? 'Portal: disabled' : 'Portal: none';
+  const lastSeenRow = mem.filter(m => m.last_login_at).sort((a, b) => String(b.last_login_at).localeCompare(String(a.last_login_at)))[0] || null;
+  const SYS = { supplier_invited: 'Supplier added by invitation', invite_accepted: 'Invitation accepted', details_completed: 'Company details completed by the supplier', details_updated: 'Company details updated', portal_blocked: 'Portal access blocked', portal_restored: 'Portal access restored',
+    crm_status: 'Relationship status changed', ai_enabled: 'AI access switched on', ai_disabled: 'AI access switched off', followup_done: 'Follow-up completed', followup_rescheduled: 'Follow-up rescheduled', invite_sent: 'Invitation sent', invite_resent: 'New invitation sent',
+    invite_cancelled: 'Invitation cancelled', products_imported: 'Products imported', supplier_deleted: 'Supplier deleted' };
+  const label = e => e.action.startsWith('crm_') && e.action !== 'crm_status' ? (acts[e.action.slice(4)] || 'Note') : (SYS[e.action] || fmt.status(e.action));
+  // identical system events in a row (same person, same text, within 2 minutes) are shown once as "×N"
+  const tl = [];
+  evs.forEach(e => {
+    const crmEv = e.action.startsWith('crm_') && e.action !== 'crm_status', who = e.profiles?.full_name || e.profiles?.email || (crmEv ? '' : 'System'), prev = tl[tl.length - 1];
+    const note = e.detail?.from !== undefined && e.detail?.to ? (e.detail.note || '') + ' · ' + asDate(e.detail.from) + ' → ' + fmt.date(e.detail.to) : e.detail?.note;
+    if (!crmEv && prev && !prev.crm && prev.text === label(e) && prev.who === who && prev.note === note && Math.abs(new Date(prev.at) - new Date(e.created_at)) < 120000) { prev.n++; prev.times.push(e.created_at); return; }
+    tl.push({ id: e.id, crm: crmEv, text: label(e), who, at: e.created_at, times: [e.created_at], date: e.detail?.date, note, next: e.detail?.next_action, follow: e.detail?.follow_up, n: 1 });
+  });
+  const nCrm = tl.filter(x => x.crm).length;
+  const DOC_KINDS = ['certificate', 'qc_report', 'other'];
+  const money = (n, c) => fmt.money(n, c, 0);
+  const owedTxt = Object.entries(P.owed).map(([c, n]) => money(n, c)).join(' · ');
+  const hasPhone = !!s.phone;
 %>
-<div class="pagehead">
-  <div>
+<header class="cd-head">
+  <div class="cd-id">
     <a class="back" href="/admin/suppliers">← Suppliers</a>
-    <h1><%= placeholder ? 'New supplier ' + s.name : s.name %></h1>
-    <p class="muted suphead">
-      <span class="pill crm-<%= s.crm_status || 'active' %>"><%= crm[s.crm_status] || 'Active supplier' %></span>
-      <%= [s.city, s.country].filter(Boolean).join(', ') || '—' %>
-      <% if (s.company_type) { %>· <%= ty[s.company_type] %><% } %>
-      · <%= s.details_completed_at ? 'registered ' + fmt.date(s.details_completed_at) : 'added ' + fmt.date(s.created_at) %>
-      <% if (s.rating) { %>· <span class="stars"><%= '★'.repeat(s.rating) %></span><% } %>
-      <% if (s.can_export_official) { %>· <span class="tag ok">official exporter</span><% } %>
-    </p>
-  </div>
-  <div class="actions">
-    <% if (mem.some(m => m.state === 'accepted')) { %>
-      <form method="post" action="/admin/suppliers/<%= s.id %>/portal" class="inline" <% if (!portalBlocked) { %>onsubmit="return confirm('Block portal access for everyone at this supplier?')"<% } %>>
-        <input type="hidden" name="action" value="<%= portalBlocked ? 'restore' : 'block' %>">
-        <button class="btn <%= portalBlocked ? '' : 'danger-outline' %>"><%= portalBlocked ? 'Restore portal access' : 'Block portal access' %></button>
-      </form>
-    <% } %>
-    <a class="btn primary" href="/admin/products/new?supplier_id=<%= s.id %>">+ Product</a>
-  </div>
-</div>
-
-<div class="kpis kpis4">
-  <div class="kpi"><span class="n"><%= products.length %></span><span class="l">Products</span></div>
-  <div class="kpi"><span class="n"><%= orders.length %></span><span class="l">Orders</span></div>
-  <div class="kpi"><span class="n"><%= fmt.money(spend, defCur, 0) %></span><span class="l">Purchases (cost)</span></div>
-  <div class="kpi <%= overdue ? 'bad' : '' %>"><span class="n"><%= s.next_follow_up ? fmt.date(s.next_follow_up) : '—' %></span><span class="l"><%= overdue ? 'Follow-up overdue' : 'Next follow-up' %></span></div>
-</div>
-
-<%- include('../../partials/ai_access', { ai: s, use: aiUse, prices: aiPrices, action: '/admin/suppliers/' + s.id + '/ai', who: 'this supplier' }) %>
-
-<div class="card">
-  <h2>Portal users <span class="count"><%= mem.filter(x => x.state === 'accepted' && x.active !== false).length %> active<%= mem.some(x => x.state === 'pending') ? ' · ' + mem.filter(x => x.state === 'pending').length + ' invited' : '' %></span></h2>
-  <% if (!s.details_completed_at && mem.some(x => x.state === 'pending' || x.state === 'accepted')) { %>
-    <div class="alert warn">Waiting for the supplier to register — they fill in the company details after accepting the invitation.</div>
-  <% } %>
-  <%- include('../../partials/users_table', { members: mem, base: '/admin/suppliers/' + s.id, emptyText: 'Nobody has portal access yet. Invite the supplier so they register and keep their company details up to date themselves.', firstPlaceholder: 'sales@factory.com', firstValue: s.email || '', otherPlaceholder: 'colleague@factory.com' }) %>
-</div>
-
-<div class="grid2 even">
-  <div class="card">
-    <h2>Details</h2>
-    <form method="post" action="/admin/suppliers/<%= s.id %>" class="detailsform">
-      <div class="row">
-        <label>Factory / company name <input name="name" required value="<%= placeholder ? '' : v('name') %>" placeholder="<%= placeholder ? 'Filled in by the supplier' : '' %>"></label>
-        <label>Contact person <input name="contact_name" value="<%= v('contact_name') %>"></label>
-      </div>
-      <div class="row">
-        <label>Email <input type="email" name="email" value="<%= v('email') %>"></label>
-        <label>Phone / WhatsApp <input name="phone" value="<%= v('phone') %>"></label>
-        <label>WeChat <input name="wechat" value="<%= v('wechat') %>"></label>
-      </div>
-      <label>Website / Alibaba / 1688 <input name="website" value="<%= v('website') %>"></label>
-      <label>Factory address <textarea name="address" rows="2"><%= v('address') %></textarea></label>
-      <div class="row">
-        <label>City <input name="city" value="<%= v('city') %>"></label>
-        <label>Country <input name="country" value="<%= v('country') %>"></label>
-        <label>Type <select name="company_type"><option value="">—</option><% Object.entries(ty).forEach(([k, l]) => { %><option value="<%= k %>" <%= s.company_type === k ? 'selected' : '' %>><%= l %></option><% }) %></select></label>
-      </div>
-      <div class="row">
-        <label>CRM status <select name="crm_status"><% Object.entries(crm).forEach(([k, l]) => { %><option value="<%= k %>" <%= (s.crm_status || 'active') === k ? 'selected' : '' %>><%= l %></option><% }) %></select></label>
-        <label>Rating <select name="rating"><option value="">—</option><% [5,4,3,2,1].forEach(n => { %><option value="<%= n %>" <%= String(s.rating) === String(n) ? 'selected' : '' %>><%= '★'.repeat(n) %></option><% }) %></select></label>
-        <label>Next follow-up <input type="date" name="next_follow_up" value="<%= v('next_follow_up') %>"></label>
-      </div>
-      <label>Main products / categories supplied <input name="main_products" value="<%= v('main_products') %>"></label>
-      <div class="row">
-        <label>Certifications <input name="certifications" value="<%= v('certifications') %>" placeholder="BSCI, ISO 9001…"></label>
-        <label>Registration no. <input name="registration_no" value="<%= v('registration_no') %>"></label>
-      </div>
-      <div class="row">
-        <label>Payment terms <input name="payment_terms" value="<%= v('payment_terms') %>" placeholder="30% deposit, 70% before shipment"></label>
-        <label>Lead time (days) <input type="number" min="0" name="lead_time_days" value="<%= v('lead_time_days') %>"></label>
-      </div>
-      <label class="check"><input type="checkbox" name="can_export_official" <%= s.can_export_official ? 'checked' : '' %>> Holds export rights — can export officially with a government export declaration</label>
-      <label>Notes <span class="muted small">— internal</span><textarea name="notes" rows="3"><%= v('notes') %></textarea></label>
-      <div class="actions"><button class="btn primary">Save</button></div>
-    </form>
-  </div>
-
-  <div class="stack">
-    <div class="card" id="activity">
-      <h2>Activity</h2>
-      <%- include('../../partials/crm_activity', { events: evs, action: '/admin/suppliers/' + s.id + '/activity', types: acts, today }) %>
+    <h1 title="<%= s.name %>"><%= placeholder ? 'New supplier ' + s.name : s.name %> <span class="pill crm-<%= s.crm_status || 'active' %>" title="Relationship status"><%= crm[s.crm_status] || 'Active supplier' %></span></h1>
+    <div class="cd-meta"><%= place || 'Location not set' %>
+      <% if (s.company_type) { %><span class="sep">·</span><span title="Business type"><%= ty[s.company_type] %></span><% } %>
+      <span class="sep">·</span><span title="Portal access is separate from the relationship status"><%= portalTxt %></span>
     </div>
-    <div class="card">
-      <h2>Orders <span class="count"><%= orders.length %></span></h2>
-      <% if (!orders.length) { %><p class="muted">No orders yet.</p><% } else { %>
-      <table class="tbl"><thead><tr><th>Order</th><th>Client</th><th>Status</th><th class="right">Cost</th></tr></thead><tbody>
-      <% orders.forEach(o => { %>
-        <tr><td><a href="/admin/orders/<%= o.id %>"><%= o.order_no %></a></td><td><%= o.client_name %></td><td><span class="pill <%= o.status %>"><%= fmt.status(o.status) %></span></td><td class="right"><%= fmt.money(o.cost_total, o.currency) %></td></tr>
+    <div class="cd-meta">
+      <% if (s.contact_name || s.email || s.phone) { %><span title="Primary contact"><%= s.contact_name || 'Contact' %></span><% if (s.email) { %><span class="sep">·</span><a href="mailto:<%= s.email %>"><%= s.email %></a><% } %><% if (s.phone) { %><span class="sep">·</span><a href="tel:<%= String(s.phone).replace(/[^0-9+]/g, '') %>"><%= s.phone %></a><% } %>
+      <% } else { %><span class="muted">No primary contact</span><% } %>
+    </div>
+  </div>
+  <div class="cd-actions">
+    <button type="button" class="btn" data-open="editdlg">Edit supplier</button>
+    <a class="btn" href="/admin/purchasing/new?supplier=<%= s.id %>">Create purchase order</a>
+    <a class="btn primary" href="/admin/products/new?supplier_id=<%= s.id %>">+ Add product</a>
+  </div>
+</header>
+
+<div class="cd-stats" aria-label="Supplier summary">
+  <a href="#products"><b><%= products.length %></b> product<%= products.length === 1 ? '' : 's' %></a>
+  <a href="#purchasing" title="Purchase orders we placed with this supplier"><b><%= P.rows.length %></b> purchase order<%= P.rows.length === 1 ? '' : 's' %><%= P.open ? ' · ' + P.open + ' open' : '' %></a>
+  <% if (owedTxt) { %><a href="#purchasing" title="Still to pay on confirmed supplier proforma invoices, per currency"><span class="muted">To pay</span> <b><%= owedTxt %></b></a><% } %>
+  <a href="#activity" class="<%= overdue ? 'late' : '' %>" title="The next follow-up with this supplier"><span class="muted">Next follow-up</span> <b class="<%= overdue ? 'bad' : '' %>"><%= s.next_follow_up ? fmt.date(s.next_follow_up) + (overdue ? ' · overdue' : '') : 'none' %></b></a>
+</div>
+
+<div class="cd-tabs" role="tablist" aria-label="Supplier sections">
+  <button type="button" role="tab" id="t-overview" aria-controls="tab-overview" data-tab="overview">Overview</button>
+  <button type="button" role="tab" id="t-products" aria-controls="tab-products" data-tab="products">Products <span class="cnt"><%= products.length %></span></button>
+  <button type="button" role="tab" id="t-purchasing" aria-controls="tab-purchasing" data-tab="purchasing" title="Purchase orders placed with this supplier">Purchasing <span class="cnt"><%= P.rows.length %></span></button>
+  <button type="button" role="tab" id="t-activity" aria-controls="tab-activity" data-tab="activity" title="Calls, WeChat, meetings and notes<%= overdue ? ' · follow-up overdue' : '' %>">Activity <span class="cnt"><%= nCrm %><%= evs.length >= evCap ? '+' : '' %></span><% if (overdue) { %><span class="dotbad" aria-label="Follow-up overdue"></span><% } %></button>
+  <button type="button" role="tab" id="t-portal" aria-controls="tab-portal" data-tab="portal" title="Portal users and AI access">Portal &amp; access<% if (uc.active) { %> <span class="cnt"><%= uc.active %></span><% } %></button>
+</div>
+
+<%# ---------- Overview ---------- %>
+<section class="cd-panel" id="tab-overview" role="tabpanel" aria-labelledby="t-overview" hidden>
+  <% if (placeholder) { %><div class="alert warn">Waiting for the supplier to register — they fill in the company details after accepting the invitation. You can also <button type="button" class="cd-edit" data-open="editdlg">enter them yourself</button>.</div><% } %>
+  <div class="cd-grid cd-grid-ov">
+    <div class="cd-card cd-info">
+      <h2>Supplier information <button type="button" class="cd-edit" data-open="editdlg">Edit supplier</button></h2>
+      <div class="cd-cols">
+        <div>
+          <h3 class="first">Company identity</h3>
+          <dl class="cd-dl">
+            <div><dt>Company name</dt><dd class="<%= placeholder ? 'na' : '' %>"><%= placeholder ? 'Filled in by the supplier' : s.name %></dd></div>
+            <div><dt>Registration no.</dt><dd class="<%= s.registration_no ? '' : 'na' %>"><%= s.registration_no || '—' %></dd></div>
+            <div><dt>Established</dt><dd class="<%= s.year_established ? '' : 'na' %>"><%= s.year_established || '—' %><%= s.employees ? ' · ' + s.employees + ' staff' : '' %></dd></div>
+            <div><dt>Website</dt><dd class="<%= s.website ? '' : 'na' %>"><% if (s.website) { %><a href="<%= /^https?:\/\//i.test(s.website) ? s.website : 'https://' + s.website %>" target="_blank" rel="noopener noreferrer"><%= s.website %></a><% } else { %>—<% } %></dd></div>
+          </dl>
+          <h3>Contacts</h3>
+          <dl class="cd-dl">
+            <div><dt>Contact person</dt><dd class="<%= s.contact_name ? '' : 'na' %>"><%= s.contact_name || '—' %></dd></div>
+            <div><dt>Email</dt><dd><% if (s.email) { %><a href="mailto:<%= s.email %>"><%= s.email %></a><% } else { %><button type="button" class="cd-add" data-open="editdlg" data-focus="email">+ Add email</button><% } %></dd></div>
+            <div><dt>Phone / WhatsApp</dt><dd><% if (s.phone) { %><a href="tel:<%= String(s.phone).replace(/[^0-9+]/g, '') %>"><%= s.phone %></a><% } else { %><button type="button" class="cd-add" data-open="editdlg" data-focus="phone">+ Add phone</button><% } %></dd></div>
+            <div><dt>WeChat</dt><dd class="<%= s.wechat ? '' : 'na' %>"><%= s.wechat || '—' %></dd></div>
+          </dl>
+          <h3>Locations</h3>
+          <dl class="cd-dl">
+            <div><dt>Factory address</dt><dd class="pre <%= (s.address || place || s.postal_code) ? '' : 'na' %>"><%= [s.address, [s.postal_code, s.city].filter(Boolean).join(' '), s.country].filter(Boolean).join('\n') || '—' %></dd></div>
+          </dl>
+        </div>
+        <div>
+          <h3 class="first">Business role &amp; export</h3>
+          <dl class="cd-dl">
+            <div><dt>Business type</dt><dd class="<%= s.company_type ? '' : 'na' %>"><%= s.company_type ? ty[s.company_type] : 'Not set' %></dd></div>
+            <div><dt>Official exporter</dt><dd><% if (s.can_export_official) { %><span class="oktext">✓ Can export officially</span> <span class="muted small">with a government export declaration</span><% } else { %><span class="muted">Not confirmed</span><% } %></dd></div>
+            <div><dt>Main products</dt><dd class="<%= s.main_products ? '' : 'na' %>"><%= s.main_products || '—' %></dd></div>
+            <div><dt>Certifications</dt><dd class="<%= s.certifications ? '' : 'na' %>"><%= s.certifications || '—' %></dd></div>
+          </dl>
+          <h3>Commercial terms</h3>
+          <dl class="cd-dl">
+            <div><dt>Payment terms</dt><dd class="<%= s.payment_terms ? '' : 'na' %>"><%= s.payment_terms || '—' %><% if (s.payment_terms) { %> <span class="muted small">general — each PI sets the real amounts</span><% } %></dd></div>
+            <div><dt>Production lead time</dt><dd class="<%= s.lead_time_days != null ? '' : 'na' %>"><%= s.lead_time_days != null ? s.lead_time_days + ' days' : '—' %> <% if (s.lead_time_days != null) { %><span class="muted small">general</span><% } %></dd></div>
+            <div><dt>Rating</dt><dd><% if (s.rating) { %><span class="stars"><%= '★'.repeat(s.rating) %></span><span class="muted"><%= '★'.repeat(5 - s.rating) %></span> <span class="muted small">entered by your team</span><% } else { %><span class="na">Not rated</span><% } %></dd></div>
+          </dl>
+        </div>
+      </div>
+      <h3>Internal notes</h3>
+      <% if (s.notes) { %><p class="pre cd-notes"><%= s.notes %></p><% } else { %><p class="muted small">No notes. Notes are internal and never shown to the supplier.</p><% } %>
+    </div>
+
+    <div class="cd-card">
+      <h2>Relationship</h2>
+      <dl class="cd-dl">
+        <div><dt>Status</dt><dd><span class="pill crm-<%= s.crm_status || 'active' %>"><%= crm[s.crm_status] || 'Active supplier' %></span></dd></div>
+        <div><dt>Supplier since</dt><dd><%= fmt.date(s.created_at) %></dd></div>
+        <div><dt>Company details</dt><dd><% if (s.details_completed_at) { %><span class="oktext">✓ Completed <%= fmt.date(s.details_completed_at) %></span><% } else if (placeholder) { %><span class="warntext">Pending — supplier has not registered</span><% } else { %><span class="muted">Entered by your team</span><% } %></dd></div>
+        <div><dt>Portal access</dt><dd><a href="#portal"><%= portalTxt.replace('Portal: ', '').replace(/^./, c => c.toUpperCase()) %></a><%= uc.active ? ' · ' + uc.active + ' user' + (uc.active === 1 ? '' : 's') : '' %></dd></div>
+        <div><dt>Products</dt><dd><a href="#products"><%= products.length %></a></dd></div>
+        <div><dt>Purchase orders</dt><dd><a href="#purchasing"><%= P.rows.length %></a><%= P.open ? ' · ' + P.open + ' open' : '' %></dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="cd-card" id="docs">
+    <h2>Documents &amp; certificates <span class="cnt"><%= docs.length %></span><button type="button" class="btn small primary more" data-open="docdlg">+ Upload</button></h2>
+    <p class="muted small cd-sub">Licences, certificates and QC reports for this supplier. Purchase-order documents are kept on the purchase order itself.</p>
+    <% if (!docs.length) { %><p class="muted">No documents yet. Documents are internal by default.</p><% } else { %>
+    <div class="tblwrap"><table class="cd-tbl sd-docs">
+      <thead><tr><th>Document</th><th>Type</th><th class="c-date">Uploaded</th><th>Visibility</th><th class="r">Actions</th></tr></thead>
+      <tbody>
+      <% docs.forEach(d => { const pub = !!d.client_visible, own = !['cargo_photo', 'cargo_draft'].includes(d.kind); %>
+        <tr>
+          <td class="c-main"><a href="/admin/documents/<%= d.id %>/download" target="_blank" rel="noopener" title="<%= d.title %>"><strong class="clip"><%= d.title %></strong></a></td>
+          <td><span class="tag"><%= fmt.status(d.kind) %></span></td>
+          <td class="c-date muted"><%= fmt.date(d.created_at) %></td>
+          <td>
+            <% if (own) { %><form method="post" action="/admin/documents/<%= d.id %>/toggle" class="inline"<%- pub ? '' : ' data-sdconfirm="Show this document to clients?" data-sdtext="Supplier documents can be confidential. Clients who can see this supplier’s products will be able to open it. Continue only if you are sure." data-sdok="Show to clients"' %>><input type="hidden" name="redirect" value="/admin/suppliers/<%= s.id %>#overview"><button class="vis <%= pub ? 'on' : '' %>" title="<%= pub ? 'Visible to clients — click to make internal' : 'Internal — click to share with clients' %>"><%= pub ? 'Client sees' : 'Internal' %></button></form><% } else { %><span class="tag internal">Internal</span><% } %>
+          </td>
+          <td class="r">
+            <a class="link small" href="/admin/documents/<%= d.id %>/download" target="_blank" rel="noopener">Open</a>
+            <form method="post" action="/admin/documents/<%= d.id %>/delete" class="inline" data-sdconfirm="Delete this document?" data-sdtext="<%= d.title %> will be removed for good." data-sdok="Delete" data-sddanger="1"><input type="hidden" name="redirect" value="/admin/suppliers/<%= s.id %>#overview"><button class="link small danger">Delete</button></form>
+          </td>
+        </tr>
       <% }) %>
-      </tbody></table>
-      <% } %>
-    </div>
-    <div>
-      <%- include('../../partials/docs', { docs, entityType: 'supplier', entityId: s.id, redirect: '/admin/suppliers/' + s.id, kinds: ['certificate','qc_report','other','product_photo'], heading: 'Licences, certificates & files', defaultKind: 'certificate', defaultVisible: false }) %>
-    </div>
+      </tbody>
+    </table></div>
+    <% } %>
   </div>
-</div>
 
-<div class="card">
-  <h2>Products <span class="count"><%= products.length %></span>
-    <span class="hactions"><a class="btn small" href="/admin/products?supplier=<%= s.id %>">Open in product list</a><a class="btn small primary" href="/admin/products/new?supplier_id=<%= s.id %>">+ Product</a></span></h2>
-  <% if (!products.length) { %><p class="muted">No products yet — import the supplier's price list below or add one by hand.</p><% } else { %>
-  <table class="tbl">
-    <thead><tr><th></th><th>Product</th><th>Supplier SKU</th><th>Category</th><th class="right">Unit cost</th><th class="right">MOQ</th><th>HS code</th><th>Carton</th><th>Added</th></tr></thead>
-    <tbody>
-    <% products.forEach(p => { %>
-      <tr>
-        <td class="thumbcell"><% if (photos[p.id]) { %><img class="pthumbsm" src="/admin/documents/<%= photos[p.id] %>/download" alt="" loading="lazy"><% } else { %><span class="pthumbsm empty"></span><% } %></td>
-        <td><a href="/admin/products/<%= p.id %>"><strong><%= p.name %></strong></a><% if (p.sku) { %><div class="muted small"><%= p.sku %></div><% } %></td>
-        <td><%= p.supplier_sku || '—' %></td>
-        <td><%= p.category || '—' %></td>
-        <td class="right"><%= p.unit_cost != null ? fmt.money(p.unit_cost, p.cost_currency, 2) : '—' %></td>
-        <td class="right"><%= p.moq ?? '—' %></td>
-        <td><%= p.hs_code || '—' %></td>
-        <td class="small"><%= p.carton_qty ? p.carton_qty + ' pcs' : '—' %><%= p.carton_cbm ? ' · ' + Number(p.carton_cbm).toFixed(3) + ' cbm' : '' %></td>
-        <td class="muted small"><%= fmt.date(p.created_at) %></td>
-      </tr>
-    <% }) %>
-    </tbody>
-  </table>
+  <% if (mayDelete) { %>
+  <details class="cd-restricted">
+    <summary>Restricted actions <span class="muted small">Admin only</span></summary>
+    <div class="body">
+      <p class="muted small">Deleting a supplier cannot be undone and is only possible while no orders, quotes or purchase orders refer to it. Its products are kept without a supplier. To stop working with a supplier, set the status to “Blocked” instead.</p>
+      <button type="button" class="btn danger-outline" data-open="deldlg">Delete supplier…</button>
+    </div>
+  </details>
   <% } %>
-  <form method="post" action="/admin/products/import" enctype="multipart/form-data" class="importrow">
-    <input type="hidden" name="supplier_id" value="<%= s.id %>">
-    <strong>Import products for this supplier</strong>
-    <input type="file" name="file" required accept=".xlsx,.xlsm,.csv,.pdf,.jpg,.jpeg,.png,.webp" aria-label="Price list file">
-    <button class="btn primary">Import</button>
-    <a href="/templates/lumi-trade-product-import-template.xlsx" download>Excel template</a>
-    <span class="muted small">Excel, CSV, PDF or a photo — you review everything before it's saved.</span>
-  </form>
-</div>
+</section>
 
-<% if (isAdmin) { %>
-  <form method="post" action="/admin/suppliers/<%= s.id %>/delete" class="dangerzone" onsubmit="return confirm('Delete <%= String(s.name).replace(/'/g, '') %>? Its products are kept without a supplier. This cannot be undone.')">
-    <button class="link danger">Delete supplier</button>
+<%# ---------- Products ---------- %>
+<section class="cd-panel" id="tab-products" role="tabpanel" aria-labelledby="t-products" hidden>
+  <div class="cd-card">
+    <h2>Products <span class="cnt"><%= products.length %></span>
+      <span class="sd-tools"><button type="button" class="btn small" data-open="importdlg">Import products</button><a class="btn small primary" href="/admin/products/new?supplier_id=<%= s.id %>">+ Add product</a></span></h2>
+    <% if (nSub) { %><div class="alert info sd-sub"><b><%= nSub %></b> product<%= nSub === 1 ? '' : 's' %> submitted by the supplier <%= nSub === 1 ? 'is' : 'are' %> waiting for your review. <a href="/admin/products/submissions">Review submissions</a></div><% } %>
+    <% if (!products.length) { %>
+      <p class="muted">No products yet — add one by hand, or import the supplier’s price list. You review everything before it is saved.</p>
+    <% } else { %>
+    <div class="sd-find"><input type="search" id="pfind" placeholder="Search name, SKU, supplier SKU, category…" aria-label="Search this supplier’s products" autocomplete="off"><span class="muted small" id="pcount"><%= products.length %> of <%= products.length %></span>
+      <a class="more small" href="/admin/products?supplier=<%= s.id %>">Open in product list</a></div>
+    <div class="tblwrap"><table class="cd-tbl sd-prod" id="ptbl">
+      <thead><tr><th class="c-thumb"></th><th>Product</th><th class="c-ssku">Supplier SKU</th><th class="c-cat">Category</th><th class="r">Unit cost</th><th class="r c-moq">MOQ</th><th class="c-pack">Packing</th><th class="r"></th></tr></thead>
+      <tbody>
+      <% products.forEach(p => { const hay = [p.name, p.sku, p.supplier_sku, p.category].filter(Boolean).join(' ').toLowerCase(); %>
+        <tr data-hay="<%= hay %>">
+          <td class="c-thumb"><% if (photos[p.id]) { %><img class="pthumbsm" src="/admin/documents/<%= photos[p.id] %>/download" alt="" loading="lazy"><% } else { %><span class="pthumbsm empty"></span><% } %></td>
+          <td class="c-main"><a href="/admin/products/<%= p.id %>" title="<%= p.name %>"><strong class="clip"><%= p.name %></strong></a><% if (p.sku) { %><div class="muted small">Our SKU <%= p.sku %></div><% } %></td>
+          <td class="c-ssku"><%= p.supplier_sku || '—' %></td>
+          <td class="c-cat clip" title="<%= p.category || '' %>"><%= p.category || '—' %></td>
+          <td class="r"><%= p.unit_cost != null ? fmt.money(p.unit_cost, p.cost_currency, 2) : '—' %></td>
+          <td class="r c-moq"><%= p.moq ?? '—' %></td>
+          <td class="c-pack small"><%= p.carton_qty ? p.carton_qty + ' pcs/carton' : '—' %><%= p.carton_cbm ? ' · ' + Number(p.carton_cbm).toFixed(3) + ' cbm' : '' %></td>
+          <td class="r"><a class="link small" href="/admin/products/<%= p.id %>/edit">Edit</a></td>
+        </tr>
+      <% }) %>
+      </tbody>
+    </table></div>
+    <p class="muted small" id="pnone" hidden>No product matches your search.</p>
+    <p class="muted small cd-sub">Prices are shown in the currency the supplier quoted. <%= s.lead_time_days != null ? 'General production lead time: ' + s.lead_time_days + ' days.' : '' %></p>
+    <% } %>
+  </div>
+</section>
+
+<%# ---------- Purchasing ---------- %>
+<section class="cd-panel" id="tab-purchasing" role="tabpanel" aria-labelledby="t-purchasing" hidden>
+  <div class="cd-card">
+    <h2>Purchase orders <span class="cnt"><%= P.rows.length %></span>
+      <span class="sd-tools"><% if (P.rows.length) { %><a class="more small" href="/admin/purchasing?supplier=<%= s.id %>">Open in Purchasing</a><% } %><a class="btn small primary" href="/admin/purchasing/new?supplier=<%= s.id %>">Create purchase order</a></span></h2>
+    <p class="muted small cd-sub">Orders we placed with this supplier. Amounts come from the supplier’s approved proforma invoice, not from payment terms or product prices.</p>
+    <% if (!P.rows.length) { %><p class="muted">No purchase orders yet. “Create purchase order” starts one with this supplier already selected.</p><% } else { %>
+    <div class="tblwrap"><table class="cd-tbl sd-po">
+      <thead><tr><th>Purchase order</th><th>Status</th><th class="r">PO total</th><th>Supplier PI</th><th>Payment</th><th class="c-date">Dates</th></tr></thead>
+      <tbody>
+      <% P.rows.slice(0, 25).forEach(o => { %>
+        <tr>
+          <td class="c-main"><a href="/admin/purchasing/<%= o.id %>"><strong><%= o.ref %></strong></a><% if (o.title) { %><div class="muted small clip" title="<%= o.title %>"><%= o.title %></div><% } %></td>
+          <td><span class="pill spo-<%= o.status %>"><%= SPOL[o.status] || fmt.status(o.status) %></span></td>
+          <td class="r"><%= fmt.money(o.total, o.currency, 2) %></td>
+          <td><span class="sd-pi <%= o.piStatus %>"><%= PIL[o.piStatus] %></span><% if (o.piTotal != null) { %><div class="muted small"><%= fmt.money(o.piTotal, o.piCurrency, 2) %></div><% } %></td>
+          <td><span class="sd-pay <%= o.pay %>"><%= PAYL[o.pay] %></span><% if (o.open != null && o.open > 0.01) { %><div class="muted small"><%= fmt.money(o.open, o.piCurrency, 2) %> to pay</div><% } %></td>
+          <td class="c-date muted small"><div>Created <%= fmt.date(o.created_at) %></div><% if (o.required_date) { %><div>Needed <%= fmt.date(o.required_date) %></div><% } %></td>
+        </tr>
+      <% }) %>
+      </tbody>
+    </table></div>
+    <% if (P.rows.length > 25) { %><p class="muted small">Showing the latest 25 of <%= P.rows.length %>. <a href="/admin/purchasing?supplier=<%= s.id %>">Open all in Purchasing</a></p><% } %>
+    <% } %>
+  </div>
+</section>
+
+<%# ---------- Activity ---------- %>
+<section class="cd-panel" id="tab-activity" role="tabpanel" aria-labelledby="t-activity" hidden>
+  <div class="cd-grid cd-grid-act">
+    <div class="cd-card cd-timeline">
+      <h2>Timeline <span class="cd-filter" role="group" aria-label="Show"><button type="button" class="on" data-show="all">All</button><button type="button" data-show="crm">Team</button><button type="button" data-show="sys">System</button></span><button type="button" class="btn small primary more" data-open="actdlg">+ Add activity</button></h2>
+      <% if (!tl.length) { %><p class="muted">No activity yet. Log a call, WeChat chat, visit or note to start the history.</p><% } %>
+      <ol class="cd-tl" id="cdtl">
+        <% tl.forEach(e => { %>
+          <li class="<%= e.crm ? 'crm' : 'sys' %>">
+            <div class="h"><strong><%= e.text %></strong><% if (e.n > 1) { %> <details class="grp"><summary title="Show every event">×<%= e.n %></summary><ul><% e.times.forEach(t => { %><li><%= fmt.datetime(t) %></li><% }) %></ul></details><% } %> <span class="muted small"><%= e.date ? fmt.date(e.date) : fmt.datetime(e.at) %><%= e.who ? ' · ' + e.who : '' %></span></div>
+            <% if (e.note && e.crm) { %><p class="pre"><%= e.note %></p><% } else if (e.note) { %><div class="muted small"><%= e.note %></div><% } %>
+            <% if (e.next) { %><div class="small"><span class="muted">Next:</span> <%= e.next %></div><% } %>
+            <% if (e.follow) { %><div class="small muted">↻ Follow-up requested for <%= fmt.date(e.follow) %></div><% } %>
+          </li>
+        <% }) %>
+      </ol>
+      <% if (evs.length >= evCap) { %><p class="muted small">Showing the latest <%= evCap %> events.</p><% } %>
+    </div>
+    <aside class="cd-card cd-follow">
+      <h2>Next follow-up<% if (overdue) { %> <span class="cnt late">overdue</span><% } %></h2>
+      <% if (!s.next_follow_up) { %>
+        <p class="muted small">No follow-up planned. Add a follow-up date when logging an activity and it appears here and in the page header.</p>
+      <% } else { %>
+        <ul><li class="fu <%= overdue ? 'late' : '' %>">
+          <span class="d <%= overdue ? 'bad' : '' %>"><%= fmt.date(s.next_follow_up) %><%= overdue ? ' · overdue ' + daysLate(s.next_follow_up) + ' d' : (s.next_follow_up === today ? ' · today' : '') %></span>
+          <span class="muted small">The supplier has one next follow-up. Completing it clears the date; the activity it came from stays in the timeline.</span>
+          <span class="fu-act">
+            <form method="post" action="/admin/suppliers/<%= s.id %>/followup/done" class="inline"><button class="btn small" title="Mark done — clears the date">✓ Done</button></form>
+            <button type="button" class="link small" data-resched data-due="<%= s.next_follow_up %>">Reschedule</button>
+          </span>
+        </li></ul>
+      <% } %>
+    </aside>
+  </div>
+</section>
+
+<%# ---------- Portal & access ---------- %>
+<section class="cd-panel" id="tab-portal" role="tabpanel" aria-labelledby="t-portal" hidden>
+  <div class="cd-card" id="portal">
+    <h2>Portal users <span class="cnt"><%= uc.active %> active<%= uc.pending ? ' · ' + uc.pending + ' pending' : '' %><%= uc.expired ? ' · ' + uc.expired + ' expired' : '' %><%= uc.disabled ? ' · ' + uc.disabled + ' disabled' : '' %></span>
+      <span class="sd-tools">
+        <% if (mem.some(m => m.state === 'accepted')) { %>
+        <form method="post" action="/admin/suppliers/<%= s.id %>/portal" class="inline"
+          <% if (!portalBlocked) { %>data-sdconfirm="Block portal access for everyone at this supplier?" data-sdtext="Every active user is signed out of the supplier portal until you restore access. Pending invitations are cancelled." data-sdok="Block access" data-sddanger="1"<% } %>>
+          <input type="hidden" name="action" value="<%= portalBlocked ? 'restore' : 'block' %>">
+          <button class="btn small <%= portalBlocked ? '' : 'danger-outline' %>"><%= portalBlocked ? 'Restore portal access' : 'Block all access' %></button>
+        </form>
+        <% } %>
+        <button type="button" class="btn small primary" data-open="invitedlg">+ Invite user</button>
+      </span></h2>
+    <p class="muted small cd-sub"><%= lastSeenRow ? 'Last sign-in to the portal: ' + fmt.datetime(lastSeenRow.last_login_at) + ' (' + (lastSeenRow.full_name || lastSeenRow.email) + ').' : 'Nobody has signed in to the portal yet.' %> Portal access is separate from the relationship status.</p>
+    <% if (!s.details_completed_at && mem.some(x => x.state === 'pending' || x.state === 'accepted')) { %>
+      <div class="alert warn">Waiting for the supplier to register — they fill in the company details after accepting the invitation.</div>
+    <% } %>
+    <div class="tblwrap"><%- include('../../partials/users_table', { members: mem, base: '/admin/suppliers/' + s.id, inviteDialog: true, emptyText: 'Nobody has portal access yet. Invite the supplier so they register and keep their company details up to date themselves.', firstPlaceholder: 'sales@factory.com', firstValue: s.email || '', otherPlaceholder: 'colleague@factory.com' }) %></div>
+  </div>
+  <%- include('../../partials/ai_access', { ai: s, use: aiUse, prices: aiPrices, action: '/admin/suppliers/' + s.id + '/ai', who: 'this supplier', compactAi: true }) %>
+</section>
+
+<%# ---------- drawers & dialogs ---------- %>
+<dialog class="drawer" id="editdlg" aria-labelledby="edtitle" <%- E ? 'data-invalid="1"' : '' %>>
+  <form method="post" action="/admin/suppliers/<%= s.id %>/details" class="drawerform" novalidate>
+    <div class="dh"><h2 id="edtitle">Edit supplier</h2><button type="button" class="x" data-close aria-label="Close">✕</button></div>
+    <div class="db2">
+      <div class="dsum" role="alert" <%= E && Object.keys(E.errors).length ? '' : 'hidden' %>>Please check the highlighted field<%= E && Object.keys(E.errors).length > 1 ? 's' : '' %> — nothing has been saved yet.</div>
+      <fieldset class="fgroup"><legend>Company identity</legend>
+        <%- include('../../partials/cd_field', { name: 'name', label: 'Company name', value: E ? E.vals.name : (placeholder ? '' : s.name || ''), error: ee('name'), required: true, rule: 'required', maxlength: 200, placeholder: placeholder ? 'Filled in by the supplier' : '' }) %>
+        <div class="fgrid">
+          <%- include('../../partials/cd_field', { name: 'registration_no', label: 'Registration no.', value: v('registration_no'), error: ee('registration_no'), maxlength: 60 }) %>
+          <%- include('../../partials/cd_field', { name: 'year_established', label: 'Year established', value: v('year_established'), error: ee('year_established'), inputmode: 'numeric', maxlength: 4, placeholder: 'e.g. 2008' }) %>
+        </div>
+        <div class="fgrid">
+          <%- include('../../partials/cd_field', { name: 'employees', label: 'Employees', value: v('employees'), error: ee('employees'), maxlength: 40, placeholder: 'e.g. 50-100' }) %>
+          <%- include('../../partials/cd_field', { name: 'website', label: 'Website / Alibaba / 1688', value: v('website'), error: ee('website'), rule: 'website', placeholder: 'www.factory.com', maxlength: 255 }) %>
+        </div>
+      </fieldset>
+      <fieldset class="fgroup"><legend>Contacts</legend>
+        <%- include('../../partials/cd_field', { name: 'contact_name', label: 'Contact person', value: v('contact_name'), error: ee('contact_name'), maxlength: 120 }) %>
+        <div class="fgrid">
+          <%- include('../../partials/cd_field', { name: 'email', label: 'Email', value: v('email'), error: ee('email'), rule: 'email', type: 'email', autocomplete: 'off', maxlength: 254 }) %>
+          <%- include('../../partials/cd_field', { name: 'phone', label: 'Phone / WhatsApp', value: v('phone'), error: ee('phone'), rule: 'phone', type: 'tel', placeholder: '+86 138 2581 4890', maxlength: 40 }) %>
+        </div>
+        <%- include('../../partials/cd_field', { name: 'wechat', label: 'WeChat', value: v('wechat'), error: ee('wechat'), maxlength: 80 }) %>
+      </fieldset>
+      <fieldset class="fgroup"><legend>Locations</legend>
+        <%- include('../../partials/cd_field', { name: 'address', label: 'Factory address', type: 'textarea', rows: 2, value: v('address'), error: ee('address'), maxlength: 500 }) %>
+        <div class="fgrid fgrid3">
+          <%- include('../../partials/cd_field', { name: 'city', label: 'City', value: v('city'), error: ee('city'), maxlength: 100 }) %>
+          <%- include('../../partials/cd_field', { name: 'postal_code', label: 'Postal code', value: v('postal_code'), error: ee('postal_code'), maxlength: 20 }) %>
+          <%- include('../../partials/cd_field', { name: 'country', label: 'Country', value: v('country'), error: ee('country'), maxlength: 80 }) %>
+        </div>
+      </fieldset>
+      <fieldset class="fgroup"><legend>Business role &amp; export capability</legend>
+        <div class="fgrid">
+          <%- include('../../partials/cd_field', { name: 'company_type', label: 'Business type', type: 'select', value: v('company_type'), error: ee('company_type'), list: [['', 'Not set'], ...Object.entries(ty)] }) %>
+          <%- include('../../partials/cd_field', { name: 'crm_status', label: 'Relationship status', type: 'select', value: E ? E.vals.crm_status : (s.crm_status || 'active'), error: ee('crm_status'), list: Object.entries(crm), hint: 'Separate from portal access.' }) %>
+        </div>
+        <label class="fcheck"><input type="checkbox" name="can_export_official" <%= (E ? E.vals.can_export_official : s.can_export_official) ? 'checked' : '' %>> Official exporter <span class="muted small">— can export with a government export declaration</span></label>
+        <%- include('../../partials/cd_field', { name: 'main_products', label: 'Main products / categories', value: v('main_products'), error: ee('main_products'), maxlength: 500 }) %>
+      </fieldset>
+      <fieldset class="fgroup"><legend>Commercial terms</legend>
+        <%- include('../../partials/cd_field', { name: 'payment_terms', label: 'Payment terms', value: v('payment_terms'), error: ee('payment_terms'), placeholder: '30% deposit, 70% before shipment', hint: 'General terms only — every supplier PI sets the real amounts.', maxlength: 300 }) %>
+        <div class="fgrid">
+          <%- include('../../partials/cd_field', { name: 'lead_time_days', label: 'Production lead time (days)', value: v('lead_time_days'), error: ee('lead_time_days'), inputmode: 'numeric', maxlength: 3 }) %>
+          <%- include('../../partials/cd_field', { name: 'rating', label: 'Rating', type: 'select', value: v('rating'), error: ee('rating'), list: [['', 'Not rated'], ['5', '★★★★★'], ['4', '★★★★'], ['3', '★★★'], ['2', '★★'], ['1', '★']] }) %>
+        </div>
+      </fieldset>
+      <fieldset class="fgroup"><legend>Qualification &amp; notes</legend>
+        <%- include('../../partials/cd_field', { name: 'certifications', label: 'Certifications', value: v('certifications'), error: ee('certifications'), placeholder: 'BSCI, ISO 9001…', maxlength: 300 }) %>
+        <%- include('../../partials/cd_field', { name: 'notes', label: 'Internal notes', type: 'textarea', rows: 3, value: v('notes'), error: ee('notes'), hint: 'Internal — never shown to the supplier. Licences and certificate files are uploaded under Documents.', maxlength: 4000 }) %>
+      </fieldset>
+    </div>
+    <div class="df"><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Save changes</button></div>
+    <div class="dconfirm" hidden role="alertdialog" aria-labelledby="edconfirm"><div class="box"><h3 id="edconfirm">Discard your changes?</h3><p class="muted small">You have unsaved changes to this supplier.</p><div class="actions"><button type="button" class="btn" data-keep>Keep editing</button><button type="button" class="btn primary danger" data-discard>Discard changes</button></div></div></div>
   </form>
+</dialog>
+
+<dialog class="drawer" id="actdlg" aria-labelledby="acttitle" <%- A ? 'data-invalid="1"' : '' %>>
+  <form method="post" action="/admin/suppliers/<%= s.id %>/activity" class="drawerform" novalidate>
+    <div class="dh"><h2 id="acttitle">Add activity</h2><button type="button" class="x" data-close aria-label="Close">✕</button></div>
+    <div class="db2">
+      <div class="dsum" role="alert" <%= A && Object.keys(A.errors).length ? '' : 'hidden' %>>Please check the highlighted field<%= A && Object.keys(A.errors).length > 1 ? 's' : '' %> — the activity has not been saved yet.</div>
+      <div class="fgrid">
+        <%- include('../../partials/cd_field', { pfx: 'a-', name: 'date', label: 'Date', type: 'date', value: A ? A.vals.date : today, error: A ? (A.errors.date || '') : '' }) %>
+        <%- include('../../partials/cd_field', { pfx: 'a-', name: 'type', label: 'Type', type: 'select', value: A ? A.vals.type : 'call', list: Object.entries(acts) }) %>
+      </div>
+      <%- include('../../partials/cd_field', { pfx: 'a-', name: 'summary', label: 'Summary', type: 'textarea', rows: 4, required: true, rule: 'required', value: A ? A.vals.summary : '', error: A ? (A.errors.summary || '') : '', placeholder: 'What was discussed or agreed — prices, samples, next steps…', maxlength: 2000 }) %>
+      <fieldset class="fgroup"><legend>Follow-up <span class="muted small">— optional</span></legend>
+        <%- include('../../partials/cd_field', { pfx: 'a-', name: 'next_action', label: 'Next action', value: A ? A.vals.next_action : '', error: A ? (A.errors.next_action || '') : '', placeholder: 'e.g. Ask for the revised price list', maxlength: 300 }) %>
+        <%- include('../../partials/cd_field', { pfx: 'a-', name: 'follow_up', label: 'Follow up on', type: 'date', value: A ? A.vals.follow_up : '', error: A ? (A.errors.follow_up || '') : '', min: today, hint: s.next_follow_up ? 'The supplier’s next follow-up is ' + fmt.date(s.next_follow_up) + ' — the earlier date is kept.' : 'Becomes the supplier’s next follow-up.' }) %>
+      </fieldset>
+    </div>
+    <div class="df"><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Log activity</button></div>
+    <div class="dconfirm" hidden role="alertdialog" aria-labelledby="actconfirm"><div class="box"><h3 id="actconfirm">Discard this activity?</h3><p class="muted small">What you typed has not been saved.</p><div class="actions"><button type="button" class="btn" data-keep>Keep editing</button><button type="button" class="btn primary danger" data-discard>Discard</button></div></div></div>
+  </form>
+</dialog>
+
+<dialog class="modaldlg" id="resdlg" aria-labelledby="restitle">
+  <form method="post" action="/admin/suppliers/<%= s.id %>/followup/reschedule" id="resform" class="modalform">
+    <h2 id="restitle">Reschedule follow-up</h2>
+    <div class="fld"><label for="resdate">New date</label><input type="date" id="resdate" name="due_date" required></div>
+    <p class="muted small">The change is recorded in the timeline.</p>
+    <div class="actions"><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Save date</button></div>
+  </form>
+</dialog>
+
+<dialog class="modaldlg" id="importdlg" aria-labelledby="imptitle">
+  <form method="post" action="/admin/products/import" enctype="multipart/form-data" class="modalform sd-import">
+    <input type="hidden" name="supplier_id" value="<%= s.id %>">
+    <h2 id="imptitle">Import products</h2>
+    <ol class="sd-steps">
+      <li><b>Upload</b> an Excel, CSV, PDF or photo of the price list.</li>
+      <li><b>Review</b> the recognised products: matches with existing products and possible duplicates are flagged, and prices, currencies, quantities and packing are checked.</li>
+      <li><b>Confirm</b> — nothing is saved before this step. Existing products stay unchanged unless you choose “Update”.</li>
+    </ol>
+    <div class="fld"><label for="impfile">Price list file</label><input type="file" id="impfile" name="file" required accept=".xlsx,.xlsm,.csv,.pdf,.jpg,.jpeg,.png,.webp"></div>
+    <p class="muted small"><a href="/templates/lumi-trade-product-import-template.xlsx" download>Download the Excel template</a></p>
+    <div class="actions"><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Upload &amp; review</button></div>
+  </form>
+</dialog>
+
+<dialog class="modaldlg" id="docdlg" aria-labelledby="doctitle">
+  <form method="post" action="/admin/documents/upload" enctype="multipart/form-data" class="modalform">
+    <input type="hidden" name="entity_type" value="supplier"><input type="hidden" name="entity_id" value="<%= s.id %>"><input type="hidden" name="redirect" value="/admin/suppliers/<%= s.id %>#overview">
+    <h2 id="doctitle">Upload documents</h2>
+    <div class="fld"><label for="dockind">Type</label><select id="dockind" name="kind"><% DOC_KINDS.forEach(k => { %><option value="<%= k %>"><%= fmt.status(k) %></option><% }) %></select></div>
+    <div class="fld"><label for="docfile">Files</label><input type="file" id="docfile" name="files" multiple required></div>
+    <p class="muted small">Uploaded as <b>internal</b>. You can share a document with clients afterwards, after a confirmation.</p>
+    <div class="actions"><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Upload</button></div>
+  </form>
+</dialog>
+
+<% if (mayDelete) { %>
+<dialog class="modaldlg" id="deldlg" aria-labelledby="deltitle">
+  <form method="post" action="/admin/suppliers/<%= s.id %>/delete" class="modalform">
+    <h2 id="deltitle">Delete this supplier?</h2>
+    <p class="muted small">This cannot be undone. Its products are kept without a supplier. Type the supplier’s name to confirm:</p>
+    <p><b><%= s.name %></b></p>
+    <div class="fld"><label for="delname">Supplier name</label><input id="delname" name="confirm_name" autocomplete="off" data-want="<%= String(s.name).toLowerCase().trim() %>"></div>
+    <div class="actions"><button type="button" class="btn" data-close>Cancel</button><button class="btn primary danger" id="delgo" disabled>Delete supplier</button></div>
+  </form>
+</dialog>
 <% } %>
+
+<dialog class="modaldlg" id="sdcfm" aria-labelledby="sdcfmt">
+  <div class="modalform"><h2 id="sdcfmt">Are you sure?</h2><p class="muted" id="sdcfmx"></p>
+    <div class="actions"><button type="button" class="btn" data-close>Cancel</button><button type="button" class="btn primary" id="sdcfmok">Confirm</button></div></div>
+</dialog>
+
+<script>
+(function () {
+  var INIT_TAB = <%- JSON.stringify(TAB || '') %>, OPEN = <%- JSON.stringify(OPEN || '') %>;
+  var tabs = [].slice.call(document.querySelectorAll('[data-tab]')), names = tabs.map(function (b) { return b.dataset.tab; });
+  function show(name) {
+    if (name === 'docs') name = 'overview';
+    if (names.indexOf(name) < 0) name = 'overview';
+    tabs.forEach(function (b) { var on = b.dataset.tab === name; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1; });
+    names.forEach(function (n) { document.getElementById('tab-' + n).hidden = n !== name; });
+  }
+  tabs.forEach(function (b) { b.addEventListener('click', function () { history.replaceState(null, '', '#' + b.dataset.tab); show(b.dataset.tab); }); });
+  document.querySelector('.cd-tabs').addEventListener('keydown', function (e) {
+    var i = names.indexOf(document.activeElement.dataset && document.activeElement.dataset.tab); if (i < 0 || (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft' && e.key !== 'Home' && e.key !== 'End')) return;
+    var j = e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : (i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length;
+    e.preventDefault(); tabs[j].focus(); tabs[j].click();
+  });
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+  show(INIT_TAB || location.hash.slice(1));
+
+  function openDlg(id, focusName) {
+    var d = document.getElementById(id); if (!d || !d.showModal) return;
+    if (!d.open) d.showModal();
+    var t = focusName && d.querySelector('[name="' + focusName + '"]'); if (t) { t.focus(); if (t.select) t.select(); }
+  }
+  document.querySelectorAll('[data-open]').forEach(function (b) { b.addEventListener('click', function () { openDlg(b.dataset.open, b.dataset.focus); }); });
+  document.querySelectorAll('dialog.modaldlg [data-close]').forEach(function (b) { b.addEventListener('click', function () { b.closest('dialog').close(); }); });
+  document.querySelectorAll('dialog.modaldlg').forEach(function (d) { d.addEventListener('click', function (e) { if (e.target === d) d.close(); }); });
+
+  // ---- drawers: fixed header and footer, only the body scrolls; closing with unsaved changes asks first ----
+  var RULES = {
+    required: function (v) { return v.trim() ? '' : 'This field is required.'; },
+    email: function (v) { return !v.trim() || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.trim()) ? '' : 'Enter a valid email address, e.g. sales@factory.com.'; },
+    phone: function (v) { v = v.trim().replace(/\s*(ext\.?|x)\s*\d{1,6}$/i, ''); return !v || (/^[+()\-.\s\/#0-9]{5,40}$/.test(v) && (v.match(/\d/g) || []).length >= 5) ? '' : 'Enter a valid phone number, e.g. +86 138 2581 4890.'; },
+    website: function (v) { v = v.trim(); return !v || (!/\s/.test(v) && /^(https?:\/\/)?[^\s\/.]+(\.[^\s\/.]+)+([\/?#]\S*)?$/i.test(v)) ? '' : 'Enter a web address like www.factory.com.'; }
+  };
+  function setErr(input, msg) {
+    var box = document.getElementById(input.id + '-e'), fld = input.closest('.fld');
+    if (box) box.textContent = msg || ''; if (fld) fld.classList.toggle('has-err', !!msg);
+    if (msg) input.setAttribute('aria-invalid', 'true'); else input.removeAttribute('aria-invalid');
+  }
+  function checkField(input) {
+    var msg = '', r = (input.dataset.rule || '').split(' ');
+    for (var i = 0; i < r.length && !msg; i++) if (RULES[r[i]]) msg = RULES[r[i]](input.value);
+    setErr(input, msg); return !msg;
+  }
+  function ser(f) { return new URLSearchParams(new FormData(f)).toString(); }
+  document.querySelectorAll('dialog.drawer').forEach(function (d) {
+    var f = d.querySelector('form'), cf = d.querySelector('.dconfirm'), snap = ser(f), invalid = !!d.dataset.invalid, sum = d.querySelector('.dsum');
+    var dirty = function () { return invalid || ser(f) !== snap; };
+    function attemptClose() { if (!cf.hidden) return keep(); if (dirty()) { cf.hidden = false; cf.querySelector('[data-keep]').focus(); } else d.close(); }
+    function keep() { cf.hidden = true; var t = f.querySelector('input:not([type=hidden]),textarea,select'); if (t) t.focus(); }
+    d.addEventListener('cancel', function (e) { e.preventDefault(); attemptClose(); });
+    d.addEventListener('click', function (e) { if (e.target === d) attemptClose(); });
+    d.querySelectorAll('[data-close]').forEach(function (b) { b.addEventListener('click', attemptClose); });
+    cf.querySelector('[data-keep]').addEventListener('click', keep);
+    cf.querySelector('[data-discard]').addEventListener('click', function () { cf.hidden = true; f.reset(); f.querySelectorAll('.has-err').forEach(function (x) { x.classList.remove('has-err'); }); f.querySelectorAll('.ferr').forEach(function (x) { x.textContent = ''; }); if (sum) sum.hidden = true; invalid = false; d.close(); });
+    f.querySelectorAll('[data-rule]').forEach(function (i) { i.addEventListener('blur', function () { if (i.value || i.closest('.has-err')) checkField(i); }); i.addEventListener('input', function () { if (i.closest('.has-err')) checkField(i); }); });
+    f.addEventListener('submit', function (e) {
+      var bad = null;
+      f.querySelectorAll('[data-rule]').forEach(function (i) { if (!checkField(i) && !bad) bad = i; });
+      var fu = f.querySelector('[name="follow_up"]'), dt = f.querySelector('[name="date"]');
+      if (fu && dt && fu.value && dt.value && fu.value < dt.value) { setErr(fu, 'The follow-up cannot be before the activity date.'); bad = bad || fu; }
+      if (bad) { e.preventDefault(); if (sum) sum.hidden = false; bad.focus(); } else { invalid = false; }
+    });
+    d.addEventListener('close', function () { cf.hidden = true; });
+  });
+  if (OPEN) { openDlg(OPEN); var bad = document.querySelector('#' + OPEN + ' .has-err input, #' + OPEN + ' .has-err textarea, #' + OPEN + ' .has-err select'); if (bad) bad.focus(); }
+
+  // ---- reschedule the follow-up ----
+  document.querySelectorAll('[data-resched]').forEach(function (b) { b.addEventListener('click', function () { var di = document.getElementById('resdate'); di.value = b.dataset.due; openDlg('resdlg'); di.focus(); }); });
+
+  // ---- confirmations for sensitive form actions ----
+  var cfm = document.getElementById('sdcfm'), pend = null;
+  document.addEventListener('submit', function (e) {
+    var f = e.target; if (!f.dataset || !f.dataset.sdconfirm || f.dataset.sdok2) return;
+    e.preventDefault(); pend = f;
+    document.getElementById('sdcfmt').textContent = f.dataset.sdconfirm; document.getElementById('sdcfmx').textContent = f.dataset.sdtext || '';
+    var ok = document.getElementById('sdcfmok'); ok.textContent = f.dataset.sdok || 'Confirm'; ok.classList.toggle('danger', !!f.dataset.sddanger);
+    cfm.showModal();
+  });
+  document.getElementById('sdcfmok').addEventListener('click', function () { var f = pend; cfm.close(); if (f) { f.dataset.sdok2 = 1; f.submit(); } });
+
+  // ---- typed confirmation before deleting a supplier ----
+  var dn = document.getElementById('delname'), dg = document.getElementById('delgo');
+  if (dn) dn.addEventListener('input', function () { dg.disabled = dn.value.trim().toLowerCase() !== dn.dataset.want; });
+
+  // ---- search this supplier's products ----
+  var pf = document.getElementById('pfind');
+  if (pf) pf.addEventListener('input', function () {
+    var words = pf.value.toLowerCase().split(/\s+/).filter(Boolean), rows = [].slice.call(document.querySelectorAll('#ptbl tbody tr')), n = 0;
+    rows.forEach(function (r) { var ok = words.every(function (w) { return r.dataset.hay.indexOf(w) >= 0; }); r.hidden = !ok; if (ok) n++; });
+    document.getElementById('pcount').textContent = n + ' of ' + rows.length; document.getElementById('pnone').hidden = n > 0;
+  });
+
+  // ---- timeline filter ----
+  document.querySelectorAll('.cd-filter button').forEach(function (b) { b.addEventListener('click', function () {
+    document.querySelectorAll('.cd-filter button').forEach(function (x) { x.classList.toggle('on', x === b); });
+    document.querySelectorAll('#cdtl > li').forEach(function (li) { li.hidden = b.dataset.show !== 'all' && !li.classList.contains(b.dataset.show); });
+  }); });
+})();
+</script>
 <%- include('../../partials/foot') %>
