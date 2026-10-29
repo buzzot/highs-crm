@@ -42,6 +42,11 @@
     </form>
     <% } %>
     <%- include('po_lines', { lines: pi.lines, currency: pi.currency, edit: false }) %>
+    <div class="spiacts">
+      <button type="button" class="btn" onclick="var d=document.querySelector('#supplier-pi details.spiedit');d.open=true;d.scrollIntoView({behavior:'smooth',block:'nearest'})">Edit PI</button>
+      <% if (typeof aiOn !== 'undefined' && aiOn) { %><button type="button" class="btn" onclick="document.getElementById('spiai').showModal()">Read a new file with AI</button><% } %>
+      <% if (pi.status !== 'confirmed') { %><% if (chk.matches) { %><form method="post" action="/admin/purchasing/<%= po.id %>/pi/<%= pi.id %>/approve" class="inline"><button class="btn primary">Approve PI</button></form><% } else { %><button type="button" class="btn primary" disabled title="The lines must match the total printed on the supplier's PI">Approve PI</button><span class="muted small">Approve once the lines match the printed total.</span><% } %><% } %>
+    </div>
     <% if (pi.notes) { %><p class="muted small">Note: <%= pi.notes %></p><% } %>
     <% if (hist.length) { %><p class="muted small">Earlier versions: <%= hist.map(h => (h.pi_no || 'PI') + ' · ' + fmt.money(h.total, h.currency) + ' · ' + fmt.date(h.created_at)).join('  |  ') %></p><% } %>
   <% } else { %>
@@ -55,14 +60,19 @@
       <input type="file" name="files" multiple aria-label="Supplier PI file" accept=".pdf,.xlsx,.xlsm,.csv,.txt,image/*">
       <span class="dicon"><%- icon('upload') %></span><strong data-drop-count>Drop the supplier's PI here, or <span class="dlink">browse</span></strong>
       <span class="muted small dsub">PDF, Excel or screenshot<%= typeof aiOn !== 'undefined' && aiOn ? ' — AI can fill the lines, you check them' : '' %></span></div><div class="fgrid" data-drop-list></div></div>
-    <% if (typeof aiOn !== 'undefined' && aiOn) { %><button type="button" class="btn" onclick="var f=this.form;f.action='/admin/purchasing/<%= po.id %>/pi/read';f.submit()">Read with AI</button><% } %>
+  </div>
+  <div class="spiacts">
+    <button type="button" class="btn" id="spiman" onclick="var d=document.querySelector('#supplier-pi details.spiedit');d.open=true;d.scrollIntoView({behavior:'smooth',block:'nearest'})">Enter manually</button>
+    <% if (typeof aiOn !== 'undefined' && aiOn) { %><button type="button" class="btn" id="spiaibtn" data-url="/admin/purchasing/<%= po.id %>/pi/read">Read with AI</button><% } %>
+    <span class="muted small"><%= fromPo ? 'Manual entry starts from our PO lines.' : '' %> Nothing is overwritten until you save.</span>
   </div>
   <% } %>
 
-  <details class="spiedit" <%= pi ? '' : 'open' %>>
-    <summary class="btn small"><%= pi ? 'Edit / new revision' : (fromPo ? 'Check / edit the PI (prefilled from our PO)' : 'Enter the PI manually') %></summary>
+  <details class="spiedit<%= pi ? '' : ' nosum' %>">
+    <summary class="btn small">Edit PI</summary>
     <% if (pi) { %><form method="post" action="/admin/purchasing/<%= po.id %>/pi" enctype="multipart/form-data" id="spiform"><% } %>
       <% if (pi) { %><input type="hidden" name="pid" value="<%= pi.id %>"><% } %>
+      <% if (!pi && fromPo) { %><p class="muted small">The lines start from our PO — change them to match what the supplier invoiced. Save draft keeps your work; Approve PI is available once the lines match the total printed on the PI.</p><% } %>
       <div class="row">
         <label>Supplier's PI no. <input name="pi_no" value="<%= pi?.pi_no || '' %>"></label>
         <label>Date <input type="date" name="pi_date" value="<%= pi?.pi_date || new Date().toISOString().slice(0, 10) %>"></label>
@@ -89,7 +99,7 @@
       <div class="spiactions"><button type="button" class="link small" id="spimore">+ Add line</button>
         <span class="muted small">New product? Choose “+ New product…” in the Product list.</span></div>
       <label>Notes <input name="notes" value="<%= pi?.notes || '' %>"></label>
-      <div class="actions"><% if (pi) { %><label class="check small"><input type="checkbox" onchange="this.form.pid.disabled = this.checked"> save as a new revision (keep the old PI in the history)</label><% } %><button class="btn primary">Save PI</button></div>
+      <div class="actions"><% if (pi) { %><label class="check small"><input type="checkbox" onchange="this.form.pid.disabled = this.checked"> save as a new revision (keep the old PI in the history)</label><% } %><button class="btn" name="act" value="draft">Save draft</button><button class="btn primary" name="act" value="approve" title="Approve only when the lines match the total printed on the supplier's PI">Approve PI</button></div>
     <% if (pi) { %></form><% } %>
     <% if (pi) { %><form method="post" action="/admin/purchasing/<%= po.id %>/pi/<%= pi.id %>/delete" onsubmit="return confirm('Delete this supplier PI? The files stay in the documents.')" class="inline"><button class="link small danger">Delete this PI</button></form><% } %>
   </details>
@@ -164,6 +174,16 @@
     <p class="muted small">A simple card — add photos, packing and specs later on the product page.</p>
   </dialog>
   <% if (pi) { %>
+  <% if (typeof aiOn !== 'undefined' && aiOn) { %>
+  <dialog id="spiai" class="bookdlg">
+    <h2>Read a new file with AI</h2>
+    <p class="muted small">This adds a <strong>new draft revision</strong> from the file. The current PI and your edits are not changed — they stay in the history.</p>
+    <form method="post" action="/admin/purchasing/<%= po.id %>/pi/read" enctype="multipart/form-data">
+      <div class="dropwrap"><div class="filedrop compact" data-dropzone data-max="1" data-max-mb="20" tabindex="0"><input type="file" name="files" aria-label="Supplier PI file" accept=".pdf,.xlsx,.xlsm,.csv,.txt,image/*"><span class="dicon"><%- icon('upload') %></span><strong data-drop-count>Drop the file here, or <span class="dlink">browse</span></strong></div><div class="fgrid" data-drop-list></div></div>
+      <div class="actions"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn primary">Read with AI</button></div>
+    </form>
+  </dialog>
+  <% } %>
   <dialog id="spifile" class="bookdlg">
     <h2>Attach the supplier's PI file</h2>
     <form method="post" action="/admin/purchasing/<%= po.id %>/pi/<%= pi.id %>/files" enctype="multipart/form-data">
@@ -178,6 +198,12 @@
     const root = document.getElementById('supplier-pi');
     root.querySelectorAll('dialog.bookdlg').forEach(d => d.addEventListener('click', e => { if (e.target === d) d.close(); }));
     const form = document.getElementById('spiform'); if (!form) return;
+    let dirty = false; form.addEventListener('input', e => { if (e.target.type !== 'file') dirty = true; });
+    const aib = document.getElementById('spiaibtn');
+    if (aib) aib.addEventListener('click', () => {
+      if (dirty && !confirm('You have typed changes in the lines. Reading a file with AI creates a separate draft from the file — your typed changes on this form will not be saved. Continue?')) return;
+      form.action = aib.dataset.url; form.submit();
+    });
     const rows = [...form.querySelectorAll('tr.spirow')], tot = document.getElementById('spitotal'), diff = form.querySelector('.spidiff'), decl = form.querySelector('[name=declared_total]');
     const f2 = v => v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     function calc() {

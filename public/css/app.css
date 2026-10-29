@@ -1686,3 +1686,8 @@ form.payrec.dlg .wide { grid-column: 1 / -1; }
 .spifile .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .spifile form { display: inline; margin: 0; }
 .spifiles > .link { align-self: flex-start; }
+.spiacts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
+.spiacts form { display: inline; margin: 0; }
+details.spiedit > summary { display: none; }
+.spiacts .btn[disabled] { opacity: .45; cursor: not-allowed; }
+details.spiedit .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
