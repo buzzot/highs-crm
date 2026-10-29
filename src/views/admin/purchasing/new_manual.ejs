@@ -1,14 +1,24 @@
 <%- include('../../partials/head') %>
-<div class="pagehead"><div><a class="back" href="/admin/purchasing">← Purchasing</a><h1>New purchase order</h1>
-  <p class="muted">A purchase order to one supplier — no client order needed. Link it to an order later, when the order is confirmed.</p></div></div>
+<%
+  const F = typeof form !== 'undefined' ? form : {}, E = typeof errors !== 'undefined' ? errors : {};
+  const hasAddl = !!(F.title || F.order_id || F.payment_terms || F.ship_to || F.notes || E.order_id);
+%>
+<div class="pagehead"><div><a class="back" href="/admin/purchasing">← Purchasing</a><h1>New Purchase Order</h1></div></div>
 <% if (error) { %><div class="alert err"><%= error %></div><% } %>
-<form method="post" action="/admin/purchasing/new-manual" class="poform manualpo" id="mpo">
+<form method="post" action="/admin/purchasing/new-manual" class="poform manualpo npo" id="mpo" novalidate>
+  <input type="hidden" name="token" value="<%= F.token || '' %>">
+  <input type="hidden" name="act" id="m_act" value="draft">
   <div class="card">
-    <h2>Supplier</h2>
-    <div class="row">
-      <label class="grow2">Supplier
-        <select data-picker name="supplier_id" id="m_sup" required><option value="">— choose —</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= s.id === supplier_id ? 'selected' : '' %>><%= s.name %></option><% }) %><option value="__new">+ Add new supplier…</option></select></label>
-      <label class="grow2">Label <span class="muted small">optional, for us — e.g. “Stock for November”</span><input name="title" maxlength="200"></label>
+    <div class="npo-main">
+      <label class="npo-sup">Supplier
+        <select data-picker name="supplier_id" id="m_sup" required><option value="">— choose —</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= s.id === F.supplier_id ? 'selected' : '' %>><%= s.name %></option><% }) %><option value="__new">+ Add new supplier…</option></select>
+        <span class="fielderr" data-err="supplier_id"></span></label>
+      <label class="npo-cur">Currency
+        <select name="currency" id="m_cur"><% currencies.forEach(c => { %><option <%= c === (F.currency || 'CNY') ? 'selected' : '' %>><%= c %></option><% }) %></select>
+        <span class="fielderr" data-err="currency"></span></label>
+      <label class="npo-date">Requested ready date
+        <input type="date" name="required_date" value="<%= F.required_date || '' %>">
+        <span class="fielderr" data-err="required_date"></span></label>
     </div>
     <div class="newsup" id="newSup" hidden>
       <strong>New supplier</strong> <span class="muted small">— just the basics; complete the rest later on the supplier page</span>
@@ -25,92 +35,263 @@
       <div class="aiscan-msg err" id="ns_err" hidden></div>
       <div class="actions"><button type="button" class="btn small primary" id="ns_save">Add supplier</button><button type="button" class="btn small" id="ns_cancel">Cancel</button></div>
     </div>
-    <div class="row">
-      <label>Currency <select name="currency" id="m_cur"><% currencies.forEach(c => { %><option <%= c === 'CNY' ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
-      <label>Required by <input type="date" name="required_date"></label>
-      <label class="grow2">Link to an order <span class="muted small">optional — can be done later</span>
-        <select data-picker="Order" name="order_id"><option value="">— not linked yet —</option><% orders.forEach(o => { %><option value="<%= o.id %>"><%= o.order_no %> · <%= o.organizations?.name || '' %></option><% }) %></select></label>
-    </div>
+    <details class="npo-addl" <%= hasAddl ? 'open' : '' %>>
+      <summary>Additional details <span class="muted small">optional — label, linked customer order, payment terms, delivery address, notes</span></summary>
+      <div class="npo-grid">
+        <label>Internal label <span class="muted small">for us only</span><input name="title" maxlength="200" value="<%= F.title || '' %>" placeholder="e.g. Stock for November"></label>
+        <label>Linked customer order <span class="muted small">can be done later</span>
+          <select data-picker="Order" name="order_id"><option value="">— not linked yet —</option><% orders.forEach(o => { %><option value="<%= o.id %>" <%= o.id === F.order_id ? 'selected' : '' %>><%= o.order_no %> · <%= o.organizations?.name || '' %></option><% }) %></select>
+          <span class="fielderr" data-err="order_id"></span></label>
+        <label>Payment terms <span class="muted small" id="m_ptnote">defaults from the supplier</span><input name="payment_terms" id="m_pt" maxlength="300" value="<%= F.payment_terms || '' %>"></label>
+        <label>Delivery address <span class="muted small">where the supplier delivers / we collect</span><input name="ship_to" maxlength="500" value="<%= F.ship_to || '' %>"></label>
+        <label class="npo-wide">Notes <span class="muted small">printed on the PO</span><textarea name="notes" rows="2" maxlength="2000"><%= F.notes || '' %></textarea></label>
+      </div>
+    </details>
   </div>
-  <div class="card">
-    <h2>Products</h2>
-    <div class="tablewrap"><table class="tbl compact newspo" id="m_lines">
-      <thead><tr><th>Product</th><th>Description on the PO</th><th>SKU</th><th class="right">Qty</th><th class="right">Unit price</th><th></th></tr></thead>
+
+  <div class="card npo-prod">
+    <div class="npo-prodhead"><h2>Products</h2><button type="button" class="btn primary" id="m_add">+ Add Product</button></div>
+    <div class="npo-review" id="m_review" hidden></div>
+    <div class="tablewrap"><table class="tbl compact npo-lines" id="m_lines">
+      <thead><tr><th>Product</th><th class="right">Quantity</th><th>Unit</th><th class="right">Unit price</th><th class="right">Amount</th><th></th></tr></thead>
       <tbody></tbody>
     </table></div>
-    <div class="actions"><button type="button" class="btn small primary" id="m_add">+ Add product</button><button type="button" class="btn small" id="m_free">+ Free line</button></div>
-    <p class="muted small">“Add product” opens the catalogue: pick a product and it fills in the name, SKU and factory price — then enter the quantity. Use “Free line” for something that is not in the catalogue. Prices are what we pay the supplier, in the currency above.</p>
-    <div class="actions"><button class="btn primary">Create purchase order</button><a class="btn" href="/admin/purchasing">Cancel</a></div>
+    <p class="npo-empty muted" id="m_empty">No products yet — click <strong>+ Add Product</strong> to pick from the catalogue.</p>
+    <span class="fielderr" data-err="lines"></span>
+    <div class="npo-total"><span>Purchase order total</span><strong id="m_total">—</strong></div>
+    <p class="muted small">Prices are what we pay the supplier. They are prefilled from the product's factory price when it belongs to the chosen supplier and uses the same currency — you can change them here, and the product's own price is never changed by this.</p>
+  </div>
+
+  <div class="npo-foot">
+    <span class="muted small">The PO is created as a <strong>draft</strong>. Nothing is sent to the supplier until you send it from the PO page.</span>
+    <span class="npo-footbtns">
+      <a class="btn" href="/admin/purchasing">Cancel</a>
+      <button type="submit" class="btn" data-act="draft" title="Keep what you have — lines may stay incomplete">Save Draft</button>
+      <button type="submit" class="btn primary" data-act="create" title="Every line needs a catalogue product, a quantity and a price">Create PO</button>
+    </span>
   </div>
 </form>
-<dialog class="pickdlg" id="pickDlg">
-  <div class="pickhead"><h2>Choose a product</h2><button type="button" class="link" id="pk_close" title="Close">×</button></div>
-  <div class="pickbar"><input type="search" id="pk_q" placeholder="Search name, SKU, description…" autocomplete="off">
-    <label class="small"><input type="checkbox" id="pk_only"> only this supplier's products</label></div>
-  <div class="pickscroll"><table class="tbl picktbl"><thead><tr><th></th><th>Product</th><th>Description</th><th>Supplier</th><th class="right">Price</th><th></th></tr></thead><tbody id="pk_rows"></tbody></table>
-    <p class="muted" id="pk_empty" hidden>No products match.</p></div>
+
+<dialog class="catdlg" id="catDlg">
+  <div class="cat-head"><h2>Add products</h2><button type="button" class="link" id="cat_close" title="Close">×</button></div>
+  <div class="cat-bar">
+    <input type="search" id="cat_q" placeholder="Search name, SKU, supplier SKU or description…" autocomplete="off">
+    <button type="button" class="btn small" id="cat_new">+ Create New Product</button>
+  </div>
+  <div class="cat-new" id="cat_newbox" hidden>
+    <strong>New product</strong> <span class="muted small" id="cat_newsup"></span>
+    <div class="npo-grid">
+      <label>Name <input id="cn_name" maxlength="200"></label>
+      <label>SKU <input id="cn_sku" maxlength="80"></label>
+      <label>Supplier SKU <input id="cn_ssku" maxlength="80"></label>
+      <label>Factory price <input id="cn_price" type="number" step="0.0001" min="0"></label>
+      <label class="npo-wide">Description <input id="cn_desc" maxlength="1000"></label>
+    </div>
+    <div class="aiscan-msg err" id="cn_err" hidden></div>
+    <div class="actions"><button type="button" class="btn small primary" id="cn_save">Create &amp; add to the PO</button><button type="button" class="btn small" id="cn_cancel">Cancel</button></div>
+  </div>
+  <div class="cat-scroll" id="cat_list"></div>
+  <div class="cat-foot"><button type="button" class="link small" id="cat_free">Can’t find it? Add a line without a catalogue product (draft only)</button><button type="button" class="btn primary" id="cat_done">Done</button></div>
 </dialog>
-<script type="application/json" id="mData"><%- JSON.stringify({ products: products.map(p => ({ id: p.id, name: p.name, sku: p.sku, supplier_id: p.supplier_id, unit_cost: p.unit_cost, cost_currency: p.cost_currency, description: p.description, moq: p.moq, photo: p.photo })), suppliers: suppliers.map(x => ({ id: x.id, name: x.name })) }).replace(/</g, '\\u003c') %></script>
+
+<script type="application/json" id="mData"><%- JSON.stringify({
+  products: products.map(p => ({ id: p.id, name: p.name, sku: p.sku, ssku: p.supplier_sku, supplier_id: p.supplier_id, unit_cost: p.unit_cost, cost_currency: p.cost_currency, description: p.description, photo: p.photo })),
+  suppliers: suppliers.map(x => ({ id: x.id, name: x.name, payment_terms: x.payment_terms })),
+  initial: F.lines || [], errors: E
+}).replace(/</g, '\\u003c') %></script>
 <script>
 (function () {
-  const data = JSON.parse(document.getElementById('mData').textContent), body = document.querySelector('#m_lines tbody'), sup = document.getElementById('m_sup'), cur = document.getElementById('m_cur');
-  const dlg = document.getElementById('pickDlg'), $ = id => document.getElementById(id);
-  const supName = id => (data.suppliers.find(x => x.id === id) || {}).name || '';
-  let n = 0, target = null;
-  const fmt = (v, c) => v == null || v === '' ? '—' : (c ? c + ' ' : '') + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
-  function addRow(free) {
-    const i = n++, tr = document.createElement('tr');
-    tr.innerHTML = `<td class="prodcell"><input type="hidden" name="line[${i}][product_id]"><div class="prodpick"></div></td>
-      <td><input name="line[${i}][description]" placeholder="Product name"></td><td><input name="line[${i}][sku]"></td>
-      <td class="right"><input type="number" min="1" name="line[${i}][quantity]"></td><td class="right"><input type="number" step="0.0001" min="0" name="line[${i}][unit_price]"></td>
-      <td><button type="button" class="link small danger" title="Remove line">×</button></td>`;
-    const q = s => tr.querySelector(s);
-    const box = q('.prodpick');
-    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'btn small'; btn.textContent = 'Choose product'; box.appendChild(btn);
-    btn.addEventListener('click', () => openPicker(tr));
-    q('button.danger').addEventListener('click', () => tr.remove());
-    tr._set = p => {
-      q('input[type=hidden]').value = p.id;
-      q('[name$="[description]"]').value = p.name; q('[name$="[sku]"]').value = p.sku || ''; q('[name$="[unit_price]"]').value = p.unit_cost ?? '';
-      box.innerHTML = '';
-      if (p.photo) { const im = document.createElement('img'); im.src = '/admin/documents/' + p.photo + '/download'; im.alt = ''; box.appendChild(im); }
-      const t = document.createElement('button'); t.type = 'button'; t.className = 'link small'; t.textContent = 'change'; t.addEventListener('click', () => openPicker(tr)); box.appendChild(t);
-    };
+  const data = JSON.parse(document.getElementById('mData').textContent), $ = id => document.getElementById(id);
+  const form = $('mpo'), body = document.querySelector('#m_lines tbody'), sup = $('m_sup'), cur = $('m_cur'), dlg = $('catDlg');
+  const prod = id => data.products.find(p => p.id === id), supName = id => (data.suppliers.find(x => x.id === id) || {}).name || '';
+  const supOk = () => sup.value && sup.value !== '__new' ? sup.value : '';
+  const money = (v, c) => { try { return new Intl.NumberFormat('en-US', { style: 'currency', currency: c, maximumFractionDigits: 4, minimumFractionDigits: 2 }).format(v).replace('CN¥', '¥'); } catch (e) { return c + ' ' + v.toFixed(2); } };
+  const money2 = (v, c) => { try { return new Intl.NumberFormat('en-US', { style: 'currency', currency: c }).format(v).replace('CN¥', '¥'); } catch (e) { return c + ' ' + v.toFixed(2); } };
+  const num = v => { const s = String(v ?? '').trim().replace(',', '.'); return s === '' ? null : Number(s); };
+  const amountOf = (q, p) => (q == null || p == null || !Number.isFinite(q) || !Number.isFinite(p)) ? null : Math.round(q * p * 1e4) / 1e4;   // exact to 4 decimals, no float drift
+  let n = 0, target = null, curTouched = false, ptTouched = !!$('m_pt').value;
+  const rows = () => [...body.querySelectorAll('tr')];
+  const q = (tr, f) => tr.querySelector(`[name$="[${f}]"]`);
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  // price a catalogue product for THIS supplier and currency — never another supplier's price
+  function priceFor(p) {
+    if (!p) return { v: '', why: '' };
+    if (p.unit_cost == null) return { v: '', why: 'No factory price on file — enter the price' };
+    if (p.supplier_id && p.supplier_id !== supOk() && supOk()) return { v: '', why: 'Belongs to ' + (supName(p.supplier_id) || 'another supplier') + ' — price not used' };
+    if (!p.supplier_id) return { v: '', why: 'No supplier set on the product — enter the price' };
+    if ((p.cost_currency || 'CNY') !== cur.value) return { v: '', why: 'Factory price is in ' + p.cost_currency + ', the PO is in ' + cur.value + ' — enter the price' };
+    return { v: p.unit_cost, why: '' };
+  }
+  function flag(tr) {
+    const p = prod(q(tr, 'product_id').value), box = tr.querySelector('.flags'); let h = '';
+    if (!p) h = '<span class="tag warn" title="Draft only — link a catalogue product to create the PO">Not in catalogue</span> <button type="button" class="link small" data-link>link a product</button>';
+    else {
+      if (supOk() && p.supplier_id && p.supplier_id !== supOk()) h += '<span class="tag warn">Other supplier’s product</span> ';
+      if (p.cost_currency && p.cost_currency !== cur.value && !q(tr, 'unit_price').value) h += '<span class="tag warn">Price currency: ' + esc(p.cost_currency) + '</span> ';
+      else if (!q(tr, 'unit_price').value && tr._why) h += '<span class="muted small">' + esc(tr._why) + '</span>';
+    }
+    box.innerHTML = h;
+    const lk = box.querySelector('[data-link]'); if (lk) lk.addEventListener('click', () => { target = tr; openCat(); });
+  }
+  function addRow(init) {
+    const i = n++, tr = document.createElement('tr'); tr.className = 'npo-row';
+    tr.innerHTML = `<td class="npo-pcell"><input type="hidden" name="line[${i}][product_id]"><input type="hidden" name="line[${i}][sku]">
+        <input name="line[${i}][description]" class="npo-desc" placeholder="Product name" maxlength="500" aria-label="Product name">
+        <div class="npo-sub small muted"><span class="sk"></span><span class="ds"></span></div><div class="flags small"></div><div class="fielderr" data-lerr></div></td>
+      <td class="right"><input type="number" step="any" min="0" name="line[${i}][quantity]" class="npo-q" aria-label="Quantity"></td>
+      <td><input name="line[${i}][unit]" value="pcs" class="npo-u" maxlength="20" aria-label="Unit"></td>
+      <td class="right"><input type="number" step="0.0001" min="0" name="line[${i}][unit_price]" class="npo-p" aria-label="Unit price"></td>
+      <td class="right num npo-amt">—</td>
+      <td><button type="button" class="link small danger" title="Remove line" aria-label="Remove line">×</button></td>`;
+    tr.querySelector('button.danger').addEventListener('click', () => { tr.remove(); refresh(); });
+    tr.addEventListener('input', e => { if (e.target === q(tr, 'unit_price')) { tr.dataset.edited = '1'; flag(tr); } refresh(); clearLErr(tr); });
     body.appendChild(tr);
+    if (init) {
+      q(tr, 'product_id').value = init.product_id || ''; q(tr, 'sku').value = init.sku || '';
+      q(tr, 'description').value = init.description || ''; q(tr, 'quantity').value = init.quantity ?? ''; q(tr, 'unit').value = init.unit || 'pcs'; q(tr, 'unit_price').value = init.unit_price ?? '';
+      if (init.unit_price !== '' && init.unit_price != null) tr.dataset.edited = '1';
+    }
+    decorate(tr); refresh();
     return tr;
   }
-  function openPicker(tr) {
-    target = tr; $('pk_q').value = ''; $('pk_only').checked = !!sup.value && sup.value !== '__new'; render(); dlg.showModal(); $('pk_q').focus();
+  function decorate(tr) {
+    const p = prod(q(tr, 'product_id').value);
+    tr.querySelector('.sk').textContent = p ? [p.sku && 'SKU ' + p.sku, p.ssku && 'Supplier SKU ' + p.ssku].filter(Boolean).join(' · ') : (q(tr, 'sku').value ? 'SKU ' + q(tr, 'sku').value : '');
+    tr.querySelector('.ds').textContent = p && p.description ? ' · ' + p.description.slice(0, 70) + (p.description.length > 70 ? '…' : '') : '';
+    flag(tr);
   }
-  function render() {
-    const term = $('pk_q').value.trim().toLowerCase(), only = $('pk_only').checked && sup.value && sup.value !== '__new';
-    const rows = data.products.filter(p => (!only || p.supplier_id === sup.value) && (!term || [p.name, p.sku, p.description, supName(p.supplier_id)].some(x => String(x || '').toLowerCase().includes(term))));
-    const tb = $('pk_rows'); tb.innerHTML = '';
-    rows.forEach(p => {
-      const tr = document.createElement('tr'); tr.className = 'pickrow';
-      const c0 = document.createElement('td'); c0.className = 'pthumbcell';
-      if (p.photo) { const im = document.createElement('img'); im.src = '/admin/documents/' + p.photo + '/download'; im.loading = 'lazy'; im.alt = ''; c0.appendChild(im); } else { c0.textContent = '▫'; }
-      const c1 = document.createElement('td'); const b = document.createElement('strong'); b.textContent = p.name; c1.appendChild(b);
-      if (p.sku) { const sk = document.createElement('div'); sk.className = 'muted small'; sk.textContent = p.sku; c1.appendChild(sk); }
-      const c2 = document.createElement('td'); c2.className = 'muted small'; c2.textContent = (p.description || '').slice(0, 140);
-      const c3 = document.createElement('td'); c3.className = 'small'; c3.textContent = supName(p.supplier_id) || '—';
-      const c4 = document.createElement('td'); c4.className = 'right'; c4.textContent = fmt(p.unit_cost, p.cost_currency) + (p.moq ? '' : '');
-      const c5 = document.createElement('td'); const sb = document.createElement('button'); sb.type = 'button'; sb.className = 'btn small primary'; sb.textContent = 'Select'; c5.appendChild(sb);
-      tr.append(c0, c1, c2, c3, c4, c5); tb.appendChild(tr);
-      const pick = () => {
-        if (target) { target._set(p); const firstEmpty = !target.querySelector('[name$="[quantity]"]').value; if (p.cost_currency && ![...body.querySelectorAll('[name$="[product_id]"]')].some(h => h.value && h !== target.querySelector('[name$="[product_id]"]'))) cur.value = p.cost_currency; if (!sup.value && p.supplier_id) { sup.value = p.supplier_id; sup.dispatchEvent(new Event('change')); } dlg.close(); if (firstEmpty) target.querySelector('[name$="[quantity]"]').focus(); }
-      };
-      tr.addEventListener('dblclick', pick); sb.addEventListener('click', pick);
+  function setProduct(tr, p) {
+    q(tr, 'product_id').value = p.id; q(tr, 'sku').value = p.sku || '';
+    q(tr, 'description').value = p.name;
+    const pr = priceFor(p); tr._why = pr.why;
+    q(tr, 'unit_price').value = pr.v; delete tr.dataset.edited;
+    decorate(tr); refresh();
+  }
+  const blank = tr => !q(tr, 'product_id').value && !q(tr, 'description').value && !q(tr, 'quantity').value && !q(tr, 'unit_price').value;
+  function refresh() {
+    let total = 0, ok = true;
+    rows().forEach(tr => {
+      const a = amountOf(num(q(tr, 'quantity').value), num(q(tr, 'unit_price').value));
+      tr.querySelector('.npo-amt').textContent = a == null ? '—' : money2(Math.round(a * 100) / 100, cur.value);
+      if (a != null) total += a;
     });
-    $('pk_empty').hidden = rows.length > 0;
+    $('m_total').textContent = money2(Math.round(total * 100) / 100, cur.value);
+    $('m_empty').hidden = rows().length > 0;
+    body.closest('.tablewrap').hidden = rows().length === 0;
   }
-  $('pk_q').addEventListener('input', render); $('pk_only').addEventListener('change', render);
-  $('pk_close').addEventListener('click', () => dlg.close());
-  dlg.addEventListener('close', () => { if (target && !target.querySelector('[name$="[product_id]"]').value && !target.querySelector('[name$="[description]"]').value) target.remove(); }); // closed without choosing: drop the empty line
-  const blankRow = () => [...body.querySelectorAll('tr')].find(t => !t.querySelector('[name$="[product_id]"]').value && !t.querySelector('[name$="[description]"]').value);
-  $('m_add').addEventListener('click', () => openPicker(blankRow() || addRow())); // reuse an empty line instead of stacking blanks
-  $('m_free').addEventListener('click', () => { const tr = blankRow() || addRow(); tr.querySelector('[name$="[description]"]').focus(); });
-  addRow();
+  // ---- errors (field level) ----
+  function setErr(name, msg) { const e = form.querySelector(`[data-err="${name}"]`); if (e) { e.textContent = msg || ''; e.hidden = !msg; const inp = e.parentElement && e.parentElement.querySelector('select,input'); if (inp) inp.classList.toggle('invalid', !!msg); } }
+  function lineErr(tr, f, msg) { const el = tr.querySelector('[data-lerr]'); const cur_ = el.dataset.m ? JSON.parse(el.dataset.m) : {}; cur_[f] = msg; el.dataset.m = JSON.stringify(cur_); el.textContent = Object.values(cur_).filter(Boolean).join(' · '); const inp = f === 'product' ? q(tr, 'description') : q(tr, f); if (inp) inp.classList.add('invalid'); }
+  function clearLErr(tr) { const el = tr.querySelector('[data-lerr]'); el.textContent = ''; el.dataset.m = ''; tr.querySelectorAll('.invalid').forEach(x => x.classList.remove('invalid')); }
+  function validate(strict) {
+    let first = null; const mark = el => { first ||= el; };
+    ['supplier_id', 'currency', 'required_date', 'order_id', 'lines'].forEach(k => setErr(k, ''));
+    rows().forEach(clearLErr);
+    if (!supOk()) { setErr('supplier_id', 'Choose the supplier.'); mark(sup); }
+    const d = form.required_date.value; if (d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) { setErr('required_date', 'Enter a valid date.'); mark(form.required_date); }
+    const used = rows().filter(tr => !blank(tr));
+    if (!used.length) { setErr('lines', 'Add at least one product.'); mark($('m_add')); }
+    used.forEach(tr => {
+      const qy = num(q(tr, 'quantity').value), pr = num(q(tr, 'unit_price').value);
+      if (!q(tr, 'description').value.trim()) { lineErr(tr, 'description', 'Enter a name.'); mark(tr); }
+      if (strict && !q(tr, 'product_id').value) { lineErr(tr, 'product', 'Choose a catalogue product (or save as a draft).'); mark(tr); }
+      if (qy != null && (!Number.isFinite(qy) || qy < 0)) { lineErr(tr, 'quantity', 'Quantity must be ≥ 0.'); mark(tr); } else if (strict && !(qy > 0)) { lineErr(tr, 'quantity', 'Enter a quantity.'); mark(tr); }
+      if (pr != null && (!Number.isFinite(pr) || pr < 0)) { lineErr(tr, 'unit_price', 'Price must be ≥ 0.'); mark(tr); } else if (strict && pr == null) { lineErr(tr, 'unit_price', 'Enter the unit price.'); mark(tr); }
+    });
+    if (first) { first.scrollIntoView({ behavior: 'smooth', block: 'center' }); return false; }
+    return true;
+  }
+  // ---- catalogue dialog ----
+  function openCat() { $('cat_q').value = ''; $('cat_newbox').hidden = true; renderCat(); dlg.showModal(); $('cat_q').focus(); }
+  function renderCat() {
+    const term = $('cat_q').value.trim().toLowerCase(), s = supOk(), list = $('cat_list');
+    const match = p => !term || [p.name, p.sku, p.ssku, p.description].some(x => String(x || '').toLowerCase().includes(term));
+    const mine = data.products.filter(p => s && p.supplier_id === s && match(p)), other = data.products.filter(p => !(s && p.supplier_id === s) && match(p));
+    const inPo = id => rows().some(tr => q(tr, 'product_id').value === id);
+    const row = p => {
+      const pr = priceFor(p), here = p.supplier_id === s;
+      return `<div class="cat-row" data-id="${p.id}"><div class="cat-th">${p.photo ? `<img src="/admin/documents/${p.photo}/download" alt="" loading="lazy">` : '▫'}</div>
+        <div class="cat-main"><strong>${esc(p.name)}</strong><div class="muted small">${esc([p.sku && 'SKU ' + p.sku, p.ssku && 'Supplier SKU ' + p.ssku, !here && supName(p.supplier_id)].filter(Boolean).join(' · '))}</div></div>
+        <div class="cat-price small">${pr.v !== '' ? '<strong>' + money(pr.v, p.cost_currency) + '</strong>' : '<span class="muted">' + esc(p.unit_cost != null ? (here ? 'price in ' + p.cost_currency : 'other supplier') : 'no price') + '</span>'}</div>
+        <button type="button" class="btn small ${inPo(p.id) ? '' : 'primary'}">${inPo(p.id) ? 'Add again' : 'Add'}</button></div>`;
+    };
+    const cap = a => a.slice(0, 60).map(row).join('') + (a.length > 60 ? `<p class="muted small cat-more">${a.length - 60} more — refine your search.</p>` : '');
+    list.innerHTML = (s ? `<div class="cat-grp">${esc(supName(s))} — this supplier’s products</div>${mine.length ? cap(mine) : '<p class="muted small cat-none">No matching products for this supplier.</p>'}` : '<p class="muted small cat-none">Choose the supplier first to see its prices and products first.</p>')
+      + (other.length ? `<div class="cat-grp">${s ? 'Other suppliers — price not used' : 'All products'}</div>${cap(other)}` : '');
+  }
+  $('cat_list').addEventListener('click', e => {
+    const b = e.target.closest('.cat-row .btn'); if (!b) return; const p = prod(b.closest('.cat-row').dataset.id); if (!p) return;
+    if (!supOk() && p.supplier_id && data.suppliers.some(x => x.id === p.supplier_id)) { sup.value = p.supplier_id; sup.dispatchEvent(new Event('change')); }
+    const dup = rows().find(tr => q(tr, 'product_id').value === p.id && tr !== target);
+    if (dup && !confirm(p.name + ' is already on this PO. Add another line (e.g. a different price or condition)?')) { dlg.close(); dup.scrollIntoView({ block: 'center' }); q(dup, 'quantity').focus(); return; }
+    if (!rows().some(tr => q(tr, 'product_id').value && tr !== target) && !curTouched && p.cost_currency && p.supplier_id === supOk() && [...cur.options].some(o => o.value === p.cost_currency)) cur.value = p.cost_currency;
+    let tr = target && blank(target) ? target : (target && !q(target, 'product_id').value ? target : null);
+    if (!tr) tr = rows().find(blank) || addRow();
+    setProduct(tr, p); target = null;
+    b.textContent = 'Added ✓'; b.classList.remove('primary'); b.disabled = true; setTimeout(() => { b.disabled = false; b.textContent = 'Add again'; }, 1200);
+    q(tr, 'quantity').focus({ preventScroll: true });
+  });
+  $('cat_q').addEventListener('input', renderCat);
+  $('m_add').addEventListener('click', () => { target = null; openCat(); });
+  $('cat_close').addEventListener('click', () => dlg.close()); $('cat_done').addEventListener('click', () => dlg.close());
+  dlg.addEventListener('close', () => { target = null; const qty = rows().find(tr => !num(q(tr, 'quantity').value) && q(tr, 'product_id').value); if (qty) q(qty, 'quantity').focus(); });
+  $('cat_free').addEventListener('click', () => { dlg.close(); const tr = (target && blank(target) ? target : rows().find(blank)) || addRow(); tr.querySelector('.npo-desc').focus(); });
+  // quick-create a catalogue product
+  $('cat_new').addEventListener('click', () => { if (!supOk()) { alert('Choose the supplier first — the new product is created for that supplier.'); return; } $('cat_newsup').textContent = '— for ' + supName(supOk()) + ', price in ' + cur.value; $('cat_newbox').hidden = false; $('cn_name').focus(); });
+  $('cn_cancel').addEventListener('click', () => { $('cat_newbox').hidden = true; });
+  $('cn_save').addEventListener('click', async () => {
+    const err = t => { const e = $('cn_err'); e.hidden = !t; e.textContent = t || ''; }; err('');
+    const name = $('cn_name').value.trim(); if (!name) return err('Enter the product name.');
+    const btn = $('cn_save'); btn.disabled = true;
+    try {
+      const res = await fetch('/admin/products/quick', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ name, sku: $('cn_sku').value, supplier_sku: $('cn_ssku').value, description: $('cn_desc').value, unit_cost: $('cn_price').value, cost_currency: cur.value, supplier_id: supOk() }) });
+      const j = await res.json().catch(() => ({})); if (!res.ok) throw new Error(j.error || 'Could not create the product.');
+      const p = { id: j.id, name: j.name, sku: j.sku, ssku: j.supplier_sku, supplier_id: j.supplier_id, unit_cost: j.unit_cost, cost_currency: j.cost_currency, description: j.description, photo: null };
+      data.products.unshift(p);
+      const tr = rows().find(blank) || addRow(); setProduct(tr, p);
+      ['cn_name', 'cn_sku', 'cn_ssku', 'cn_price', 'cn_desc'].forEach(i => { $(i).value = ''; }); $('cat_newbox').hidden = true; renderCat(); q(tr, 'quantity').focus({ preventScroll: true });
+    } catch (e) { err(e.message); } finally { btn.disabled = false; }
+  });
+  // ---- supplier / currency changes: flag, never overwrite the user's edits ----
+  function review(reason) {
+    const bar = $('m_review'), s = supOk(), used = rows().filter(tr => q(tr, 'product_id').value);
+    used.forEach(tr => { const p = prod(q(tr, 'product_id').value); tr._why = priceFor(p).why; flag(tr); });
+    const other = used.filter(tr => { const p = prod(q(tr, 'product_id').value); return s && p && p.supplier_id && p.supplier_id !== s; });
+    const stale = used.filter(tr => tr.dataset.edited !== '1' && priceFor(prod(q(tr, 'product_id').value)).v !== q(tr, 'unit_price').value && q(tr, 'unit_price').value !== '');
+    if (!used.length || (!other.length && !stale.length)) { bar.hidden = true; return; }
+    bar.hidden = false;
+    bar.innerHTML = `<strong>${reason} — please review the lines.</strong> ${other.length ? `${other.length} product${other.length > 1 ? 's belong' : ' belongs'} to another supplier. ` : ''}${stale.length ? `${stale.length} price${stale.length > 1 ? 's' : ''} came from the catalogue and no longer match this supplier / currency. ` : ''}Your own edits are kept.
+      ${stale.length ? '<button type="button" class="btn small" id="m_reprice">Refresh prices I haven’t edited</button>' : ''}`;
+    const rb = $('m_reprice'); if (rb) rb.addEventListener('click', () => { stale.forEach(tr => { const pr = priceFor(prod(q(tr, 'product_id').value)); q(tr, 'unit_price').value = pr.v; tr._why = pr.why; flag(tr); }); refresh(); review(reason); });
+  }
+  sup.addEventListener('change', () => {
+    const s = data.suppliers.find(x => x.id === sup.value);
+    if (!ptTouched) $('m_pt').value = s && s.payment_terms ? s.payment_terms : '';
+    setErr('supplier_id', ''); if (sup.value !== '__new') review('Supplier changed');
+  });
+  cur.addEventListener('change', () => { curTouched = true; refresh(); review('Currency changed'); });
+  $('m_pt').addEventListener('input', () => { ptTouched = true; });
+  // ---- submit: one click only ----
+  let sent = false;
+  form.querySelectorAll('button[data-act]').forEach(b => b.addEventListener('click', () => { $('m_act').value = b.dataset.act; }));
+  form.addEventListener('submit', e => {
+    if (sent) { e.preventDefault(); return; }
+    if (sup.value === '__new') { e.preventDefault(); setErr('supplier_id', 'Add the new supplier first, or choose one from the list.'); return; }
+    const strict = $('m_act').value === 'create';
+    if (!validate(strict)) { e.preventDefault(); return; }
+    const other = rows().filter(tr => { const p = prod(q(tr, 'product_id').value); return p && p.supplier_id && p.supplier_id !== supOk(); });
+    if (other.length && !confirm(other.length + ' line(s) are products of another supplier. Create the PO anyway?')) { e.preventDefault(); return; }
+    rows().filter(blank).forEach(tr => tr.remove());
+    sent = true; setTimeout(() => form.querySelectorAll('button[type=submit]').forEach(b => { b.disabled = true; }), 0);
+  });
+  // ---- start: lines from a failed submit, or one empty state ----
+  data.initial.forEach(l => addRow(l));
+  Object.entries((data.errors || {}).line || {}).forEach(([i, f]) => { const tr = rows()[i]; if (tr) Object.entries(f).forEach(([k, m]) => lineErr(tr, k, m)); });
+  ['supplier_id', 'currency', 'required_date', 'order_id', 'lines'].forEach(k => { if (data.errors && data.errors[k]) setErr(k, data.errors[k]); });
+  if (!sup.value && !ptTouched) $('m_pt').value = '';
+  else if (sup.value && !$('m_pt').value) { const s = data.suppliers.find(x => x.id === sup.value); if (s && s.payment_terms) $('m_pt').value = s.payment_terms; }
+  refresh();
 })();
 </script>
 <script>

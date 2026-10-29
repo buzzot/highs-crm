@@ -1,4 +1,5 @@
 // Purchasing: purchase orders to suppliers, generated from a client order, sent by email, answered by email.
+import { randomUUID } from 'node:crypto';
 import multer from '../../lib/multer-utf8.js';
 import { Router } from '../../lib/router.js';
 import { admin } from '../../lib/supabase.js';
@@ -62,17 +63,22 @@ async function newContext(orderId) {
   return { order, rows, suppliers: suppliers || [], existing: existing || [] };
 }
 
-// a PO without an order: pick the supplier and add products by hand
-r.get('/new', async (req, res, next) => {
-  if (isId(req.query.order)) return next();
+// a PO without an order: pick the supplier and add products from the catalogue
+async function manualCtx() {
   const [{ data: suppliers }, { data: products }, { data: orders }] = await Promise.all([
     admin.from('suppliers').select('id, name, email, payment_terms').order('name'),
-    admin.from('products').select('id, name, sku, supplier_id, unit_cost, cost_currency, description, moq').order('name'),
+    admin.from('products').select('id, name, sku, supplier_sku, supplier_id, unit_cost, cost_currency, description, moq').order('name'),
     admin.from('orders').select('id, order_no, status, organizations(name)').not('status', 'in', '("closed","cancelled","delivered")').order('created_at', { ascending: false }).limit(100),
   ]);
   const { data: ph } = await admin.from('documents').select('id, entity_id').eq('entity_type', 'product').eq('kind', 'product_photo').order('created_at'); // first photo per product, for the picker
   const photo = {}; (ph || []).forEach(d => { photo[d.entity_id] ||= d.id; });
-  res.render('admin/purchasing/new_manual', { title: 'New purchase order', suppliers: suppliers || [], products: (products || []).map(x => ({ ...x, photo: photo[x.id] || null })), orders: orders || [], currencies: CURRENCIES, error: req.query.err || null, supplier_id: isId(req.query.supplier) ? req.query.supplier : '' });
+  return { suppliers: suppliers || [], products: (products || []).map(x => ({ ...x, photo: photo[x.id] || null })), orders: orders || [] };
+}
+const blankForm = supplier => ({ supplier_id: supplier || '', currency: 'CNY', required_date: '', title: '', order_id: '', payment_terms: '', ship_to: '', notes: '', lines: [], token: randomUUID() });
+r.get('/new', async (req, res, next) => {
+  if (isId(req.query.order)) return next();
+  const ctx = await manualCtx();
+  res.render('admin/purchasing/new_manual', { title: 'New purchase order', ...ctx, currencies: CURRENCIES, error: req.query.err || null, errors: {}, form: blankForm(isId(req.query.supplier) ? req.query.supplier : '') });
 });
 
 r.get('/new', async (req, res) => {
@@ -112,25 +118,65 @@ r.post('/new', async (req, res) => {
   res.redirect(made.length === 1 ? `/admin/purchasing/${made[0].id}?msg=${encodeURIComponent(msg)}` : `/admin/purchasing?order=${orderId}&msg=${encodeURIComponent(msg)}`);
 });
 
+// duplicate-submit guard: the form carries a one-time token; a second post with the same token goes to the PO the first one made
+const made = new Map();
+const rememberToken = (tok, id) => { made.set(tok, { id, at: Date.now() }); for (const [k, v] of made) if (Date.now() - v.at > 3600e3) made.delete(k); };
+const num = v => { const s = String(v ?? '').trim().replace(',', '.'); return s === '' ? null : Number(s); };
+const realDay = v => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v + 'T00:00:00Z')) && new Date(v + 'T00:00:00Z').toISOString().slice(0, 10) === v;
+
 r.post('/new-manual', async (req, res) => {
-  const b = req.body, to = '/admin/purchasing/new';
-  if (!isId(b.supplier_id)) return back(res, to, { err: 'Choose the supplier.' });
-  const arr = Array.isArray(b.line) ? b.line : Object.values(b.line || {});
-  const lines = arr.filter(l => l && String(l.description || '').trim() && Number(l.quantity) > 0).map(l => ({ description: String(l.description).trim().slice(0, 500), sku: String(l.sku || '').trim().slice(0, 80),
-    quantity: Number(l.quantity), unit: String(l.unit || 'pcs').trim().slice(0, 20) || 'pcs', unit_price: Number(String(l.unit_price).replace(',', '.')) || 0, product_id: isId(l.product_id) ? l.product_id : null, order_item_id: null }));
-  if (!lines.length) return back(res, `${to}?supplier=${b.supplier_id}`, { err: 'Add at least one product with a quantity.' });
-  const { data: sup } = await admin.from('suppliers').select('id, email, payment_terms').eq('id', b.supplier_id).maybeSingle();
-  if (!sup) return back(res, to, { err: 'Supplier not found.' });
-  const orderId = isId(b.order_id) ? b.order_id : null;
+  const b = req.body, strict = b.act === 'create', tok = String(b.token || '');
+  if (tok && made.has(tok)) return res.redirect(`/admin/purchasing/${made.get(tok).id}`);
+  const s = (v, n) => String(v ?? '').trim().slice(0, n);
+  const raw = Array.isArray(b.line) ? b.line : Object.values(b.line || {});
+  const form = { supplier_id: s(b.supplier_id, 40), currency: s(b.currency, 5), required_date: s(b.required_date, 10), title: s(b.title, 200), order_id: s(b.order_id, 40), payment_terms: s(b.payment_terms, 300), ship_to: s(b.ship_to, 500), notes: s(b.notes, 2000), token: tok || randomUUID(),
+    lines: raw.filter(l => l && [l.description, l.product_id, l.quantity, l.unit_price].some(x => String(x ?? '').trim() !== '')).map(l => ({ product_id: isId(l.product_id) ? l.product_id : '', description: s(l.description, 500), sku: s(l.sku, 80), quantity: s(l.quantity, 20), unit: s(l.unit, 20) || 'pcs', unit_price: s(l.unit_price, 20) })) };
+  const errors = {}, lerr = {};
+  const bad = (i, f, m) => { (lerr[i] ||= {})[f] = m; };
+  if (!isId(form.supplier_id)) errors.supplier_id = 'Choose the supplier.';
+  if (!CURRENCIES.includes(form.currency)) errors.currency = 'Choose a valid currency.';
+  if (form.required_date && !realDay(form.required_date)) errors.required_date = 'Enter a valid date.';
+  if (form.order_id && !isId(form.order_id)) errors.order_id = 'Choose an order from the list.';
+  if (!form.lines.length) errors.lines = 'Add at least one product.';
+  const ids = [...new Set(form.lines.map(l => l.product_id).filter(Boolean))];
+  const { data: prods } = ids.length ? await admin.from('products').select('id, name, sku').in('id', ids) : { data: [] };
+  const known = new Map((prods || []).map(p => [p.id, p]));
+  form.lines.forEach((l, i) => {
+    const q = num(l.quantity), p = num(l.unit_price);
+    if (l.product_id && !known.has(l.product_id)) bad(i, 'product', 'This product no longer exists — choose it again.');
+    if (strict && !l.product_id) bad(i, 'product', 'Choose a catalogue product (or save as a draft).');
+    if (!l.description) bad(i, 'description', 'Enter a name.');
+    if (q != null && (!Number.isFinite(q) || q < 0)) bad(i, 'quantity', 'Quantity must be a number ≥ 0.');
+    else if (strict && !(q > 0)) bad(i, 'quantity', 'Enter a quantity.');
+    if (p != null && (!Number.isFinite(p) || p < 0)) bad(i, 'unit_price', 'Price must be a number ≥ 0.');
+    else if (strict && p == null) bad(i, 'unit_price', 'Enter the unit price.');
+  });
+  if (Object.keys(lerr).length) errors.line = lerr;
+  const fail = async (status, general) => {
+    const ctx = await manualCtx();
+    res.status(status).render('admin/purchasing/new_manual', { title: 'New purchase order', ...ctx, currencies: CURRENCIES, error: general || null, errors, form });
+  };
+  if (Object.keys(errors).length) return fail(400, 'Please fix the highlighted fields.');
+  const [{ data: sup }, orderRes] = await Promise.all([
+    admin.from('suppliers').select('id, email, payment_terms').eq('id', form.supplier_id).maybeSingle(),
+    form.order_id ? admin.from('orders').select('id').eq('id', form.order_id).maybeSingle() : { data: null },
+  ]);
+  if (!sup) { errors.supplier_id = 'Supplier not found.'; return fail(400, 'Please fix the highlighted fields.'); }
+  if (form.order_id && !orderRes.data) { errors.order_id = 'Order not found.'; return fail(400, 'Please fix the highlighted fields.'); }
+  const lines = form.lines.map(l => ({ description: l.description, sku: l.sku || known.get(l.product_id)?.sku || '', quantity: num(l.quantity) || 0, unit: l.unit, unit_price: num(l.unit_price) || 0, product_id: l.product_id || null, order_item_id: null }));
+  const orderId = form.order_id || null;
   let po = null, lastErr = null;
   for (let n = 0; n < 5 && !po; n++) {
-    const { data, error } = await admin.from('supplier_pos').insert({ order_id: orderId, supplier_id: sup.id, title: String(b.title || '').trim().slice(0, 200) || null, currency: CURRENCIES.includes(b.currency) ? b.currency : 'CNY',
-      lines, total: totalOf(lines), required_date: /^\d{4}-\d{2}-\d{2}$/.test(b.required_date || '') ? b.required_date : null, payment_terms: sup.payment_terms || null, sent_to: sup.email || null, created_by: req.user.id }).select('id, ref').single();
+    const { data, error } = await admin.from('supplier_pos').insert({ order_id: orderId, supplier_id: sup.id, title: form.title || null, currency: form.currency,
+      lines, total: totalOf(lines), required_date: form.required_date || null, payment_terms: form.payment_terms || sup.payment_terms || null, ship_to: form.ship_to || null, notes: form.notes || null,
+      sent_to: sup.email || null, created_by: req.user.id }).select('id, ref').single();
     if (!error) po = data; else lastErr = error;
   }
-  if (!po) return back(res, `${to}?supplier=${sup.id}`, { err: /order_id/.test(lastErr?.message || '') && /null/.test(lastErr?.message || '') ? 'Run supabase/migrations/0022_purchasing_standalone.sql first.' : missingTable(lastErr) ? MIGRATION : lastErr?.message || 'Could not create the PO.' });
+  if (!po) return fail(500, /order_id/.test(lastErr?.message || '') && /null/.test(lastErr?.message || '') ? 'Run supabase/migrations/0022_purchasing_standalone.sql first.' : missingTable(lastErr) ? MIGRATION : lastErr?.message || 'Could not create the PO.');
+  rememberToken(form.token, po.id);
   await log({ entityType: orderId ? 'order' : 'supplier', entityId: orderId || sup.id, action: 'supplier_pos_created', actorId: req.user.id, detail: { note: po.ref } });
-  res.redirect(`/admin/purchasing/${po.id}?msg=${encodeURIComponent(`${po.ref} created${orderId ? '' : ' — not linked to an order yet'}. Check it, then send.`)}`);
+  const incomplete = lines.some(l => !l.product_id || !(l.quantity > 0) || l.unit_price == null);
+  res.redirect(`/admin/purchasing/${po.id}?msg=${encodeURIComponent(`${po.ref} saved as a draft${orderId ? '' : ' — not linked to an order yet'}${incomplete && !strict ? ' — some lines are still incomplete' : ''}. Nothing has been sent; review it, then send it to the supplier.`)}`);
 });
 
 // link a PO to an order (the order confirmed later) — or take the link off again

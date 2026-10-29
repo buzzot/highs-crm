@@ -193,10 +193,10 @@ r.post('/quick', async (req, res) => {
   const name = String(req.body.name || '').trim();
   if (!name) return res.status(400).json({ error: 'Enter a product name.' });
   const num = v => (String(v ?? '').trim() !== '' && Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : null);
-  const row = { name: name.slice(0, 200), sku: String(req.body.sku || '').trim().slice(0, 80) || null, supplier_id: req.body.supplier_id || null,
+  const row = { name: name.slice(0, 200), sku: String(req.body.sku || '').trim().slice(0, 80) || null, supplier_id: req.body.supplier_id || null, supplier_sku: String(req.body.supplier_sku || '').trim().slice(0, 80) || null, description: String(req.body.description || '').trim().slice(0, 1000) || null,
     unit_cost: num(req.body.unit_cost), cost_currency: ['CNY', 'USD', 'EUR'].includes(req.body.cost_currency) ? req.body.cost_currency : 'CNY', moq: num(req.body.moq), hs_code: String(req.body.hs_code || '').trim().slice(0, 40) || null };
   const { data, error } = await admin.from('products').insert(row)
-    .select('id, name, sku, supplier_id, unit_cost, cost_currency, moq, hs_code, unit_weight_kg, carton_qty, carton_cbm').single();
+    .select('id, name, sku, supplier_sku, description, supplier_id, unit_cost, cost_currency, moq, hs_code, unit_weight_kg, carton_qty, carton_cbm').single();
   if (error) return res.status(400).json({ error: error.message });
   res.json(data);
 });
