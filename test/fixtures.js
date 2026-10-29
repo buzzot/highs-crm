@@ -346,3 +346,31 @@ export const pages = {
   'auth/account': base({ ...clientUser, job_title: 'Buyer', phone: '+1 555 0100' }, '/account', { title: 'My account', saved: false }),
   error: base(staffUser, '/x', { title: 'Not found', message: 'Page not found.' }),
 };
+
+// ---- client detail variants: normal (+owner box), sparse (nothing filled in), many records with long English / Cyrillic / Chinese names ----
+{
+  const ownerBox = { table: 'organizations', id: 'o1', ownerId: 'u1', ownerName: 'Anna Lee', createdByName: 'Marsel', staff: [{ id: 'u1', full_name: 'Anna Lee' }, { id: 'u2', full_name: 'Marsel' }], redirect: '/admin/clients/o1' };
+  const n = pages['admin/clients/detail'];
+  const staffChoices = [{ id: 'u1', name: 'Anna Lee' }, { id: 'u2', name: 'Marsel' }];
+  const followups = [
+    { id: 'f1', org_id: 'o1', activity_id: 13, title: 'Send price list', due_date: day(-1), original_due: day(-4), rescheduled_count: 1, owner_id: 'u2', owner_name: 'Marsel', status: 'open' },
+    { id: 'f2', org_id: 'o1', activity_id: 9, title: 'Discussed Q1 reorder of lamps.', due_date: day(5), original_due: day(5), rescheduled_count: 0, owner_id: 'u1', owner_name: 'Anna Lee', status: 'open' },
+    { id: 'f3', org_id: 'o1', activity_id: null, title: 'Confirm sample feedback', due_date: day(-6), original_due: day(-6), rescheduled_count: 0, owner_id: 'u1', owner_name: 'Anna Lee', status: 'done', completed_at: d(-5) }];
+  const fuExtra = { followups, followReady: true, staffChoices, canEdit: true, canAssignOwner: true, meId: 'u1', members: n.members.map(m => (m.email === 'tom@acme.example' ? { ...m, last_login_at: d(-1) } : m)) };
+  pages['admin/clients/detail'] = { ...n, ...fuExtra, ownerBox, canAssign: true, kpi: { ...n.kpi, lastActivity: d(-1) }, events: [...n.events, { id: 11, action: 'company_details_completed', detail: { note: 'Acme' }, created_at: d(-30), profiles: { full_name: 'Tom Baker' } }, { id: 12, action: 'company_details_completed', detail: { note: 'Acme' }, created_at: d(-30), profiles: { full_name: 'Tom Baker' } }, { id: 13, action: 'crm_meeting', detail: { note: 'Visited the showroom.', date: day(-9), next_action: 'Send price list', follow_up: day(-1) }, created_at: d(-9), profiles: { full_name: 'Marsel' } }] };
+  pages['admin/clients/detail#sparse'] = ['admin/clients/detail', { ...n, ...fuExtra, followups: [], members: [], ownerBox: { ...ownerBox, ownerId: null, ownerName: null }, canAssign: true, org: { id: 'o1', name: 'Raylux', active: false, default_currency: 'CNY', created_at: d(-5), country: null, details_completed_at: null }, kpi: { openRequests: 0, activeOrders: 0, sales: 0, profit: 0, lastLogin: null, lastActivity: null }, members: [], requests: [], orders: [], events: [], aiUse: { ready: true, current: { calls: 0, input: 0, output: 0, total: 0 }, all: { calls: 0, input: 0, output: 0, total: 0 }, months: [] } }];
+  const full = pages['admin/clients/detail'];
+  pages['admin/clients/detail#nofu'] = ['admin/clients/detail', { ...full, followups: [], followReady: false }];
+  pages['admin/clients/detail#manager'] = ['admin/clients/detail', { ...full, canAssign: false, canAssignOwner: false, meId: 'u9', staffChoices: [{ id: 'u9', name: 'Pat Manager' }], ownerBox: { ...ownerBox, ownerId: 'u9', ownerName: 'Pat Manager' } }];
+  pages['admin/clients/detail#editerr'] = ['admin/clients/detail', { ...full, openDlg: 'editdlg', tab: 'overview', edit: { vals: { name: '', registration_no: '', tax_id: 'US-88', address: '1 Long Street', city: 'LA', postal_code: '', country: 'USA', delivery_address: '', phone: 'abc', email: 'not-an-email', website: 'a b', notes: 'Keep me', language: 'en', default_currency: 'USD', active: true }, errors: { name: 'Company name is required.', phone: 'Enter a valid phone number, e.g. +1 415 555 0100.', email: 'Enter a valid email address, e.g. buyer@company.com.', website: 'Enter a web address like www.company.com.' } } }];
+  pages['admin/clients/detail#acterr'] = ['admin/clients/detail', { ...full, openDlg: 'actdlg', tab: 'activity', act: { vals: { date: day(0), type: 'call', summary: '', next_action: 'Send quote', follow_up: day(-2), owner_id: 'u2' }, errors: { summary: 'Write a short summary of the activity.', follow_up: 'The follow-up cannot be before the activity date.' } } }];
+  const longName = { ru: 'Общество с ограниченной ответственностью «Научно-производственное объединение Казанский приборостроительный завод имени Ленина»', zh: '北京创新科技有限公司国际贸易与电子产品制造事业部（深圳）', en: 'Shenzhen Brightway Lighting & Electronic Technology Manufacturing Co., Ltd. International Division' };
+  for (const [key, name] of Object.entries(longName)) {
+    pages['admin/clients/detail#many_' + key] = ['admin/clients/detail', { ...n, ...fuExtra, ownerBox, canAssign: true, title: name, org: { ...n.org, name, address: name + '\nBuilding 5, Floor 12', city: 'Kazan', country: 'Russia', website: 'www.example.ru', notes: 'Prefers WeChat. Always ask for FOB prices.\nPays by wire.' },
+      kpi: { ...n.kpi, openRequests: 12, activeOrders: 20, lastActivity: d(-1) },
+      requests: Array.from({ length: 40 }, (_, i) => ({ ...n.requests[0], id: 'rq' + i, ref: 'REQ-2610-' + String(i).padStart(4, '0'), title: i % 3 ? name.slice(0, 60) + ' — LED lamps ' + i : 'Stainless tumbler 500ml', status: ['new', 'reviewing', 'quoted', 'accepted'][i % 4], created_at: d(-i), quotes: i % 2 ? [{ id: 'qq' + i, status: 'sent' }, { id: 'qr' + i, status: 'draft' }] : [] })),
+      orders: Array.from({ length: 40 }, (_, i) => ({ ...n.orders[0], id: 'od' + i, order_no: 'HB-2610-' + String(1000 + i), supplier_name: i % 2 ? name : 'Brightway', status: ['confirmed', 'in_production', 'shipped', 'delivered'][i % 4], created_at: d(-i) })),
+      members: [...n.members, ...Array.from({ length: 3 }, (_, i) => ({ id: 'ux' + i, email: 'buyer' + i + '@client.example', full_name: name.slice(0, 30), active: true, state: 'accepted', accepted_at: d(-40), last_login_at: d(-i) }))],
+      events: Array.from({ length: 30 }, (_, i) => i % 4 === 0 ? { id: 100 + i, action: 'crm_call', detail: { note: 'Call ' + i + ': ' + name, date: day(-i), follow_up: i < 8 ? day(i + 1) : null, next_action: 'Send quote' }, created_at: d(-i), profiles: { full_name: 'Anna Lee' } } : { id: 100 + i, action: 'company_details_updated', detail: { note: name }, created_at: d(-i), profiles: { full_name: 'Tom Baker' } }) }];
+  }
+}

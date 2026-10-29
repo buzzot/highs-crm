@@ -1,7 +1,7 @@
 <%# Owner of a record (clients, requests, quotes, RFQs, orders, shipments). Rendered only when the access-levels migration (0036) is in place. %>
 <% if (typeof ownerBox !== 'undefined' && ownerBox) { const ob = ownerBox; %>
-<div class="ownerbox">
-  <span class="muted">Owner:</span>
+<div class="ownerbox<%= typeof inline !== 'undefined' && inline ? ' inline' : '' %>">
+  <span class="muted"><%= typeof inline !== 'undefined' && inline ? 'Account owner' : 'Owner:' %></span>
   <% if (canAssign) { %>
   <form method="post" action="/admin/owner" class="inline ownerform">
     <input type="hidden" name="table" value="<%= ob.table %>"><input type="hidden" name="id" value="<%= ob.id %>"><input type="hidden" name="redirect" value="<%= ob.redirect %>">

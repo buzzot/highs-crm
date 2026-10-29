@@ -1,7 +1,8 @@
 // Shared bits for the supplier and client pages: activity types and last sign-in lookup.
 import { admin } from './supabase.js';
 
-export const ACTIVITY_TYPES = { call: 'Call', wechat: 'WeChat', email: 'Email', meeting: 'Meeting', visit: 'Visit', sample: 'Sample', note: 'Note' };
+import { ACTIVITY_TYPES } from './crm-forms.js';
+export { ACTIVITY_TYPES, validateActivity, validateCompany } from './crm-forms.js';
 
 /** Validated activity form → { type, summary, date, follow } or { error }. */
 export function readActivity(body) {
@@ -9,7 +10,8 @@ export function readActivity(body) {
   const summary = String(body.summary || '').trim().slice(0, 2000);
   const iso = v => (/^\d{4}-\d{2}-\d{2}$/.test(v || '') ? v : null);
   if (!summary) return { error: 'Write a short summary of the activity.' };
-  return { type, summary, date: iso(body.date) || new Date().toISOString().slice(0, 10), follow: iso(body.follow_up) };
+  const next = String(body.next_action || '').trim().slice(0, 300);
+  return { type, summary, date: iso(body.date) || new Date().toISOString().slice(0, 10), follow: iso(body.follow_up), next: next || null };
 }
 
 /** Fill last_login_at from Supabase's own record for people who signed in before we recorded it. */

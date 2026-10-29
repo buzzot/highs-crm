@@ -1,121 +1,403 @@
 <%- include('../../partials/head') %>
 <%
-  const k = typeof kpi !== 'undefined' ? kpi : { openRequests: 0, activeOrders: 0, sales: 0, profit: 0, lastLogin: null };
+  const k = typeof kpi !== 'undefined' ? kpi : { openRequests: 0, activeOrders: 0, sales: 0, profit: 0, lastLogin: null, lastActivity: null };
   const evs = typeof events !== 'undefined' ? events : [];
   const types = typeof activityTypes !== 'undefined' ? activityTypes : {};
+  const fus = typeof followups !== 'undefined' ? followups : [], fuReady = typeof followReady !== 'undefined' ? followReady : false;
+  const staffOpts = typeof staffChoices !== 'undefined' ? staffChoices : [];
+  const mayEdit = typeof canEdit !== 'undefined' ? canEdit : true, mayAssign = typeof canAssignOwner !== 'undefined' ? canAssignOwner : false, me = typeof meId !== 'undefined' ? meId : null;
+  const E = typeof edit !== 'undefined' ? edit : null, A = typeof act !== 'undefined' ? act : null, OPEN = typeof openDlg !== 'undefined' ? openDlg : null, TAB = typeof tab !== 'undefined' ? tab : null;
+  const evCap = typeof eventLimit !== 'undefined' ? eventLimit : 200;
   const today = new Date().toISOString().slice(0, 10);
-  const v = f => org[f] ?? '';
+  const v = f => (E ? E.vals[f] : org[f]) ?? '';
+  const ee = f => (E && E.errors && E.errors[f]) || '';
   const cur = org.default_currency || 'USD';
   const active = org.active !== false;
+  const place = [org.city, org.country].filter(Boolean).join(', ');
+  const langName = org.language === 'ru' ? 'Русский' : 'English';
+  const REQ_SHOW = 15, ORD_SHOW = 15;
+  // ---- scopes used for every count on this page ----
+  //  requests / orders      = all records of this client (cancelled and closed included)
+  //  open requests          = new, reviewing or quoted      active orders = not delivered, closed or cancelled
+  //  portal users           = people with a login: active / pending invitation / expired invitation / disabled
+  const mst = m => m.state === 'accepted' ? (m.active === false ? 'disabled' : 'active') : m.state;
+  const uc = { active: 0, pending: 0, expired: 0, disabled: 0 }; members.forEach(m => { const x = mst(m); if (x in uc) uc[x]++; });
+  const lastSeenRow = members.filter(m => m.last_login_at).sort((a, b) => String(b.last_login_at).localeCompare(String(a.last_login_at)))[0] || null;   // the one source for "last sign-in" everywhere
+  const liveOrders = orders.filter(o => o.status !== 'cancelled');
+  const valueBy = {}; liveOrders.forEach(o => { if (Number(o.subtotal) > 0) valueBy[o.currency] = (valueBy[o.currency] || 0) + Number(o.subtotal); });
+  // ---- timeline: team activities stand out; system events are muted. Identical system events in a row (same person, same text, within 2 minutes) are shown once as "×N" — every underlying event stays listed under it ----
+  const SYS = { supplier_invited: 'Supplier added by invitation', invite_accepted: 'Invitation accepted', details_completed: 'Company details completed', company_details_completed: 'Company details completed by the client', company_details_updated: 'Company details updated by the client',
+    details_updated: 'Company details updated', portal_blocked: 'Portal access disabled', portal_restored: 'Portal access restored', crm_status: 'Status changed', changes_submitted: 'Client changed a request', created: 'Client created', ai_enabled: 'AI access switched on', ai_disabled: 'AI access switched off',
+    followup_done: 'Follow-up completed', followup_reopened: 'Follow-up reopened', followup_rescheduled: 'Follow-up rescheduled', invite_sent: 'Invitation sent', invite_resent: 'New invitation sent', invite_cancelled: 'Invitation cancelled' };
+  const label = e => e.action.startsWith('crm_') ? (types[e.action.slice(4)] || 'Note') : (SYS[e.action] || fmt.status(e.action));
+  const fuByAct = {}; fus.forEach(f => { if (f.activity_id != null) fuByAct[f.activity_id] = f; });
+  const tl = [];
+  evs.forEach(e => {
+    const crm = e.action.startsWith('crm_'), who = e.profiles?.full_name || e.profiles?.email || (crm ? '' : 'System'), prev = tl[tl.length - 1];
+    const note = e.detail?.from && e.detail?.to ? (e.detail.note || '') + ' · ' + fmt.date(e.detail.from) + ' → ' + fmt.date(e.detail.to) : e.detail?.note;
+    if (!crm && prev && !prev.crm && prev.text === label(e) && prev.who === who && prev.note === note && Math.abs(new Date(prev.at) - new Date(e.created_at)) < 120000) { prev.n++; prev.times.push(e.created_at); return; }
+    tl.push({ id: e.id, crm, text: label(e), who, at: e.created_at, times: [e.created_at], date: e.detail?.date, note, next: e.detail?.next_action, follow: e.detail?.follow_up, fu: fuByAct[e.id] || null, n: 1 });
+  });
+  const nCrm = tl.filter(x => x.crm).length;
+  const daysLate = d => Math.max(0, Math.round((Date.parse(today) - Date.parse(d)) / 864e5));
+  const openFu = fus.filter(f => f.status === 'open').sort((a, b) => String(a.due_date).localeCompare(String(b.due_date)));
+  const doneFu = fus.filter(f => f.status === 'done').sort((a, b) => String(b.completed_at).localeCompare(String(a.completed_at))).slice(0, 5);
+  const lateFu = openFu.filter(f => f.due_date < today).length;
+  const legacyFu = fuReady ? [] : tl.filter(x => x.crm && x.follow).sort((a, b) => String(a.follow).localeCompare(String(b.follow))).slice(0, 5);
+  const mayAct = f => mayAssign || (me && f.owner_id === me);
+  const asDate = d => d ? fmt.date(d) : '—';
 %>
-<div class="pagehead">
-  <div>
+<header class="cd-head">
+  <div class="cd-id">
     <a class="back" href="/admin/clients">← Clients</a>
-    <h1><%= org.name %></h1>
-    <p class="muted suphead">
-      <span class="pill <%= active ? 'crm-active' : 'crm-blocked' %>"><%= active ? 'Active client' : 'Inactive' %></span>
-      <%= [org.city, org.country].filter(Boolean).join(', ') || 'location not set' %>
-      · <%= cur %>
-      · client since <%= fmt.date(org.created_at) %>
-      · <% if (org.details_completed_at) { %><span class="oktext">✓ details completed <%= fmt.date(org.details_completed_at) %></span><% } else { %><span class="warntext">details pending — asked on first sign-in</span><% } %>
-    </p>
+    <h1 title="<%= org.name %>"><%= org.name %> <span class="pill <%= active ? 'crm-active' : 'crm-blocked' %>"><%= active ? 'Active' : 'Inactive' %></span></h1>
+    <div class="cd-meta"><%= place || 'Location not set' %><span class="sep">·</span><span title="Default currency for quotes and orders"><%= cur %></span></div>
+    <div class="cd-owner"><%- include('../../partials/owner_box', { inline: true }) %></div>
   </div>
-  <div class="actions">
-    <a class="btn primary" href="/admin/orders/new?org_id=<%= org.id %>">+ Order</a>
+  <div class="cd-actions">
+    <% if (mayEdit) { %><button type="button" class="btn" data-open="editdlg">Edit details</button><% } %>
+    <a class="btn" href="/admin/sourcing/new?org=<%= org.id %>">+ New request</a>
+    <a class="btn primary" href="/admin/orders/new?org_id=<%= org.id %>">+ New order</a>
   </div>
-</div>
-<%- include('../../partials/owner_box') %>
+</header>
 
-<div class="kpis kpis4">
-  <div class="kpi"><span class="n"><%= k.openRequests %></span><span class="l">Open requests</span></div>
-  <div class="kpi"><span class="n"><%= k.activeOrders %></span><span class="l">Orders in progress</span></div>
-  <div class="kpi"><span class="n"><%= fmt.money(k.sales, cur, 0) %></span><span class="l">Sales · <%= fmt.money(k.profit, cur, 0) %> gross profit</span></div>
-  <div class="kpi"><span class="n"><%= k.lastLogin ? fmt.date(k.lastLogin) : '—' %></span><span class="l">Last portal sign-in</span></div>
+<div class="cd-stats" aria-label="Client summary">
+  <a href="/admin/sourcing?client=<%= org.id %>&status=open" title="Requests that are new, in review or quoted"><b><%= k.openRequests %></b> open request<%= k.openRequests === 1 ? '' : 's' %></a>
+  <a href="/admin/orders?client=<%= org.id %>" title="Orders not yet delivered, closed or cancelled"><b><%= k.activeOrders %></b> active order<%= k.activeOrders === 1 ? '' : 's' %></a>
+  <a href="#activity" title="Latest request or order change, or call, meeting or note logged by the team"><span class="muted">Last activity</span> <b><%= k.lastActivity ? fmt.date(k.lastActivity) : '—' %></b></a>
+  <a href="#portal" title="People with portal access: active users, pending and expired invitations"><b><%= uc.active %></b> active portal user<%= uc.active === 1 ? '' : 's' %><%= uc.pending ? ' · ' + uc.pending + ' pending' : '' %><%= uc.expired ? ' · ' + uc.expired + ' expired' : '' %></a>
 </div>
 
-<%- include('../../partials/ai_access', { ai: org, use: aiUse, prices: aiPrices, action: '/admin/clients/' + org.id + '/ai', who: 'this client' }) %>
-
-<div class="card">
-  <h2>Portal users <span class="count"><%= members.filter(x => x.state === 'accepted' && x.active !== false).length %> active<%= members.some(x => x.state === 'pending') ? ' · ' + members.filter(x => x.state === 'pending').length + ' invited' : '' %></span></h2>
-  <%- include('../../partials/users_table', { members, base: '/admin/clients/' + org.id, emptyText: 'Nobody from this client has portal access yet. Invite them — they confirm their email, fill in the company details and create a password.', firstPlaceholder: 'buyer@client.com', firstValue: org.email || '', otherPlaceholder: 'colleague@client.com' }) %>
+<div class="cd-tabs" role="tablist" aria-label="Client sections">
+  <button type="button" role="tab" id="t-overview" aria-controls="tab-overview" data-tab="overview">Overview</button>
+  <button type="button" role="tab" id="t-requests" aria-controls="tab-requests" data-tab="requests" title="All requests and orders of this client, closed and cancelled included">Requests &amp; orders <span class="cnt"><%= requests.length + orders.length %></span></button>
+  <button type="button" role="tab" id="t-activity" aria-controls="tab-activity" data-tab="activity" title="Calls, meetings and notes logged by the team<%= lateFu ? ' · ' + lateFu + ' overdue follow-up' + (lateFu === 1 ? '' : 's') : '' %>">Activity <span class="cnt"><%= nCrm %><%= evs.length >= evCap ? '+' : '' %></span><% if (lateFu) { %><span class="dotbad" aria-label="<%= lateFu %> overdue follow-up<%= lateFu === 1 ? '' : 's' %>"></span><% } %></button>
+  <button type="button" role="tab" id="t-portal" aria-controls="tab-portal" data-tab="portal" title="Active portal users">Portal &amp; access<% if (uc.active) { %> <span class="cnt"><%= uc.active %></span><% } %></button>
 </div>
 
-<div class="grid2 even">
-  <div class="card">
-    <h2>Company details</h2>
-    <form method="post" action="/admin/clients/<%= org.id %>/details" class="detailsform">
-      <label>Registered company name <input name="name" required value="<%= v('name') %>"></label>
-      <div class="row">
-        <label>Registration no. <input name="registration_no" value="<%= v('registration_no') %>"></label>
-        <label>Tax / VAT ID <input name="tax_id" value="<%= v('tax_id') %>"></label>
+<%# ---------- Overview ---------- %>
+<section class="cd-panel" id="tab-overview" role="tabpanel" aria-labelledby="t-overview" hidden>
+  <div class="cd-grid cd-grid-ov">
+    <div class="cd-card cd-info">
+      <h2>Client information<% if (mayEdit) { %> <button type="button" class="cd-edit" data-open="editdlg">Edit details</button><% } %></h2>
+      <div class="cd-cols">
+        <div>
+          <h3 class="first">Company identity</h3>
+          <dl class="cd-dl">
+            <div><dt>Registered name</dt><dd><%= org.name %></dd></div>
+            <div><dt>Registration no.</dt><dd class="<%= org.registration_no ? '' : 'na' %>"><%= org.registration_no || '—' %></dd></div>
+            <div><dt>Tax / VAT ID</dt><dd class="<%= org.tax_id ? '' : 'na' %>"><%= org.tax_id || '—' %></dd></div>
+            <div><dt>Website</dt><dd class="<%= org.website ? '' : 'na' %>"><% if (org.website) { %><a href="<%= /^https?:\/\//i.test(org.website) ? org.website : 'https://' + org.website %>" target="_blank" rel="noopener noreferrer"><%= org.website %></a><% } else { %>—<% } %></dd></div>
+          </dl>
+          <h3>Contact</h3>
+          <dl class="cd-dl">
+            <div><dt>Phone</dt><dd><% if (org.phone) { %><a href="tel:<%= String(org.phone).replace(/[^0-9+]/g, '') %>"><%= org.phone %></a><% } else if (mayEdit) { %><button type="button" class="cd-add" data-open="editdlg" data-focus="phone">+ Add phone</button><% } else { %><span class="na">—</span><% } %></dd></div>
+            <div><dt>Email</dt><dd><% if (org.email) { %><a href="mailto:<%= org.email %>"><%= org.email %></a><% } else if (mayEdit) { %><button type="button" class="cd-add" data-open="editdlg" data-focus="email">+ Add email</button><% } else { %><span class="na">—</span><% } %></dd></div>
+          </dl>
+        </div>
+        <div>
+          <h3 class="first">Addresses</h3>
+          <dl class="cd-dl">
+            <div><dt>Registered</dt><dd class="pre <%= (org.address || place || org.postal_code) ? '' : 'na' %>"><%= [org.address, [org.postal_code, org.city].filter(Boolean).join(' '), org.country].filter(Boolean).join('\n') || '—' %></dd></div>
+            <div><dt>Delivery</dt><dd class="pre <%= org.delivery_address ? '' : 'na' %>"><%= org.delivery_address || 'Same as registered address' %></dd></div>
+          </dl>
+          <h3>Preferences</h3>
+          <dl class="cd-dl">
+            <div><dt>Currency</dt><dd><%= cur %> <span class="muted small">quotes and orders</span></dd></div>
+            <div><dt>Language</dt><dd><%= langName %> <span class="muted small">portal and emails</span></dd></div>
+          </dl>
+        </div>
       </div>
-      <label>Address <textarea name="address" rows="2"><%= v('address') %></textarea></label>
-      <div class="row">
-        <label>City <input name="city" value="<%= v('city') %>"></label>
-        <label>Postal code <input name="postal_code" value="<%= v('postal_code') %>"></label>
-        <label>Country <input name="country" value="<%= v('country') %>"></label>
-      </div>
-      <label>Delivery address <span class="muted small">— if different (warehouse, forwarder)</span><textarea name="delivery_address" rows="2"><%= v('delivery_address') %></textarea></label>
-      <div class="row">
-        <label>Phone <input name="phone" value="<%= v('phone') %>"></label>
-        <label>Email <input type="email" name="email" value="<%= v('email') %>"></label>
-      </div>
-      <div class="row">
-        <label>Website <input name="website" value="<%= v('website') %>"></label>
-        <label>Language <select name="language"><option value="en" <%= org.language !== 'ru' ? 'selected' : '' %>>English</option><option value="ru" <%= org.language === 'ru' ? 'selected' : '' %>>Русский</option></select> <span class="muted small">portal &amp; emails; invitations use it</span></label>
-        <label>Currency <select name="default_currency"><% ['USD','EUR','GBP','CNY'].forEach(c => { %><option <%= cur === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
-      </div>
-      <label>Notes <span class="muted small">— internal, never shown to the client</span><textarea name="notes" rows="3"><%= v('notes') %></textarea></label>
-      <label class="check"><input type="checkbox" name="active" <%= active ? 'checked' : '' %>> Active client</label>
-      <div class="actions"><button class="btn primary">Save</button></div>
-    </form>
-  </div>
-
-  <div class="stack">
-    <div class="card" id="activity">
-      <h2>Activity</h2>
-      <%- include('../../partials/crm_activity', { events: evs, action: '/admin/clients/' + org.id + '/activity', types, today }) %>
+      <h3>Internal notes</h3>
+      <% if (org.notes) { %><p class="pre cd-notes"><%= org.notes %></p><% } else { %><p class="muted small">No notes. Notes are internal and never shown to the client.</p><% } %>
     </div>
-    <div class="card">
-      <h2>Requests <span class="count"><%= requests.length %></span><span class="hactions"><a class="btn small" href="/admin/sourcing/new?org=<%= org.id %>">+ Request</a><% if (requests.length) { %><a class="btn small" href="/admin/sourcing?client=<%= org.id %>&status=all">Open in Sourcing</a><% } %></span></h2>
-      <% if (!requests.length) { %><p class="muted">No requests yet — the client sends them from the portal.</p><% } else { %>
-      <table class="tbl reqtbl">
-        <thead><tr><th>Request</th><th class="right">Items</th><th class="right">Quotes</th><th>Status</th></tr></thead>
-        <tbody>
-        <% requests.forEach(q => { const n = q.request_items?.[0]?.count; const sent = (q.quotes || []).filter(x => x.status === 'sent').length; %>
-          <tr>
-            <td><a href="/admin/sourcing/<%= q.id %>"><%= q.title %></a><div class="muted small"><%= q.ref %> · <%= fmt.date(q.created_at) %><%= q.needed_by ? ' · needed ' + fmt.date(q.needed_by) : '' %></div></td>
-            <td class="right"><%= n || 1 %></td>
-            <td class="right"><%= (q.quotes || []).length %><% if (sent) { %> <span class="muted small">(<%= sent %> sent)</span><% } %></td>
-            <td><span class="pill <%= q.status %>"><%= fmt.status(q.status) %></span></td>
-          </tr>
+
+    <div class="cd-card">
+      <h2>Relationship</h2>
+      <dl class="cd-dl">
+        <div><dt>Client since</dt><dd><%= fmt.date(org.created_at) %></dd></div>
+        <div><dt>Company details</dt><dd><% if (org.details_completed_at) { %><span class="oktext">✓ Completed <%= fmt.date(org.details_completed_at) %></span><% } else { %><span class="warntext">Pending — asked on first sign-in</span><% } %></dd></div>
+        <div><dt>Requests</dt><dd><a href="#requests"><%= requests.length %></a> · <%= k.openRequests %> open</dd></div>
+        <div><dt>Orders</dt><dd><a href="#requests"><%= orders.length %></a> · <%= k.activeOrders %> active</dd></div>
+        <% if (Object.keys(valueBy).length) { %><div><dt>Order value</dt><dd><%= Object.entries(valueBy).map(([c, n]) => fmt.money(n, c, 0)).join(' · ') %> <span class="muted small">excl. cancelled, not converted</span></dd></div><% } %>
+        <div><dt>Last sign-in</dt><dd><% if (lastSeenRow) { %><a href="#portal"><%= fmt.datetime(lastSeenRow.last_login_at) %></a><div class="muted small"><%= lastSeenRow.full_name || lastSeenRow.email %></div><% } else { %><%= uc.active ? 'Never signed in' : 'No portal users yet' %><% } %></dd></div>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<%# ---------- Requests & orders ---------- %>
+<section class="cd-panel" id="tab-requests" role="tabpanel" aria-labelledby="t-requests" hidden>
+  <div class="cd-card">
+    <h2>Requests &amp; quotations <span class="cnt"><%= requests.length %></span><% if (requests.length) { %><a class="more" href="/admin/sourcing?client=<%= org.id %>&status=all">Open in Sourcing<%= requests.length > REQ_SHOW ? ' (' + requests.length + ')' : '' %></a><% } %></h2>
+    <% if (!requests.length) { %><p class="muted">No requests yet — the client sends them from the portal, or use “New request” above.</p><% } else { %>
+    <div class="tblwrap"><table class="cd-tbl">
+      <thead><tr><th>Request</th><th class="c-items r">Items</th><th>Quotations</th><th>Status</th><th class="c-date">Created</th></tr></thead>
+      <tbody>
+      <% requests.slice(0, REQ_SHOW).forEach(q => { const n = q.request_items?.[0]?.count; %>
+        <tr>
+          <td class="c-main"><a href="/admin/sourcing/<%= q.id %>" title="<%= q.title %>"><strong><%= q.title %></strong></a><div class="muted small"><%= q.ref %><%= q.needed_by ? ' · needed ' + fmt.date(q.needed_by) : '' %></div></td>
+          <td class="c-items r"><%= n || 1 %></td>
+          <td><% if (!(q.quotes || []).length) { %><span class="muted">—</span><% } %><% (q.quotes || []).forEach((x, i) => { %><a class="qchip" href="/admin/pricing/quotes/<%= x.id %>" title="Open quotation"><%= 'Quote ' + (i + 1) %> <span class="pill <%= x.status %>"><%= fmt.status(x.status) %></span></a><% }) %></td>
+          <td><span class="pill <%= q.status %>"><%= fmt.status(q.status) %></span></td>
+          <td class="c-date muted"><%= fmt.date(q.created_at) %></td>
+        </tr>
+      <% }) %>
+      </tbody>
+    </table></div>
+    <% } %>
+  </div>
+
+  <div class="cd-card">
+    <h2>Orders <span class="cnt"><%= orders.length %></span><% if (orders.length) { %><a class="more" href="/admin/orders?client=<%= org.id %>&status=all">Open in Orders<%= orders.length > ORD_SHOW ? ' (' + orders.length + ')' : '' %></a><% } %></h2>
+    <% if (!orders.length) { %><p class="muted">No orders yet.</p><% } else { %>
+    <div class="tblwrap"><table class="cd-tbl">
+      <thead><tr><th>Order</th><th class="c-sup">Supplier</th><th>Status</th><th class="r">Value</th><th class="r c-margin">Margin</th><th class="c-date">Ship date</th></tr></thead>
+      <tbody>
+      <% orders.slice(0, ORD_SHOW).forEach(o => { %>
+        <tr>
+          <td class="c-main"><a href="/admin/orders/<%= o.id %>"><strong><%= o.order_no %></strong></a><div class="muted small"><%= fmt.date(o.created_at) %></div></td>
+          <td class="c-sup clip" title="<%= o.supplier_name %>"><%= o.supplier_name || '—' %></td>
+          <td><span class="pill <%= o.status %>"><%= fmt.status(o.status) %></span></td>
+          <td class="r"><%= Number(o.subtotal) > 0 ? fmt.money(o.subtotal, o.currency) : '—' %></td>
+          <td class="r c-margin <%= o.margin_pct != null && o.margin_pct < 20 ? 'bad' : '' %>"><%= fmt.pct(o.margin_pct) %></td>
+          <td class="c-date muted"><%= o.expected_ship_date ? fmt.date(o.expected_ship_date) : '—' %></td>
+        </tr>
+      <% }) %>
+      </tbody>
+    </table></div>
+    <% } %>
+  </div>
+</section>
+
+<%# ---------- Activity ---------- %>
+<section class="cd-panel" id="tab-activity" role="tabpanel" aria-labelledby="t-activity" hidden>
+  <div class="cd-grid cd-grid-act">
+    <div class="cd-card cd-timeline">
+      <h2>Timeline <span class="cd-filter" role="group" aria-label="Show"><button type="button" class="on" data-show="all">All</button><button type="button" data-show="crm">Team</button><button type="button" data-show="sys">System</button></span><button type="button" class="btn small primary more" data-open="actdlg">+ Add activity</button></h2>
+      <% if (!tl.length) { %><p class="muted">No activity yet. Log a call, meeting or note to start the history.</p><% } %>
+      <ol class="cd-tl" id="cdtl">
+        <% tl.forEach(e => { %>
+          <li class="<%= e.crm ? 'crm' : 'sys' %>">
+            <div class="h"><strong><%= e.text %></strong><% if (e.n > 1) { %> <details class="grp"><summary title="Show every event">×<%= e.n %></summary><ul><% e.times.forEach(t => { %><li><%= fmt.datetime(t) %></li><% }) %></ul></details><% } %> <span class="muted small"><%= e.date ? fmt.date(e.date) : fmt.datetime(e.at) %><%= e.who ? ' · ' + e.who : '' %></span></div>
+            <% if (e.note && e.crm) { %><p class="pre"><%= e.note %></p><% } else if (e.note) { %><div class="muted small"><%= e.note %></div><% } %>
+            <% if (e.next) { %><div class="small"><span class="muted">Next:</span> <%= e.next %></div><% } %>
+            <% if (e.fu) { const f = e.fu; %>
+              <% if (f.status === 'done') { %><div class="small oktext">✓ Follow-up completed <%= fmt.date(f.completed_at) %></div>
+              <% } else if (f.due_date < today) { %><div class="small bad">↻ Follow-up overdue — was due <%= fmt.date(f.due_date) %><%= f.original_due && f.original_due !== f.due_date ? ' (first set for ' + fmt.date(f.original_due) + ')' : '' %></div>
+              <% } else { %><div class="small muted">↻ Follow-up due <%= fmt.date(f.due_date) %><%= f.original_due && f.original_due !== f.due_date ? ' (rescheduled from ' + fmt.date(f.original_due) + ')' : '' %></div><% } %>
+            <% } else if (e.follow) { %><div class="small <%= e.follow < today ? 'bad' : 'muted' %>">↻ Follow up <%= fmt.date(e.follow) %></div><% } %>
+          </li>
         <% }) %>
-        </tbody>
-      </table>
-      <% } %>
+      </ol>
+      <% if (evs.length >= evCap) { %><p class="muted small">Showing the latest <%= evCap %> events.</p><% } %>
     </div>
+    <aside class="cd-card cd-follow">
+      <h2>Next steps<% if (lateFu) { %> <span class="cnt late"><%= lateFu %> overdue</span><% } else if (openFu.length) { %> <span class="cnt"><%= openFu.length %> open</span><% } %></h2>
+      <% if (fuReady) { %>
+        <% if (!openFu.length) { %><p class="muted small">No open follow-ups. Add a follow-up date when logging an activity and it appears here.</p><% } %>
+        <ul>
+          <% openFu.forEach(f => { const late = f.due_date < today; %>
+          <li class="fu <%= late ? 'late' : '' %>">
+            <span class="d <%= late ? 'bad' : '' %>"><%= fmt.date(f.due_date) %><%= late ? ' · overdue ' + daysLate(f.due_date) + ' d' : (f.due_date === today ? ' · today' : '') %></span>
+            <span class="fu-title"><%= f.title %></span>
+            <span class="muted small"><%= f.owner_name ? 'Owner: ' + f.owner_name : 'No owner' %><%= f.rescheduled_count ? ' · moved ' + f.rescheduled_count + '×' : '' %></span>
+            <% if (mayAct(f)) { %><span class="fu-act">
+              <form method="post" action="/admin/clients/<%= org.id %>/followups/<%= f.id %>/complete" class="inline"><button class="btn small" title="Mark this follow-up done — the activity it came from is not changed">✓ Done</button></form>
+              <button type="button" class="link small" data-resched="<%= f.id %>" data-due="<%= f.due_date %>" data-owner="<%= f.owner_id || '' %>" data-title="<%= f.title %>">Reschedule</button>
+            </span><% } else { %><span class="muted small">Only <%= f.owner_name || 'the owner' %>, an Admin or a Director can change this.</span><% } %>
+          </li>
+          <% }) %>
+        </ul>
+        <% if (doneFu.length) { %>
+        <details class="fu-done"><summary>Completed (<%= doneFu.length %>)</summary>
+          <ul>
+            <% doneFu.forEach(f => { %><li><span class="fu-title"><%= f.title %></span><span class="muted small">Done <%= fmt.date(f.completed_at) %><%= f.owner_name ? ' · ' + f.owner_name : '' %></span>
+              <% if (mayAct(f)) { %><form method="post" action="/admin/clients/<%= org.id %>/followups/<%= f.id %>/reopen" class="inline"><button class="link small">Reopen</button></form><% } %></li><% }) %>
+          </ul>
+        </details>
+        <% } %>
+      <% } else { %>
+        <% if (!legacyFu.length) { %><p class="muted small">No follow-ups planned. Add a follow-up date when logging an activity.</p><% } else { %>
+        <ul><% legacyFu.forEach(f => { %><li class="fu"><span class="d <%= f.follow < today ? 'bad' : '' %>"><%= fmt.date(f.follow) %><%= f.follow < today ? ' · overdue' : '' %></span><span class="fu-title"><%= f.next || f.note %></span><span class="muted small"><%= f.text %><%= f.who ? ' · ' + f.who : '' %></span></li><% }) %></ul>
+        <% } %>
+        <p class="muted small cd-note">To complete or reschedule follow-ups, run <code>supabase/migrations/0038_client_followups.sql</code> in Supabase.</p>
+      <% } %>
+    </aside>
   </div>
-</div>
+</section>
 
-<div class="card">
-  <h2>Orders <span class="count"><%= orders.length %></span><span class="hactions"><% if (orders.length) { %><a class="btn small" href="/admin/orders?client=<%= org.id %>&status=all">Open in Orders</a><% } %><a class="btn small primary" href="/admin/orders/new?org_id=<%= org.id %>">+ Order</a></span></h2>
-  <% if (!orders.length) { %><p class="muted">No orders yet.</p><% } else { %>
-  <table class="tbl">
-    <thead><tr><th>Order</th><th>Supplier</th><th>Status</th><th class="right">Value</th><th class="right">Margin</th><th>Ship date</th><th>Created</th></tr></thead>
-    <tbody>
-    <% orders.forEach(o => { %>
-      <tr>
-        <td><a href="/admin/orders/<%= o.id %>"><strong><%= o.order_no %></strong></a></td>
-        <td><%= o.supplier_name || '—' %></td>
-        <td><span class="pill <%= o.status %>"><%= fmt.status(o.status) %></span></td>
-        <td class="right num"><%= fmt.money(o.subtotal, o.currency) %></td>
-        <td class="right num <%= o.margin_pct != null && o.margin_pct < 20 ? 'bad' : '' %>"><%= fmt.pct(o.margin_pct) %></td>
-        <td><%= fmt.date(o.expected_ship_date) %></td>
-        <td class="muted small"><%= fmt.date(o.created_at) %></td>
-      </tr>
-    <% }) %>
-    </tbody>
-  </table>
-  <% } %>
-</div>
+<%# ---------- Portal & access ---------- %>
+<section class="cd-panel" id="tab-portal" role="tabpanel" aria-labelledby="t-portal" hidden>
+  <div class="cd-card">
+    <h2>Portal users <span class="cnt"><%= uc.active %> active<%= uc.pending ? ' · ' + uc.pending + ' pending' : '' %><%= uc.expired ? ' · ' + uc.expired + ' expired' : '' %><%= uc.disabled ? ' · ' + uc.disabled + ' disabled' : '' %></span><button type="button" class="btn small primary more" data-open="invitedlg">+ Invite user</button></h2>
+    <p class="muted small cd-sub"><%= lastSeenRow ? 'Last sign-in to the portal: ' + fmt.datetime(lastSeenRow.last_login_at) + ' (' + (lastSeenRow.full_name || lastSeenRow.email) + ').' : 'Nobody has signed in to the portal yet.' %></p>
+    <div class="tblwrap"><%- include('../../partials/users_table', { members, base: '/admin/clients/' + org.id, inviteDialog: true, emptyText: 'Nobody from this client has portal access yet. Invite them — they confirm their email, fill in the company details and create a password.', firstPlaceholder: 'buyer@client.com', firstValue: org.email || '', otherPlaceholder: 'colleague@client.com' }) %></div>
+  </div>
+  <%- include('../../partials/ai_access', { ai: org, use: aiUse, prices: aiPrices, action: '/admin/clients/' + org.id + '/ai', who: 'this client', compactAi: true }) %>
+</section>
+
+<%# ---------- drawers & dialogs ---------- %>
+<dialog class="drawer" id="editdlg" aria-labelledby="edtitle" <%- E ? 'data-invalid="1"' : '' %>>
+  <form method="post" action="/admin/clients/<%= org.id %>/details" class="drawerform" novalidate>
+    <div class="dh"><h2 id="edtitle">Edit company details</h2><button type="button" class="x" data-close aria-label="Close">✕</button></div>
+    <div class="db2">
+      <div class="dsum" role="alert" <%= E && Object.keys(E.errors).length ? '' : 'hidden' %>>Please check the highlighted field<%= E && Object.keys(E.errors).length > 1 ? 's' : '' %> — nothing has been saved yet.</div>
+      <fieldset class="fgroup"><legend>Company identity</legend>
+        <%- include('../../partials/cd_field', { name: 'name', label: 'Registered company name', value: v('name'), error: ee('name'), required: true, rule: 'required', maxlength: 200 }) %>
+        <div class="fgrid">
+          <%- include('../../partials/cd_field', { name: 'registration_no', label: 'Registration no.', value: v('registration_no'), error: ee('registration_no'), maxlength: 60 }) %>
+          <%- include('../../partials/cd_field', { name: 'tax_id', label: 'Tax / VAT ID', value: v('tax_id'), error: ee('tax_id'), maxlength: 60 }) %>
+        </div>
+        <%- include('../../partials/cd_field', { name: 'website', label: 'Website', value: v('website'), error: ee('website'), rule: 'website', placeholder: 'www.company.com', maxlength: 255 }) %>
+        <label class="fcheck"><input type="checkbox" name="active" <%= (E ? E.vals.active : active) ? 'checked' : '' %>> Active client <span class="muted small">— inactive clients are hidden from the default list</span></label>
+      </fieldset>
+      <fieldset class="fgroup"><legend>Contact information</legend>
+        <div class="fgrid">
+          <%- include('../../partials/cd_field', { name: 'phone', label: 'Phone', value: v('phone'), error: ee('phone'), rule: 'phone', type: 'tel', autocomplete: 'tel', placeholder: '+1 415 555 0100', maxlength: 40 }) %>
+          <%- include('../../partials/cd_field', { name: 'email', label: 'Email', value: v('email'), error: ee('email'), rule: 'email', type: 'email', autocomplete: 'email', maxlength: 254 }) %>
+        </div>
+      </fieldset>
+      <fieldset class="fgroup"><legend>Addresses</legend>
+        <%- include('../../partials/cd_field', { name: 'address', label: 'Registered address', type: 'textarea', rows: 2, value: v('address'), error: ee('address'), maxlength: 500 }) %>
+        <div class="fgrid fgrid3">
+          <%- include('../../partials/cd_field', { name: 'city', label: 'City', value: v('city'), error: ee('city'), maxlength: 100 }) %>
+          <%- include('../../partials/cd_field', { name: 'postal_code', label: 'Postal code', value: v('postal_code'), error: ee('postal_code'), maxlength: 20 }) %>
+          <%- include('../../partials/cd_field', { name: 'country', label: 'Country', value: v('country'), error: ee('country'), maxlength: 80 }) %>
+        </div>
+        <%- include('../../partials/cd_field', { name: 'delivery_address', label: 'Delivery address', type: 'textarea', rows: 2, value: v('delivery_address'), error: ee('delivery_address'), hint: 'Only if different — warehouse or forwarder.', maxlength: 500 }) %>
+      </fieldset>
+      <fieldset class="fgroup"><legend>Preferences</legend>
+        <div class="fgrid">
+          <%- include('../../partials/cd_field', { name: 'language', label: 'Language', type: 'select', value: E ? E.vals.language : (org.language === 'ru' ? 'ru' : 'en'), error: ee('language'), list: [['en', 'English'], ['ru', 'Русский']], hint: 'Used for the portal and every email we send.' }) %>
+          <%- include('../../partials/cd_field', { name: 'default_currency', label: 'Currency', type: 'select', value: E ? E.vals.default_currency : cur, error: ee('default_currency'), list: [...new Set(['USD', 'EUR', 'GBP', 'CNY', E ? E.vals.default_currency : cur].filter(Boolean))].map(c => [c, c]), hint: 'Default for quotes and orders.' }) %>
+        </div>
+        <%- include('../../partials/cd_field', { name: 'notes', label: 'Internal notes', type: 'textarea', rows: 3, value: v('notes'), error: ee('notes'), hint: 'Internal — never shown to the client.', maxlength: 4000 }) %>
+      </fieldset>
+    </div>
+    <div class="df"><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Save changes</button></div>
+    <div class="dconfirm" hidden role="alertdialog" aria-labelledby="edconfirm"><div class="box"><h3 id="edconfirm">Discard your changes?</h3><p class="muted small">You have unsaved changes to this client.</p><div class="actions"><button type="button" class="btn" data-keep>Keep editing</button><button type="button" class="btn primary danger" data-discard>Discard changes</button></div></div></div>
+  </form>
+</dialog>
+
+<dialog class="drawer" id="actdlg" aria-labelledby="acttitle" <%- A ? 'data-invalid="1"' : '' %>>
+  <form method="post" action="/admin/clients/<%= org.id %>/activity" class="drawerform" novalidate>
+    <div class="dh"><h2 id="acttitle">Add activity</h2><button type="button" class="x" data-close aria-label="Close">✕</button></div>
+    <div class="db2">
+      <div class="dsum" role="alert" <%= A && Object.keys(A.errors).length ? '' : 'hidden' %>>Please check the highlighted field<%= A && Object.keys(A.errors).length > 1 ? 's' : '' %> — the activity has not been saved yet.</div>
+      <div class="fgrid">
+        <%- include('../../partials/cd_field', { pfx: 'a-', name: 'date', label: 'Date', type: 'date', value: A ? A.vals.date : today, error: A ? (A.errors.date || '') : '' }) %>
+        <%- include('../../partials/cd_field', { pfx: 'a-', name: 'type', label: 'Type', type: 'select', value: A ? A.vals.type : 'call', list: Object.entries(types) }) %>
+      </div>
+      <%- include('../../partials/cd_field', { pfx: 'a-', name: 'summary', label: 'Summary', type: 'textarea', rows: 4, required: true, rule: 'required', value: A ? A.vals.summary : '', error: A ? (A.errors.summary || '') : '', placeholder: 'What was discussed or agreed — prices, samples, next steps…', maxlength: 2000 }) %>
+      <fieldset class="fgroup"><legend>Follow-up <span class="muted small">— optional</span></legend>
+        <%- include('../../partials/cd_field', { pfx: 'a-', name: 'next_action', label: 'Next action', value: A ? A.vals.next_action : '', error: A ? (A.errors.next_action || '') : '', placeholder: 'e.g. Send revised quote', maxlength: 300 }) %>
+        <div class="fgrid">
+          <%- include('../../partials/cd_field', { pfx: 'a-', name: 'follow_up', label: 'Follow up on', type: 'date', value: A ? A.vals.follow_up : '', error: A ? (A.errors.follow_up || '') : '', min: today }) %>
+          <% if (fuReady) { %><%- include('../../partials/cd_field', { pfx: 'a-', name: 'owner_id', label: 'Responsible', type: 'select', value: A && A.vals.owner_id ? A.vals.owner_id : me, list: staffOpts.map(x => [x.id, x.name]), hint: mayAssign ? 'Who will do the follow-up.' : 'Follow-ups you create are yours.' }) %><% } %>
+        </div>
+        <% if (!fuReady) { %><p class="muted small">The date is saved with the activity. To complete or reschedule follow-ups as tasks, run migration 0038 in Supabase.</p><% } %>
+      </fieldset>
+    </div>
+    <div class="df"><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Log activity</button></div>
+    <div class="dconfirm" hidden role="alertdialog" aria-labelledby="actconfirm"><div class="box"><h3 id="actconfirm">Discard this activity?</h3><p class="muted small">What you typed has not been saved.</p><div class="actions"><button type="button" class="btn" data-keep>Keep editing</button><button type="button" class="btn primary danger" data-discard>Discard</button></div></div></div>
+  </form>
+</dialog>
+
+<dialog class="modaldlg" id="resdlg" aria-labelledby="restitle">
+  <form method="post" action="#" id="resform" class="modalform">
+    <h2 id="restitle">Reschedule follow-up</h2>
+    <p class="muted" id="resname"></p>
+    <div class="fld"><label for="resdate">New date</label><input type="date" id="resdate" name="due_date" required min="<%= today %>"></div>
+    <% if (mayAssign && staffOpts.length > 1) { %><div class="fld"><label for="resowner">Responsible</label><select id="resowner" name="owner_id"><% staffOpts.forEach(x => { %><option value="<%= x.id %>"><%= x.name %></option><% }) %></select></div><% } %>
+    <p class="muted small">The activity it came from stays as it was; the change is recorded in the timeline.</p>
+    <div class="actions"><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Reschedule</button></div>
+  </form>
+</dialog>
+
+<script>
+(function () {
+  var INIT_TAB = <%- JSON.stringify(TAB || '') %>, OPEN = <%- JSON.stringify(OPEN || '') %>, ORG = <%- JSON.stringify(String(org.id)) %>;
+  var tabs = [].slice.call(document.querySelectorAll('[data-tab]')), names = tabs.map(function (b) { return b.dataset.tab; });
+  function show(name) {
+    if (names.indexOf(name) < 0) name = 'overview';
+    tabs.forEach(function (b) { var on = b.dataset.tab === name; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1; });
+    names.forEach(function (n) { document.getElementById('tab-' + n).hidden = n !== name; });
+  }
+  tabs.forEach(function (b) { b.addEventListener('click', function () { history.replaceState(null, '', '#' + b.dataset.tab); show(b.dataset.tab); }); });
+  document.querySelector('.cd-tabs').addEventListener('keydown', function (e) {
+    var i = names.indexOf(document.activeElement.dataset && document.activeElement.dataset.tab); if (i < 0 || (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft' && e.key !== 'Home' && e.key !== 'End')) return;
+    var j = e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : (i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length;
+    e.preventDefault(); tabs[j].focus(); tabs[j].click();
+  });
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+  show(INIT_TAB || location.hash.slice(1));
+
+  // ---- opening dialogs ----
+  function openDlg(id, focusName) {
+    var d = document.getElementById(id); if (!d || !d.showModal) return;
+    if (!d.open) d.showModal();
+    var t = focusName && d.querySelector('[name="' + focusName + '"]'); if (t) { t.focus(); if (t.select) t.select(); }
+  }
+  document.querySelectorAll('[data-open]').forEach(function (b) { b.addEventListener('click', function () { openDlg(b.dataset.open, b.dataset.focus); }); });
+  document.querySelectorAll('dialog.modaldlg [data-close]').forEach(function (b) { b.addEventListener('click', function () { b.closest('dialog').close(); }); });
+  document.querySelectorAll('dialog.modaldlg').forEach(function (d) { d.addEventListener('click', function (e) { if (e.target === d) d.close(); }); });
+
+  // ---- drawers: fixed header and footer, only the body scrolls; closing with unsaved changes asks first ----
+  var RULES = {
+    required: function (v) { return v.trim() ? '' : 'This field is required.'; },
+    email: function (v) { return !v.trim() || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.trim()) ? '' : 'Enter a valid email address, e.g. buyer@company.com.'; },
+    phone: function (v) { v = v.trim().replace(/\s*(ext\.?|x)\s*\d{1,6}$/i, ''); return !v || (/^[+()\-.\s\/#0-9]{5,40}$/.test(v) && (v.match(/\d/g) || []).length >= 5) ? '' : 'Enter a valid phone number, e.g. +1 415 555 0100.'; },
+    website: function (v) { v = v.trim(); return !v || (!/\s/.test(v) && /^(https?:\/\/)?[^\s\/.]+(\.[^\s\/.]+)+([\/?#]\S*)?$/i.test(v)) ? '' : 'Enter a web address like www.company.com.'; }
+  };
+  function setErr(input, msg) {
+    var box = document.getElementById(input.id + '-e'), fld = input.closest('.fld');
+    if (box) box.textContent = msg || ''; if (fld) fld.classList.toggle('has-err', !!msg);
+    if (msg) input.setAttribute('aria-invalid', 'true'); else input.removeAttribute('aria-invalid');
+  }
+  function checkField(input) {
+    var msg = '', r = (input.dataset.rule || '').split(' ');
+    for (var i = 0; i < r.length && !msg; i++) if (RULES[r[i]]) msg = RULES[r[i]](input.value);
+    setErr(input, msg); return !msg;
+  }
+  function ser(f) { return new URLSearchParams(new FormData(f)).toString(); }
+  document.querySelectorAll('dialog.drawer').forEach(function (d) {
+    var f = d.querySelector('form'), cf = d.querySelector('.dconfirm'), snap = ser(f), invalid = !!d.dataset.invalid, sum = d.querySelector('.dsum');
+    var dirty = function () { return invalid || ser(f) !== snap; };
+    function attemptClose() { if (!cf.hidden) return keep(); if (dirty()) { cf.hidden = false; cf.querySelector('[data-keep]').focus(); } else d.close(); }
+    function keep() { cf.hidden = true; var t = f.querySelector('input:not([type=hidden]),textarea,select'); if (t) t.focus(); }
+    d.addEventListener('cancel', function (e) { e.preventDefault(); attemptClose(); });          // Esc
+    d.addEventListener('click', function (e) { if (e.target === d) attemptClose(); });          // click on the dimmed page
+    d.querySelectorAll('[data-close]').forEach(function (b) { b.addEventListener('click', attemptClose); });
+    cf.querySelector('[data-keep]').addEventListener('click', keep);
+    cf.querySelector('[data-discard]').addEventListener('click', function () { cf.hidden = true; f.reset(); f.querySelectorAll('.has-err').forEach(function (x) { x.classList.remove('has-err'); }); f.querySelectorAll('.ferr').forEach(function (x) { x.textContent = ''; }); if (sum) sum.hidden = true; invalid = false; d.close(); });
+    f.querySelectorAll('[data-rule]').forEach(function (i) { i.addEventListener('blur', function () { if (i.value || i.closest('.has-err')) checkField(i); }); i.addEventListener('input', function () { if (i.closest('.has-err')) checkField(i); }); });
+    f.addEventListener('submit', function (e) {
+      var bad = null;
+      f.querySelectorAll('[data-rule]').forEach(function (i) { if (!checkField(i) && !bad) bad = i; });
+      var fu = f.querySelector('[name="follow_up"]'), dt = f.querySelector('[name="date"]');
+      if (fu && dt && fu.value && dt.value && fu.value < dt.value) { setErr(fu, 'The follow-up cannot be before the activity date.'); bad = bad || fu; }
+      if (bad) { e.preventDefault(); if (sum) sum.hidden = false; bad.focus(); } else { invalid = false; }
+    });
+    d.addEventListener('close', function () { cf.hidden = true; });
+  });
+  if (OPEN) { openDlg(OPEN); var bad = document.querySelector('#' + OPEN + ' .has-err input, #' + OPEN + ' .has-err textarea, #' + OPEN + ' .has-err select'); if (bad) bad.focus(); }
+
+  // ---- reschedule a follow-up ----
+  var rf = document.getElementById('resform');
+  document.querySelectorAll('[data-resched]').forEach(function (b) { b.addEventListener('click', function () {
+    rf.action = '/admin/clients/' + ORG + '/followups/' + b.dataset.resched + '/reschedule';
+    document.getElementById('resname').textContent = b.dataset.title;
+    var di = document.getElementById('resdate'); di.value = b.dataset.due; di.min = '';
+    var ow = document.getElementById('resowner'); if (ow && b.dataset.owner) ow.value = b.dataset.owner;
+    openDlg('resdlg'); di.focus();
+  }); });
+
+  // ---- timeline filter ----
+  document.querySelectorAll('.cd-filter button').forEach(function (b) { b.addEventListener('click', function () {
+    document.querySelectorAll('.cd-filter button').forEach(function (x) { x.classList.toggle('on', x === b); });
+    document.querySelectorAll('#cdtl > li').forEach(function (li) { li.hidden = b.dataset.show !== 'all' && !li.classList.contains(b.dataset.show); });
+  }); });
+})();
+</script>
 <%- include('../../partials/foot') %>

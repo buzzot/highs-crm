@@ -1,0 +1,19 @@
+<%# One labelled field with its hint and an error line right under it. locals: name, label, value, error, type, rows, hint, required, maxlength, autocomplete, placeholder, rule, list (select options [[value,label]]) %>
+<%
+  const _t = typeof type !== 'undefined' && type ? type : 'text', _id = 'f-' + (typeof pfx !== 'undefined' ? pfx : '') + name;
+  const _e = typeof error !== 'undefined' ? error : '', _v = typeof value !== 'undefined' && value != null ? value : '';
+  const _h = typeof hint !== 'undefined' ? hint : '', _req = typeof required !== 'undefined' && required;
+  const _d = (typeof hint !== 'undefined' && hint ? _id + '-h ' : '') + _id + '-e';
+%>
+<div class="fld<%= _e ? ' has-err' : '' %>">
+  <label for="<%= _id %>"><%= label %><% if (_req) { %> <span class="req" aria-hidden="true">*</span><% } %></label>
+  <% if (_t === 'textarea') { %>
+    <textarea id="<%= _id %>" name="<%= name %>" rows="<%= typeof rows !== 'undefined' ? rows : 2 %>" <%= typeof maxlength !== 'undefined' ? 'maxlength=' + maxlength : '' %> <%= _req ? 'aria-required=true' : '' %> <%= _e ? 'aria-invalid=true' : '' %> aria-describedby="<%= _d %>" <%- typeof rule !== 'undefined' ? 'data-rule="' + rule + '"' : '' %> <%- typeof placeholder !== 'undefined' ? 'placeholder="' + placeholder + '"' : '' %>><%= _v %></textarea>
+  <% } else if (_t === 'select') { %>
+    <select id="<%= _id %>" name="<%= name %>" aria-describedby="<%= _d %>" <%= _e ? 'aria-invalid=true' : '' %>><% list.forEach(o => { %><option value="<%= o[0] %>" <%= String(o[0]) === String(_v) ? 'selected' : '' %>><%= o[1] %></option><% }) %></select>
+  <% } else { %>
+    <input id="<%= _id %>" type="<%= _t %>" name="<%= name %>" value="<%= _v %>" <%= typeof maxlength !== 'undefined' ? 'maxlength=' + maxlength : '' %> <%= _req ? 'aria-required=true' : '' %> <%= _e ? 'aria-invalid=true' : '' %> aria-describedby="<%= _d %>" autocomplete="<%= typeof autocomplete !== 'undefined' ? autocomplete : 'off' %>" <%- typeof rule !== 'undefined' ? 'data-rule="' + rule + '"' : '' %> <%- typeof placeholder !== 'undefined' ? 'placeholder="' + placeholder + '"' : '' %> <%- typeof min !== 'undefined' ? 'min="' + min + '"' : '' %>>
+  <% } %>
+  <% if (_h) { %><div class="fhint" id="<%= _id %>-h"><%= _h %></div><% } %>
+  <div class="ferr" id="<%= _id %>-e" role="alert"><%= _e %></div>
+</div>

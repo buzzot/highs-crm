@@ -2,7 +2,8 @@
 <% const nn = x => Number(x || 0).toLocaleString('en-US');
    const price = u => { const a = Number(prices?.input_per_m) || 0, b = Number(prices?.output_per_m) || 0; return (a || b) ? (u.input * a + u.output * b) / 1e6 : null; };
    const money = v => v == null ? '' : ' · ≈ $' + (v < 0.01 ? v.toFixed(4) : v.toFixed(2)); %>
-<div class="card aiaccess">
+<% const compact = typeof compactAi !== 'undefined' && compactAi; %>
+<div class="<%= compact ? 'aiaccess aic' : 'card aiaccess' %>">
   <h2>AI access
     <span class="hactions">
       <% if (user.role === 'admin') { %>
@@ -16,12 +17,21 @@
   <% if (!use.ready) { %>
     <p class="muted small">Usage is not tracked yet — run <code>supabase/migrations/0018_ai_access.sql</code>.</p>
   <% } else { %>
+  <% if (compact) { %>
+  <dl class="aistats">
+    <div><dt>This month</dt><dd><%= nn(use.current.total) %> tokens · <%= nn(use.current.calls) %> calls<%= money(price(use.current)) %></dd></div>
+    <div><dt>In total</dt><dd><%= nn(use.all.total) %> tokens · <%= nn(use.all.calls) %> calls<%= money(price(use.all)) %></dd></div>
+    <div><dt>Input / output</dt><dd><%= nn(use.all.input) %> / <%= nn(use.all.output) %></dd></div>
+  </dl>
+  <% } else { %>
   <div class="kpis aikpis">
     <div class="kpi"><span class="n"><%= nn(use.current.total) %></span><span class="l">Tokens this month · <%= nn(use.current.calls) %> calls<%= money(price(use.current)) %></span></div>
     <div class="kpi"><span class="n"><%= nn(use.all.total) %></span><span class="l">Tokens in total · <%= nn(use.all.calls) %> calls<%= money(price(use.all)) %></span></div>
     <div class="kpi"><span class="n"><%= nn(use.all.input) %> / <%= nn(use.all.output) %></span><span class="l">Total input / output tokens</span></div>
   </div>
+  <% } %>
   <% if (use.all.calls) { %>
+  <% if (compact) { %><details class="aihist"><summary>Monthly history</summary><% } %>
   <table class="tbl compact">
     <thead><tr><th>Month</th><th class="right">Calls</th><th class="right">Input</th><th class="right">Output</th><th class="right">Total tokens</th></tr></thead>
     <tbody>
@@ -29,6 +39,7 @@
       <tr><td><b>All time</b></td><td class="right num"><b><%= nn(use.all.calls) %></b></td><td class="right num"><b><%= nn(use.all.input) %></b></td><td class="right num"><b><%= nn(use.all.output) %></b></td><td class="right num"><b><%= nn(use.all.total) %></b></td></tr>
     </tbody>
   </table>
+  <% if (compact) { %></details><% } %>
   <% } else { %><p class="muted small">No AI use by this company yet.</p><% } %>
   <% } %>
 </div>

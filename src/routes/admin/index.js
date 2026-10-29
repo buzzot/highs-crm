@@ -9,6 +9,7 @@ import { defaultCurrency, sumIn } from '../../lib/currency.js';
 import { getSettings } from '../../lib/util.js';
 import { applyCashProfit } from '../../lib/order-profit.js';
 import { needsAttention, paymentsOpen, shipmentFlag, statusSummary, groupCounts, isOpenOrder, groupActivity, elapsed } from '../../lib/dashboard.js';
+import { dueFollowups } from '../../lib/followups.js';
 import clients from './clients.js';
 import suppliers from './suppliers.js';
 import products from './products.js';
@@ -108,7 +109,7 @@ r.get('/', async (req, res) => {
   const [settings, defCur] = await Promise.all([getSettings(admin), defaultCurrency(admin)]);
   // a table that does not exist yet (migration not run) must not break the dashboard
   const safe = async q => { try { const x = await q; return x.error ? { data: [], count: 0 } : x; } catch { return { data: [], count: 0 }; } };
-  const [reqs, orders, shipments, activity, exportGaps, pos, pis, pays, quotes, rfqs, rfqReplies] = await Promise.all([
+  const [reqs, orders, shipments, activity, exportGaps, pos, pis, pays, quotes, rfqs, rfqReplies, followups] = await Promise.all([
     admin.from('requests').select('id, ref, title, status, created_at, owner_id, organizations(name)').in('status', ['new', 'reviewing']).order('created_at', { ascending: false }).limit(300),
     admin.from('order_overview').select('*').order('created_at', { ascending: false }),
     admin.from('shipments').select('id, status, eta, ata, mode, tracking_no, owner_id, orders(order_no, owner_id, organizations(name))').not('status', 'in', '("delivered")').order('eta').limit(300),
@@ -122,6 +123,7 @@ r.get('/', async (req, res) => {
     safe(admin.from('quotes').select('id, status, valid_until, owner_id, requests(ref, organizations(name))').eq('status', 'sent').limit(100)),
     safe(admin.from('rfqs').select('id, ref, title, deadline, owner_id').eq('status', 'open').limit(100)),
     safe(admin.from('rfq_responses').select('rfq_id, rfqs(id, ref, title, owner_id)').eq('status', 'parsed').limit(100)),
+    dueFollowups(today),   // client follow-ups due today or overdue (migration 0038)
   ]);
   const all = orders.data || [];
   await applyCashProfit(all);   // same profit rule as the Orders list (logistics-only orders: cash profit)
@@ -138,7 +140,7 @@ r.get('/', async (req, res) => {
   (rfqReplies.data || []).forEach(x => { const k = x.rfq_id; const e = rfqReplyMap.get(k) || { ...(x.rfqs || {}), n: 0 }; e.n++; rfqReplyMap.set(k, e); });
   const reqList = reqs.data || [];
   const attentionAll = needsAttention({
-    now, today, pos: poList, pis: piList, pays: payList, requests: reqList, quotes: quotes.data || [], rfqs: rfqs.data || [],
+    now, today, followups: mgr ? followups.filter(f => f.owner_id === me) : followups, pos: poList, pis: piList, pays: payList, requests: reqList, quotes: quotes.data || [], rfqs: rfqs.data || [],
     rfqReplies: [...rfqReplyMap.values()], shipments: shipments.data || [],
     exportGaps: exportGaps.data || [], lowMargin: all.filter(o => o.margin_pct != null && o.margin_pct < 20 && !['closed', 'cancelled', 'delivered'].includes(o.status)),
   });

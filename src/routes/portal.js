@@ -52,10 +52,20 @@ r.post('/company', async (req, res) => {
   if (Object.keys(errors).length) {
     return res.status(400).render('portal/company', { title: 'Company details', org, form: { ...org, ...data }, errors, first: !org?.details_completed_at, saved: false });
   }
-  const first = !org.details_completed_at;
+  let first = !org.details_completed_at;
   const patch = Object.fromEntries(COMPANY_FIELDS.map(k => [k, data[k]]));
   if (first) Object.assign(patch, { details_completed_at: new Date().toISOString(), details_completed_by: req.user.id });
-  const { error } = await admin.from('organizations').update(patch).eq('id', req.user.org_id);
+  let error;
+  if (first) {
+    // "completed" is recorded once: the update only matches while details_completed_at is still empty, so a double click / second tab cannot log it twice
+    const r1 = await admin.from('organizations').update(patch).eq('id', req.user.org_id).is('details_completed_at', null).select('id');
+    error = r1.error;
+    if (!error && !(r1.data || []).length) {            // someone (the same person, a moment ago) already completed it: save as a normal update
+      first = false;
+      delete patch.details_completed_at; delete patch.details_completed_by;
+      ({ error } = await admin.from('organizations').update(patch).eq('id', req.user.org_id));
+    }
+  } else ({ error } = await admin.from('organizations').update(patch).eq('id', req.user.org_id));
   if (error) return res.status(400).render('portal/company', { title: 'Company details', org, form: { ...org, ...data }, errors: { _: error.message }, first, saved: false });
   await log({ entityType: 'organization', entityId: req.user.org_id, action: first ? 'company_details_completed' : 'company_details_updated', actorId: req.user.id, detail: { note: data.name } });
   res.redirect(first ? '/portal?msg=' + encodeURIComponent('Thanks — your company details are saved. Welcome to Lumi Trade!') : '/portal/company?saved=1');

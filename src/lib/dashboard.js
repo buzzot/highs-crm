@@ -45,7 +45,7 @@ export function shipmentFlag(s, today) {
  * input: { now (ms), today (YYYY-MM-DD), pos, pis, pays, requests, quotes, rfqs, rfqReplies, shipments }
  * item: { kind, tone: bad|warn|info, ref, href, party, action, when, overdue }
  */
-export function needsAttention({ now = Date.now(), today, pos = [], pis = [], pays = [], requests = [], quotes = [], rfqs = [], rfqReplies = [], shipments = [], lowMargin = [], exportGaps = [], minMargin = 20 }) {
+export function needsAttention({ now = Date.now(), today, followups = [], pos = [], pis = [], pays = [], requests = [], quotes = [], rfqs = [], rfqReplies = [], shipments = [], lowMargin = [], exportGaps = [], minMargin = 20 }) {
   // level: critical (a rule is broken) > overdue (a real due date has passed) > review (needs a decision) > pending (waiting / to start)
   const LEVEL = { shipment: 'overdue', rfq: 'overdue', quote: 'overdue', po_reply: 'review', rfq_reply: 'review', pi: 'review' };
   const poOwner = p => p?.orders?.owner_id || p?.created_by || p?.owner || null;   // a supplier PO belongs to the owner of its order, else to whoever created it
@@ -82,8 +82,13 @@ export function needsAttention({ now = Date.now(), today, pos = [], pis = [], pa
     add({ kind: 'po_wait', owner: poOwner(p), tone: 'info', sort: 30, ref: p.ref, href: `/admin/purchasing/${p.id}`, party: p.suppliers?.name || '', action: 'Waiting for the supplier to confirm', when: p.sent_at ? `sent ${ago(p.sent_at, now)}` : '' });
   for (const x of paymentsOpen({ pis, pays, pos })) if (x.open > 0.004)
     add({ kind: 'pay', owner: poOwner(x), tone: 'info', sort: 35, ref: x.ref, href: `/admin/purchasing/${x.po_id}#supplier-pi`, party: x.supplier, action: `Pay the supplier — ${x.fmtOpen} open`, when: '' });
+  for (const f of followups) {
+    const d = daysSince(f.due_date, today); if (d == null || d < 0 || f.status === 'done') continue;
+    const late = d > 0;
+    add({ kind: 'followup', owner: f.owner_id, level: late ? 'overdue' : 'pending', tone: late ? 'bad' : 'info', overdue: late, sort: late ? 70 + d : 38, ref: f.organizations?.name || 'Client', href: `/admin/clients/${f.org_id}#activity`, party: '', action: `Follow up: ${f.title}`, when: late ? `Due ${d} d ago` : 'Due today' });
+  }
   const LR = { critical: 0, overdue: 1, review: 2, pending: 3 };
-  const CTA = { export: 'Open shipment', margin: 'Open order', shipment: 'View shipment', rfq: 'Open RFQ', quote: 'Open quote', po_reply: 'Open reply', rfq_reply: 'Review quotes', pi: 'Review PI', pi_missing: 'Add PI', request: 'Open request', po_wait: 'Open PO', pay: 'Open PO' };
+  const CTA = { export: 'Open shipment', margin: 'Open order', shipment: 'View shipment', rfq: 'Open RFQ', quote: 'Open quote', po_reply: 'Open reply', rfq_reply: 'Review quotes', pi: 'Review PI', pi_missing: 'Add PI', request: 'Open request', po_wait: 'Open PO', pay: 'Open PO', followup: 'Open client' };
   items.forEach(i => { i.cta = CTA[i.kind]; });
   const sorted = items.sort((a, b) => LR[a.level] - LR[b.level] || b.sort - a.sort || String(a.ref).localeCompare(String(b.ref)));
   // one row per supplier PO: a reply and a PI on the same PO are one job, so the lower-priority task is added to the first row's text
