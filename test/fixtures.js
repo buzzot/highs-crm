@@ -98,7 +98,7 @@ const ORDER_STATUSES = ['confirmed', 'deposit_paid', 'in_production', 'qc', 'pac
 
 const spiFx = { aiOn: true, checkPi, paymentPlan, products: [{ id: 'pr1', name: 'LED desk lamp', sku: 'BW-LED-001', unit_cost: 38.5, cost_currency: 'CNY' }, { id: 'pr2', name: 'USB-C cable 1 m', sku: 'USB-1', unit_cost: 4.2, cost_currency: 'CNY' }],
   spis: [{ id: 'spi1', pi_no: 'BW-PI-20261012', pi_date: '2026-10-12', currency: 'CNY', status: 'draft', total: 5420, declared_total: 5500, file_doc_ids: ['dpi'], notes: 'Price valid 15 days',
-    lines: [{ product_id: 'pr1', description: 'LED desk lamp', sku: 'BW-LED-001', quantity: 100, unit: 'pcs', unit_price: 38.5 }, { product_id: 'pr2', description: 'USB-C cable 1 m', sku: 'USB-1', quantity: 400, unit: 'pcs', unit_price: 4.18 }] }],
+    lines: [{ product_id: 'pr1', description: 'LED desk lamp', sku: 'BW-LED-001', quantity: 100, unit: 'pcs', unit_price: 38.5 }, { description: 'USB-C cable 1 m (new item)', sku: 'USB-1', quantity: 400, unit: 'pcs', unit_price: 4.18 }] }],
   spays: [{ id: 'spy1', amount: 1626, currency: 'CNY', label: 'Deposit', paid_on: '2026-10-14', reference: 'Sber 30%', proof_doc_ids: ['dpf'] }], sdocs: [{ id: 'dpi', title: 'BW-PI-20261012.pdf' }, { id: 'dpf', title: 'slip.jpg' }] };
 const base = (user, path, extra = {}) => ({ RFQ_UNITS, PACKAGE_TYPES, defCur: 'CNY', fmt, icon, aiLine: u => usageLine(u), showValue, deliveryLabel, lang: 'en', here: path, user, path, query: {}, msg: null, err: null, ...extra });
 const months = ['May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'].map((label, i) => ({ key: label, label, revenue: [8200, 12100, 9400, 15800, 18300, 13300][i], profit: [1500, 2300, 1700, 3000, 3500, 2500][i] }));

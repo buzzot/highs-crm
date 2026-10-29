@@ -242,7 +242,7 @@ r.post('/:id/pi', upload.array('files', 8), async (req, res) => {
   const chk = checkPi({ lines, declared: Number.isFinite(declared) ? declared : null });
   const currency = CURRENCIES.includes(req.body.currency) ? req.body.currency : po.currency;
   const row = { po_id: po.id, pi_no: String(req.body.pi_no || '').trim().slice(0, 80) || null, pi_date: day(req.body.pi_date), currency, lines, total: chk.total, declared_total: chk.declared,
-    notes: String(req.body.notes || '').trim().slice(0, 1000) || null, status: req.body.act === 'approve' && chk.matches ? 'confirmed' : 'draft' };
+    notes: String(req.body.notes || '').trim().slice(0, 1000) || null, status: req.body.act === 'approve' && chk.matches && lines.every(l => l.product_id) ? 'confirmed' : 'draft' };
   let pid = isId(req.body.pid) ? req.body.pid : null, old = null;
   if (pid) { old = (await admin.from('supplier_pis').select('file_doc_ids').eq('id', pid).eq('po_id', po.id).maybeSingle()).data; if (!old) pid = null; }
   let newIds;
@@ -253,6 +253,7 @@ r.post('/:id/pi', upload.array('files', 8), async (req, res) => {
   if (error) return back(res, to, { err: migErr(error) });
   await log({ entityType: ent(po)[0], entityId: ent(po)[1], action: 'supplier_pi_saved', actorId: req.user.id, detail: { note: `${po.ref}: ${money(chk.total, currency)}` } });
   if (req.body.act !== 'approve') return back(res, to, chk.matches ? { msg: `Draft saved — total ${money(chk.total, currency)} matches the PI. Approve it when you have checked the lines.` } : { msg: `Draft saved — lines total ${money(chk.total, currency)}${chk.declared != null ? `, the PI says ${money(chk.declared, currency)}` : ''}.` });
+  if (!lines.every(l => l.product_id)) return back(res, to, { err: 'Not approved, saved as a draft — some lines are not in your product list yet. Add them as products first.' });
   if (!chk.matches) return back(res, to, { err: chk.declared == null ? "Not approved, saved as a draft — enter the total printed on the supplier's PI so it can be checked." : `Not approved, saved as a draft — the lines add up to ${money(chk.total, currency)} but the PI says ${money(chk.declared, currency)} (difference ${money(chk.diff, currency)}). Check quantities and prices.` });
   back(res, to, { msg: `Supplier PI approved — total ${money(chk.total, currency)}.` });
 });
@@ -277,12 +278,33 @@ r.post('/:id/pi/:pid/files/:did/remove', async (req, res) => {
   await admin.from('supplier_pis').update({ file_doc_ids: (pi.file_doc_ids || []).filter(x => x !== req.params.did) }).eq('id', pi.id);
   back(res, to, { msg: 'File removed from the PI (it stays in the documents).' });
 });
+r.post('/:id/pi/:pid/line/:i/product', async (req, res) => {
+  const po = await load(req.params.id);
+  if (!po) return notFound(res, 'Purchase order');
+  const to = `/admin/purchasing/${po.id}#supplier-pi`;
+  const { data: pi } = await admin.from('supplier_pis').select('id, lines').eq('id', req.params.pid).eq('po_id', po.id).maybeSingle();
+  if (!pi) return notFound(res, 'Supplier PI');
+  const i = Number(req.params.i), line = pi.lines?.[i];
+  if (!Number.isInteger(i) || !line) return back(res, to, { err: 'Line not found.' });
+  const b = req.body, s = (v, n) => String(v ?? '').trim().slice(0, n) || null, name = s(b.name, 200);
+  if (!name) return back(res, to, { err: 'Enter the product name.' });
+  const cost = String(b.unit_cost ?? '').trim() === '' ? null : Number(String(b.unit_cost).replace(',', '.'));
+  const { data: prod, error } = await admin.from('products').insert({ name, sku: s(b.sku, 80), supplier_sku: s(b.supplier_sku, 80), description: s(b.description, 1000), supplier_id: po.supplier_id || null,
+    unit_cost: Number.isFinite(cost) && cost >= 0 ? cost : null, cost_currency: CURRENCIES.includes(b.cost_currency) ? b.cost_currency : pi.currency || 'CNY' }).select('id, sku').single();
+  if (error) return back(res, to, { err: /sku/.test(error.message) && /unique|duplicate/i.test(error.message) ? 'That SKU is already used by another product — leave it empty or use a different one.' : error.message });
+  const lines = pi.lines.map((l, k) => (k === i ? { ...l, product_id: prod.id } : l));
+  await admin.from('supplier_pis').update({ lines }).eq('id', pi.id);
+  await log({ entityType: 'product', entityId: prod.id, action: 'product_created_from_pi', actorId: req.user.id, detail: { note: `${po.ref}: ${name}` } });
+  back(res, to, { msg: `“${name}” added to your products and linked to the PI line.` });
+});
 r.post('/:id/pi/:pid/approve', async (req, res) => {
   const po = await load(req.params.id);
   if (!po) return notFound(res, 'Purchase order');
   const to = `/admin/purchasing/${po.id}#supplier-pi`;
   const { data: pi } = await admin.from('supplier_pis').select('id, lines, declared_total, currency').eq('id', req.params.pid).eq('po_id', po.id).maybeSingle();
   if (!pi) return notFound(res, 'Supplier PI');
+  const miss = (pi.lines || []).filter(l => !l.product_id).length;
+  if (miss) return back(res, to, { err: `${miss} line${miss > 1 ? 's are' : ' is'} not in your product list yet — add ${miss > 1 ? 'them' : 'it'} first.` });
   const chk = checkPi({ lines: pi.lines, declared: pi.declared_total });
   if (!chk.matches) return back(res, to, { err: 'The lines do not match the total printed on the PI yet.' });
   await admin.from('supplier_pis').update({ status: 'confirmed' }).eq('id', pi.id);
@@ -325,7 +347,7 @@ r.post('/:id/pi/read', upload.array('files', 8), async (req, res) => {
     const ids = [...await attach(req, po, req.files, 'other'), ...picked.map(d => d.id)];
     const { error } = await admin.from('supplier_pis').insert({ po_id: po.id, pi_no: ai.pi_no, pi_date: day(ai.pi_date), currency, lines, total: chk.total, declared_total: chk.declared, file_doc_ids: ids, notes: ai.notes || null, status: 'draft', created_by: req.user.id });
     if (error) return back(res, to, { err: migErr(error) });
-    back(res, to, chk.matches ? { msg: `Read by AI — ${lines.length} lines, total ${money(chk.total, currency)} matches the PI. Check the lines, then approve it.` } : { err: `Read by AI as a draft — the lines add up to ${money(chk.total, currency)}${chk.declared != null ? ` but the PI says ${money(chk.declared, currency)}` : ''}. Check every line against the file before relying on it.` });
+    back(res, to, chk.matches ? { msg: `Read by AI — ${lines.length} lines, total ${money(chk.total, currency)} matches the PI. Check the lines, then approve it.${lines.some(l => !l.product_id) ? ` ${lines.filter(l => !l.product_id).length} line(s) are not in your product list yet — add them as products before approving.` : ''}` } : { err: `Read by AI as a draft — the lines add up to ${money(chk.total, currency)}${chk.declared != null ? ` but the PI says ${money(chk.declared, currency)}` : ''}. Check every line against the file before relying on it.` });
   } catch (e) { back(res, to, { err: `Could not read the file: ${e.message}` }); }
 });
 // payments to the supplier (shares of the PI total)

@@ -1755,3 +1755,4 @@ dialog.catdlg[open] { display: flex; flex-direction: column; }
 .spirow2 svg { width: 16px; height: 16px; flex: none; color: var(--muted); }
 .spirow2 .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .spirow2 input { width: auto; margin: 0; }
+.newprod { margin-top: 3px; } .newprod .tag { text-transform: none; }

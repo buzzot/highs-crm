@@ -5,6 +5,7 @@
   const chk = pi ? checkPi({ lines: pi.lines, declared: pi.declared_total, poTotal: po.total }) : null;
   const plan = pi ? paymentPlan(pi.total, pays) : null, cur = pi ? pi.currency : po.currency;
   const M = v => fmt.money(v, cur);
+  const newLines = pi ? (pi.lines || []).map((l, i) => ({ l, i })).filter(x => !x.l.product_id) : [];   // PI lines that are not in our product list yet
   const fromPo = !pi && Array.isArray(po.lines) && po.lines.length > 0;                  // no PI yet: start from our PO, editable
   const base = pi ? pi.lines : (fromPo ? po.lines : []), shown = Math.max(base.length, 1);   // manual entry starts with one line
   const ROWS = Math.max(30, base.length + 10);
@@ -43,11 +44,12 @@
       <%- include('supplier_pi_recv', { recv, pre: true }) %>
     </form>
     <% } %>
-    <%- include('po_lines', { lines: pi.lines, currency: pi.currency, edit: false }) %>
+    <% if (newLines.length) { %><div class="alert warn"><strong><%= newLines.length === 1 ? '1 product on this PI is' : newLines.length + ' products on this PI are' %> not in your product list yet.</strong> Add <%= newLines.length === 1 ? 'it' : 'them' %> first — a PI can be approved only when every line is a product record. <%= newLines.map(x => x.l.description).join(' · ').slice(0, 160) %></div><% } %>
+    <%- include('po_lines', { lines: pi.lines, currency: pi.currency, edit: false, flagNew: true }) %>
     <div class="spiacts">
       <button type="button" class="btn" onclick="var d=document.querySelector('#supplier-pi details.spiedit');d.open=true;d.scrollIntoView({behavior:'smooth',block:'nearest'})">Edit PI</button>
       <% if (typeof aiOn !== 'undefined' && aiOn) { %><button type="button" class="btn" onclick="document.getElementById('spiai').showModal()">Read a new file with AI</button><% } %>
-      <% if (pi.status !== 'confirmed') { %><% if (chk.matches) { %><form method="post" action="/admin/purchasing/<%= po.id %>/pi/<%= pi.id %>/approve" class="inline"><button class="btn primary">Approve PI</button></form><% } else { %><button type="button" class="btn primary" disabled title="The lines must match the total printed on the supplier's PI">Approve PI</button><span class="muted small">Approve once the lines match the printed total.</span><% } %><% } %>
+      <% if (pi.status !== 'confirmed') { %><% if (chk.matches && !newLines.length) { %><form method="post" action="/admin/purchasing/<%= po.id %>/pi/<%= pi.id %>/approve" class="inline"><button class="btn primary">Approve PI</button></form><% } else { %><button type="button" class="btn primary" disabled title="The lines must match the total printed on the supplier's PI">Approve PI</button><span class="muted small"><%= newLines.length ? 'Add the new products first.' : 'Approve once the lines match the printed total.' %></span><% } %><% } %>
     </div>
     <% if (pi.notes) { %><p class="muted small">Note: <%= pi.notes %></p><% } %>
     <% if (hist.length) { %><p class="muted small">Earlier versions: <%= hist.map(h => (h.pi_no || 'PI') + ' · ' + fmt.money(h.total, h.currency) + ' · ' + fmt.date(h.created_at)).join('  |  ') %></p><% } %>
@@ -176,6 +178,32 @@
     </form>
     <p class="muted small">A simple card — add photos, packing and specs later on the product page.</p>
   </dialog>
+  <% if (pi && newLines.length) { %>
+  <dialog id="spaddp" class="bookdlg">
+    <h2>Add to my products</h2>
+    <p class="muted small">Creates a simple product card for <strong><%= supplier ? supplier.name : 'this supplier' %></strong> and links this PI line to it. Add photos, packing and specs later on the product page.</p>
+    <form method="post" id="spaddpform" class="payrec dlg" action="">
+      <label class="wide">Name <input name="name" required maxlength="200" autocomplete="off"></label>
+      <label>Our SKU <input name="sku" maxlength="80" placeholder="optional" autocomplete="off"></label>
+      <label>Supplier's part no. <input name="supplier_sku" maxlength="80" autocomplete="off"></label>
+      <label>Unit price (from the PI) <input name="unit_cost" type="number" step="0.0001" min="0"></label>
+      <label>Currency <select name="cost_currency"><% ['CNY', 'USD', 'EUR'].forEach(c => { %><option <%= c === cur ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+      <label class="wide">Description <input name="description" maxlength="1000" autocomplete="off"></label>
+      <div class="actions"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn primary">Create product &amp; link</button></div>
+    </form>
+  </dialog>
+  <script>
+  (function () {
+    const lines = <%- JSON.stringify((pi.lines || []).map(l => ({ d: l.description || '', s: l.sku || '', p: l.unit_price ?? '' }))).replace(/</g, '\\u003c') %>;
+    const d = document.getElementById('spaddp'), f = document.getElementById('spaddpform');
+    document.querySelectorAll('#supplier-pi [data-addprod]').forEach(b => b.addEventListener('click', () => {
+      const i = Number(b.dataset.addprod), l = lines[i] || {};
+      f.action = '/admin/purchasing/<%= po.id %>/pi/<%= pi.id %>/line/' + i + '/product';
+      f.reset(); f.name.value = l.d; f.supplier_sku.value = l.s; f.unit_cost.value = l.p; f.description.value = l.d; d.showModal(); f.name.focus();
+    }));
+  })();
+  </script>
+  <% } %>
   <% if (pi) { %>
   <% if (typeof aiOn !== 'undefined' && aiOn) { %>
   <dialog id="spiai" class="bookdlg">
