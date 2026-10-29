@@ -161,7 +161,7 @@ r.post('/:id/unlink', (req, res) => linkPo(req, res, req.params.id, null));
 // ---- one PO ----
 async function load(id) {
   if (!isId(id)) return null;
-  const { data: po } = await admin.from('supplier_pos').select('*, suppliers(*), orders(id, order_no, organizations(name))').eq('id', id).maybeSingle();
+  const { data: po } = await admin.from('supplier_pos').select('*, suppliers(*), orders(id, order_no, status, organizations(name))').eq('id', id).maybeSingle();
   return po;
 }
 
