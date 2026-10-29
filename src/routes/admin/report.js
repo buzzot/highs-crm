@@ -1,7 +1,9 @@
 import { Router } from '../../lib/router.js';
 import { admin } from '../../lib/supabase.js';
 import { levelOf, canAssign } from '../../lib/access.js';
-import { defaultCurrency } from '../../lib/currency.js';
+import { defaultCurrency, sumIn } from '../../lib/currency.js';
+import { applyCashProfit } from '../../lib/order-profit.js';
+import { monthBuckets, niceScale, compact } from '../../lib/dashboard.js';
 import { getSettings, notFound } from '../../lib/util.js';
 import { buildReport } from '../../lib/order-report.js';
 import { buildOrderArchive } from '../../lib/order-archive-db.js';
@@ -43,7 +45,17 @@ r.get('/', async (req, res) => {
   const { data: costs } = shipIds.length ? await admin.from('freight_costs').select('shipment_id, amount, currency, description, paid, paid_at, created_at').in('shipment_id', shipIds) : { data: [] };
   const ownBy = new Map((own.data || []).map(o => [o.id, o]));
   const rep = buildReport({ orders: orders.map(o => ({ ...o, ...(ownBy.get(o.id) || {}) })), pays: pays.data || [], pos: pos.data || [], supPays, ships: ships.data || [], costs: costs || [], staff: staff.data || [], settings, cur });
-  res.render('admin/report/index', { title: 'Report', ...rep, status, level: levelOf(req.user) });
+  // financial performance: all non-cancelled orders (not narrowed by the list filters), same profit rule as the Orders list
+  const PERIODS = { 30: 'Last 30 days', 90: 'Last 90 days', 365: 'Last 12 months' };
+  const period = PERIODS[req.query.fp] ? Number(req.query.fp) : 30, since = new Date(Date.now() - period * 864e5).toISOString();
+  const { data: allOrders } = await admin.from('order_overview').select('*').order('created_at', { ascending: false });
+  const live = (allOrders || []).filter(o => o.status !== 'cancelled');
+  await applyCashProfit(live);
+  const inPeriod = live.filter(o => o.created_at >= since);
+  const months = monthBuckets(live.map(o => ({ date: o.created_at, revenue: sumIn(settings, cur, [[o.subtotal, o.currency]]), profit: sumIn(settings, cur, [[o.gross_profit, o.currency]]) })), 6);
+  const fin = { period, periods: PERIODS, months, scale: niceScale(Math.max(0, ...months.map(m => Math.max(m.revenue, m.profit)))), compact, orderCurs: [...new Set(live.map(o => o.currency).filter(Boolean))],
+    kpi: { revenue: sumIn(settings, cur, inPeriod.map(o => [o.subtotal, o.currency])), profit: sumIn(settings, cur, inPeriod.map(o => [o.gross_profit, o.currency])), cashOnly: inPeriod.filter(o => !(Number(o.subtotal) > 0) && Number(o.gross_profit) !== 0).length } };
+  res.render('admin/report/index', { title: 'Report', ...rep, status, fin, level: levelOf(req.user) });
 });
 
 const sendZip = (res, name, buffer) => {

@@ -1,0 +1,37 @@
+<% const mon = (v, c) => fmt.money(v, c || cur, 0); const defCur = cur; const hasChart = fin.months.some(m => m.revenue > 0 || m.profit !== 0); const months = fin.months, kpi = fin.kpi, scale = fin.scale, orderCurs = fin.orderCurs, period = fin.period, periods = fin.periods;
+   const margin = kpi.revenue > 0 ? kpi.profit / kpi.revenue * 100 : null; %>
+<section class="db-card db-fin2" aria-labelledby="h-fin">
+  <div class="db-ch"><h2 id="h-fin">Financial performance</h2>
+    <span class="db-meta"><%= defCur %> · last 6 months</span>
+    <form method="get" class="db-period db-finperiod"><% Object.entries(query || {}).filter(e => e[0] !== 'fp' && e[1]).forEach(e => { %><input type="hidden" name="<%= e[0] %>" value="<%= e[1] %>"><% }) %><label class="visually-hidden" for="fp">Period</label><select id="fp" name="fp" onchange="this.form.submit()"><% Object.keys(periods).forEach(k => { %><option value="<%= k %>" <%= Number(k) === period ? 'selected' : '' %>><%= periods[k] %></option><% }) %></select></form>
+    <span class="db-info" tabindex="0" role="note" aria-label="How these figures are calculated">i
+      <span class="tip">Revenue is the order subtotal and gross profit is the order profit, grouped by the month the order was created. <%= orderCurs.filter(c => c !== defCur).length ? 'Orders in ' + orderCurs.filter(c => c !== defCur).join(', ') + ' are converted with the rates in Settings. ' : '' %>Logistics-only orders have no sales value: their profit is cash received minus costs, so gross profit can appear without revenue.<%= kpi.cashOnly ? ' ' + kpi.cashOnly + ' such order' + (kpi.cashOnly === 1 ? ' is' : 's are') + ' in the selected period.' : '' %></span></span></div>
+  <% if (!hasChart) { %>
+    <p class="db-empty">No financial activity yet.<br><span class="muted">The chart appears once orders are created.</span></p>
+  <% } else { %>
+  <div class="fin-body">
+    <dl class="fin-sum">
+      <div><dt>Revenue</dt><dd><%= mon(kpi.revenue) %></dd><dd class="sub"><%= periods[period] %></dd></div>
+      <div><dt>Gross profit</dt><dd class="pro"><%= mon(kpi.profit) %></dd><dd class="sub"><%= margin != null ? margin.toFixed(1) + '% of revenue' : 'No sales revenue' %></dd></div>
+    </dl>
+    <div class="fin-chart">
+      <% const W = 720, H = 210, L = 44, B = 26, T = 8, ph = H - B - T, bw = (W - L) / months.length; %>
+      <svg class="db-chart" viewBox="0 0 <%= W %> <%= H %>" role="img" aria-label="Revenue and gross profit by month in <%= defCur %>">
+        <% scale.ticks.forEach(t => { const y = T + ph - (t / scale.top) * ph; %>
+          <line x1="<%= L %>" x2="<%= W %>" y1="<%= y %>" y2="<%= y %>" class="grid<%= t === 0 ? ' base' : '' %>"/>
+          <text x="<%= L - 8 %>" y="<%= y + 4 %>" class="ax" text-anchor="end"><%= fin.compact(t) %></text>
+        <% }) %>
+        <% months.forEach((m, i) => { const x = L + i * bw, w = Math.min(26, bw * 0.24), hr = Math.max(0, m.revenue) / scale.top * ph, hp = Math.max(0, m.profit) / scale.top * ph, cx = x + bw / 2; %>
+          <g class="mg"><title><%= m.long %>&#10;Revenue: <%= mon(m.revenue) %>&#10;Gross profit: <%= mon(m.profit) %>&#10;<%= m.orders %> order<%= m.orders === 1 ? '' : 's' %></title>
+            <rect x="<%= x %>" y="0" width="<%= bw %>" height="<%= H - B %>" class="hit"/>
+            <rect x="<%= cx - w - 2 %>" y="<%= T + ph - Math.max(hr, m.revenue > 0 ? 2 : 0) %>" width="<%= w %>" height="<%= Math.max(hr, m.revenue > 0 ? 2 : 0) %>" class="rev" rx="3"/>
+            <rect x="<%= cx + 2 %>" y="<%= T + ph - Math.max(hp, m.profit > 0 ? 2 : 0) %>" width="<%= w %>" height="<%= Math.max(hp, m.profit > 0 ? 2 : 0) %>" class="pro" rx="3"/>
+            <text x="<%= cx %>" y="<%= H - 8 %>" class="ax" text-anchor="middle"><%= m.label %></text>
+          </g>
+        <% }) %>
+      </svg>
+      <p class="legend"><span class="sw rev"></span>Revenue <span class="sw pro"></span>Gross profit</p>
+    </div>
+  </div>
+  <% } %>
+</section>

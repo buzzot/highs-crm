@@ -8,6 +8,7 @@ import { levelOf, isManager, canDelete, canAssign, guardFor, LEVEL_LABEL } from 
 import { defaultCurrency, sumIn } from '../../lib/currency.js';
 import { getSettings } from '../../lib/util.js';
 import { applyCashProfit } from '../../lib/order-profit.js';
+import { needsAttention, paymentsOpen, shipmentFlag, statusSummary, groupCounts, isOpenOrder, groupActivity, elapsed } from '../../lib/dashboard.js';
 import clients from './clients.js';
 import suppliers from './suppliers.js';
 import products from './products.js';
@@ -103,45 +104,70 @@ r.post('/owner', async (req, res) => {
 });
 
 r.get('/', async (req, res) => {
-  const since30 = new Date(Date.now() - 30 * 864e5).toISOString();
+  const now = Date.now(), today = new Date(now).toISOString().slice(0, 10);
   const [settings, defCur] = await Promise.all([getSettings(admin), defaultCurrency(admin)]);
-  const [reqs, orders, shipments, activity, clientsCount, exportGaps, draftQuotes] = await Promise.all([
-    admin.from('requests').select('id, ref, title, status, created_at, organizations(name)').order('created_at', { ascending: false }).limit(8),
+  // a table that does not exist yet (migration not run) must not break the dashboard
+  const safe = async q => { try { const x = await q; return x.error ? { data: [], count: 0 } : x; } catch { return { data: [], count: 0 }; } };
+  const [reqs, orders, shipments, activity, exportGaps, pos, pis, pays, quotes, rfqs, rfqReplies] = await Promise.all([
+    admin.from('requests').select('id, ref, title, status, created_at, owner_id, organizations(name)').in('status', ['new', 'reviewing']).order('created_at', { ascending: false }).limit(300),
     admin.from('order_overview').select('*').order('created_at', { ascending: false }),
-    admin.from('shipments').select('id, status, eta, mode, tracking_no, orders(order_no, organizations(name))').not('status', 'in', '("delivered")').order('eta').limit(8),
-    (isManager(req.user) ? admin.from('activity_log').select('*, profiles(full_name, email)').eq('actor_id', req.user.id) : admin.from('activity_log').select('*, profiles(full_name, email)')).order('created_at', { ascending: false }).limit(10),
-    admin.from('organizations').select('id', { count: 'exact', head: true }).eq('active', true),
+    admin.from('shipments').select('id, status, eta, ata, mode, tracking_no, owner_id, orders(order_no, owner_id, organizations(name))').not('status', 'in', '("delivered")').order('eta').limit(300),
+    (isManager(req.user) ? admin.from('activity_log').select('*, profiles(full_name, email)').eq('actor_id', req.user.id) : admin.from('activity_log').select('*, profiles(full_name, email)')).order('created_at', { ascending: false }).limit(40),
     // shipped without a government export declaration number on file
-    admin.from('shipments').select('id, status, orders(order_no)').eq('export_official', true).is('export_declaration_no', null)
+    admin.from('shipments').select('id, status, owner_id, orders(order_no, owner_id)').eq('export_official', true).is('export_declaration_no', null)
       .in('status', ['departed', 'arrived', 'customs', 'delivered']),
-    admin.from('quotes').select('id', { count: 'exact', head: true }).eq('status', 'draft'),
+    safe(admin.from('supplier_pos').select('id, ref, status, currency, total, sent_at, last_reply_at, created_by, orders(owner_id), suppliers(name)').in('status', ['sent', 'replied', 'confirmed']).order('created_at', { ascending: false }).limit(1000)),
+    safe(admin.from('supplier_pis').select('id, po_id, status, currency, total, created_at').limit(400)),
+    safe(admin.from('supplier_payments').select('po_id, amount, currency').limit(1000)),
+    safe(admin.from('quotes').select('id, status, valid_until, owner_id, requests(ref, organizations(name))').eq('status', 'sent').limit(100)),
+    safe(admin.from('rfqs').select('id, ref, title, deadline, owner_id').eq('status', 'open').limit(100)),
+    safe(admin.from('rfq_responses').select('rfq_id, rfqs(id, ref, title, owner_id)').eq('status', 'parsed').limit(100)),
   ]);
   const all = orders.data || [];
-  await applyCashProfit(all);   // same profit rule as the Orders list
-  const open = all.filter(o => !['delivered', 'closed', 'cancelled'].includes(o.status));
-  const byStatus = {};
-  open.forEach(o => { byStatus[o.status] = (byStatus[o.status] || 0) + 1; });
-  const recent = all.filter(o => o.created_at >= since30 && o.status !== 'cancelled');
-  const kpi = {
-    clients: clientsCount.count || 0,
-    openRequests: (reqs.data || []).filter(q => ['new', 'reviewing'].includes(q.status)).length,
-    openOrders: open.length,
-    revenue30: sumIn(settings, defCur, recent.map(o => [o.subtotal, o.currency])),
-    profit30: sumIn(settings, defCur, recent.map(o => [o.gross_profit, o.currency])),
-    lowMargin: all.filter(o => o.margin_pct != null && o.margin_pct < 20 && !['closed', 'cancelled'].includes(o.status)).length,
-    draftQuotes: draftQuotes.count || 0,
-  };
-  // revenue & profit by month, last 6 months
-  const months = [];
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - i);
-    months.push({ key: d.toISOString().slice(0, 7), label: d.toLocaleString('en-GB', { month: 'short' }), revenue: 0, profit: 0 });
-  }
-  all.filter(o => o.status !== 'cancelled').forEach(o => {
-    const m = months.find(x => x.key === String(o.created_at).slice(0, 7));
-    if (m) { m.revenue += sumIn(settings, defCur, [[o.subtotal, o.currency]]); m.profit += sumIn(settings, defCur, [[o.gross_profit, o.currency]]); }
+  await applyCashProfit(all);   // same profit rule as the Orders list (logistics-only orders: cash profit)
+  const open = all.filter(isOpenOrder);
+  const me = req.user.id, mgr = isManager(req.user);
+  // a supplier PO belongs to the owner of its order, else to whoever created it (there is no owner column on supplier POs)
+  const poMine = p => (p.orders?.owner_id || p.created_by) === me;
+  const poList = (pos.data || []).filter(p => !mgr || poMine(p));       // a Manager only works with their own supplier POs
+  const poIds = new Set(poList.map(p => p.id));
+  const piList = (pis.data || []).filter(p => poIds.has(p.po_id)), payList = (pays.data || []).filter(p => poIds.has(p.po_id));
+  // outstanding supplier money = approved PI totals − payments recorded, per PO, converted with the Settings rates
+  const owing = paymentsOpen({ pis: piList, pays: payList, pos: poList }).filter(x => x.open > 0.004);
+  const rfqReplyMap = new Map();
+  (rfqReplies.data || []).forEach(x => { const k = x.rfq_id; const e = rfqReplyMap.get(k) || { ...(x.rfqs || {}), n: 0 }; e.n++; rfqReplyMap.set(k, e); });
+  const reqList = reqs.data || [];
+  const attentionAll = needsAttention({
+    now, today, pos: poList, pis: piList, pays: payList, requests: reqList, quotes: quotes.data || [], rfqs: rfqs.data || [],
+    rfqReplies: [...rfqReplyMap.values()], shipments: shipments.data || [],
+    exportGaps: exportGaps.data || [], lowMargin: all.filter(o => o.margin_pct != null && o.margin_pct < 20 && !['closed', 'cancelled', 'delivered'].includes(o.status)),
   });
-  res.render('admin/dashboard', { title: 'Dashboard', kpi, byStatus, requests: reqs.data || [], shipments: shipments.data || [], activity: activity.data || [], orders: open.slice(0, 8), months, exportGaps: exportGaps.data || [] });
+  // My tasks = rows on records I own (orders, requests, quotes, RFQs, shipments by their owner; supplier POs as above). A Manager only ever sees their own.
+  const scope = mgr || req.query.scope === 'mine' ? 'mine' : 'all';
+  const mine = attentionAll.filter(a => a.owner === me);
+  const attention = scope === 'mine' ? mine : attentionAll;
+  const inTransit = (shipments.data || []).filter(s => ['picked_up', 'departed'].includes(s.status));
+  const sCount = st => poList.filter(p => p.status === st).length;
+  const kpi = {
+    openOrders: open.length, shippingOrders: open.filter(o => ['shipped', 'in_transit', 'customs'].includes(o.status)).length,
+    toPrice: reqList.length,
+    rfqAction: (rfqs.data || []).length, rfqParsed: rfqReplyMap.size,
+    poWait: sCount('sent'), poReplied: sCount('replied'),
+    piPending: piList.filter(p => p.status === 'draft').length,        // draft PIs of live supplier POs
+    owingN: owing.length, owingTotal: sumIn(settings, defCur, owing.map(x => [x.open, x.currency])), owingCurs: [...new Set(owing.map(x => x.currency))],
+    inTransit: inTransit.length,
+    arriving: inTransit.filter(s => shipmentFlag(s, today)?.kind === 'soon').length,        // a subset of in transit: ETA within 7 days, not yet arrived
+    lowMargin: all.filter(o => o.margin_pct != null && o.margin_pct < 20 && !['closed', 'cancelled'].includes(o.status)).length,
+  };
+  const shipRows = (shipments.data || []).map(s => ({ ...s, flag: shipmentFlag(s, today) }))
+    .sort((a, b) => ({ late: 0, soon: 1, notrack: 2 }[a.flag?.kind] ?? 3) - ({ late: 0, soon: 1, notrack: 2 }[b.flag?.kind] ?? 3));
+  res.render('admin/dashboard', {
+    title: 'Dashboard', kpi, today, attention,
+    groups: groupCounts(open, all), summary: statusSummary(open),
+    taskScope: scope, scopeCounts: { mine: mine.length, all: attentionAll.length }, canSwitch: !mgr, generatedAt: new Date(now).toISOString(),
+    shipments: shipRows.slice(0, 6), shipTotal: shipRows.length, activity: groupActivity(activity.data || [], 8),
+    orders: open.slice(0, 8), openTotal: open.length, ago: t => elapsed(t, now), 
+  });
 });
 
 // ---- Email check (admin): settings, Resend domain, database, test email ----

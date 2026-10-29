@@ -1,114 +1,120 @@
 <%- include('../partials/head') %>
-<div class="pagehead">
-  <h1>Dashboard</h1>
-  <div class="actions"><a class="btn" href="/admin/orders/new">+ Order</a><a class="btn" href="/admin/pricing/quotes/new">+ Quote</a><a class="btn primary" href="/admin/clients/new">+ Client</a></div>
-</div>
-
-<div class="kpis six">
-  <a class="kpi" href="/admin/clients"><span class="n"><%= kpi.clients %></span><span class="l">Active clients</span></a>
-  <a class="kpi" href="/admin/sourcing"><span class="n"><%= kpi.openRequests %></span><span class="l">New requests</span></a>
-  <a class="kpi" href="/admin/pricing?status=draft"><span class="n"><%= kpi.draftQuotes %></span><span class="l">Draft quotes</span></a>
-  <a class="kpi" href="/admin/orders"><span class="n"><%= kpi.openOrders %></span><span class="l">Open orders</span></a>
-  <div class="kpi"><span class="n"><%= fmt.money(kpi.revenue30, defCur, 0) %></span><span class="l">Revenue · 30 days</span></div>
-  <div class="kpi"><span class="n"><%= fmt.money(kpi.profit30, defCur, 0) %></span><span class="l">Gross profit · 30 days</span></div>
-</div>
-
-<% if (kpi.lowMargin || exportGaps.length) { %>
-<div class="alerts">
-  <% if (kpi.lowMargin) { %><a class="alert warn" href="/admin/orders">⚠ <%= kpi.lowMargin %> open order(s) below the 20% minimum margin</a><% } %>
-  <% if (exportGaps.length) { %><a class="alert warn" href="/admin/logistics">⚠ <%= exportGaps.length %> shipment(s) left China without an export declaration number on file: <%= exportGaps.map(g => g.orders?.order_no).filter(Boolean).join(', ') %></a><% } %>
-</div>
-<% } %>
-
-<div class="grid2">
-  <div class="card">
-    <h2>Open orders by status</h2>
-    <% const steps = ['confirmed','deposit_paid','in_production','qc','packed','shipped','in_transit','customs']; const maxN = Math.max(1, ...steps.map(s => byStatus[s] || 0)); %>
-    <div class="bars">
-      <% steps.forEach(s => { %>
-        <a class="bar" href="/admin/orders?status=<%= s %>">
-          <span class="bl"><%= fmt.status(s) %></span>
-          <span class="bt"><span class="bf" style="width: <%= ((byStatus[s] || 0) / maxN * 100).toFixed(1) %>%"></span></span>
-          <span class="bn"><%= byStatus[s] || 0 %></span>
-        </a>
-      <% }) %>
-    </div>
+<% const mon = (v, c) => fmt.money(v, c || defCur, 0); const trunc = (t, n) => { t = String(t || ''); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
+   const LV = { critical: 'Critical', overdue: 'Overdue', review: 'Review', pending: 'Pending' };
+   const nCrit = attention.filter(a => a.level === 'critical').length, nOver = attention.filter(a => a.level === 'overdue').length;
+   const shownAttn = attention.slice(0, 7), moreAttn = attention.slice(7);
+   %>
+<div class="db">
+<header class="db-head">
+  <div><h1>Dashboard</h1><p class="db-sub">Live snapshot · <time id="gen" datetime="<%= generatedAt %>"><%= fmt.date(today) %></time> <a class="db-refresh" href="/admin" title="Reload the latest data">↻ Refresh</a></p></div>
+  <div class="db-tools">
+    <a class="db-link" href="/admin/pricing/quotes/new">New quote</a>
+    <a class="db-link" href="/admin/clients/new">New client</a>
+    <a class="btn primary" href="/admin/orders/new">+ New order</a>
   </div>
-  <div class="card">
-    <h2>Revenue & gross profit · 6 months</h2>
-    <% const maxR = Math.max(1, ...months.map(m => Math.max(m.revenue, m.profit))); %>
-    <div class="cols">
-      <% months.forEach(m => { %>
-        <div class="col" title="<%= m.label %>: revenue <%= fmt.money(m.revenue, defCur, 0) %>, profit <%= fmt.money(m.profit, defCur, 0) %>">
-          <div class="stack">
-            <span class="rev" style="height: <%= (m.revenue / maxR * 100).toFixed(1) %>%"></span>
-            <span class="pro" style="height: <%= (Math.max(0, m.profit) / maxR * 100).toFixed(1) %>%"></span>
-          </div>
-          <span class="cl"><%= m.label %></span>
-        </div>
-      <% }) %>
-    </div>
-    <p class="legend small"><span class="sw rev"></span> Revenue <span class="sw pro"></span> Gross profit</p>
-  </div>
-</div>
+</header>
 
-<div class="grid2">
-  <div class="card">
-    <h2>Orders in progress <a class="more" href="/admin/orders">all →</a></h2>
-    <% if (!orders.length) { %><p class="muted">No open orders.</p><% } %>
-    <table class="tbl"><tbody>
-      <% orders.forEach(o => { %>
-        <tr>
-          <td><a href="/admin/orders/<%= o.id %>"><%= o.order_no %></a></td>
-          <td><%= o.client_name %></td>
-          <td><span class="pill <%= o.status %>"><%= fmt.status(o.status) %></span></td>
-          <td class="right"><%= fmt.money(o.subtotal, o.currency, 0) %></td>
-          <td class="right <%= o.margin_pct != null && o.margin_pct < 20 ? 'bad' : '' %>"><%= fmt.pct(o.margin_pct) %></td>
-        </tr>
-      <% }) %>
-    </tbody></table>
-  </div>
-  <div class="card">
-    <h2>Latest requests <a class="more" href="/admin/sourcing">all →</a></h2>
-    <% if (!requests.length) { %><p class="muted">No requests yet.</p><% } %>
-    <table class="tbl"><tbody>
-      <% requests.forEach(q => { %>
-        <tr>
-          <td><a href="/admin/sourcing/<%= q.id %>"><%= q.ref %></a></td>
-          <td><%= q.title %><div class="muted small"><%= q.organizations?.name %></div></td>
-          <td><span class="pill <%= q.status %>"><%= fmt.status(q.status) %></span></td>
-          <td class="muted small"><%= fmt.date(q.created_at) %></td>
-        </tr>
-      <% }) %>
-    </tbody></table>
-  </div>
-</div>
+<section class="db-kpis" aria-label="Key figures">
+  <a class="db-kpi" href="/admin/orders"><span class="l">Open orders</span><span class="n"><%= kpi.openOrders %></span><span class="s"><%= kpi.shippingOrders %> shipped or in transit</span></a>
+  <a class="db-kpi" href="/admin/sourcing"><span class="l">Requests to quote<% if (kpi.toPrice) { %><i class="dotk warn" title="Needs action"></i><% } %></span><span class="n"><%= kpi.toPrice %></span><span class="s"><%= kpi.rfqParsed %> RFQ <%= kpi.rfqParsed === 1 ? 'reply' : 'replies' %> to review</span></a>
+  <a class="db-kpi" href="/admin/purchasing"><span class="l">POs awaiting supplier<% if (kpi.poReplied) { %><i class="dotk warn" title="Replies to review"></i><% } %></span><span class="n"><%= kpi.poWait + kpi.poReplied %></span><span class="s"><%= kpi.poWait %> waiting · <%= kpi.poReplied %> replied</span></a>
+  <a class="db-kpi" href="/admin/purchasing"><span class="l">PIs to review<% if (kpi.piPending) { %><i class="dotk warn" title="Needs action"></i><% } %></span><span class="n"><%= kpi.piPending %></span><span class="s"><%= kpi.piPending ? 'Draft, not yet approved' : 'All approved' %></span></a>
+  <a class="db-kpi" href="/admin/purchasing"><span class="l">Owed to suppliers</span><span class="n"><%= kpi.owingN ? mon(kpi.owingTotal) : mon(0) %></span><span class="s"><%= kpi.owingN %> approved PI<%= kpi.owingN === 1 ? '' : 's' %> unpaid</span></a>
+  <a class="db-kpi" href="/admin/logistics"><span class="l">In transit</span><span class="n"><%= kpi.inTransit %></span><span class="s"><%= kpi.arriving %> arriving this week</span></a>
+</section>
 
-<div class="grid2">
-  <div class="card">
-    <h2>Shipments on the move <a class="more" href="/admin/logistics">all →</a></h2>
-    <% if (!shipments.length) { %><p class="muted">Nothing in transit.</p><% } %>
-    <table class="tbl"><tbody>
+<div class="db-main">
+<div class="db-col">
+  <section class="db-card s-act" aria-labelledby="h-action">
+    <div class="db-ch"><h2 id="h-action">Action center</h2>
+      <% if (nCrit) { %><span class="chip crit"><%= nCrit %> critical</span><% } %><% if (nOver) { %><span class="chip over"><%= nOver %> overdue</span><% } %>
+      <% if (!nCrit && !nOver && attention.length) { %><span class="chip"><%= attention.length %> open</span><% } %>
+      <% if (canSwitch) { %><nav class="db-seg" aria-label="Task owner"><a href="/admin?scope=mine" class="<%= taskScope === 'mine' ? 'on' : '' %>" <%= taskScope === 'mine' ? 'aria-current=true' : '' %>>My tasks <b><%= scopeCounts.mine %></b></a><a href="/admin" class="<%= taskScope === 'all' ? 'on' : '' %>" <%= taskScope === 'all' ? 'aria-current=true' : '' %>>All tasks <b><%= scopeCounts.all %></b></a></nav><% } %></div>
+    <% if (!attention.length) { %>
+      <p class="db-empty"><span class="okmark">✓</span> <strong>All caught up.</strong> <%= taskScope === 'mine' ? 'Nothing is waiting on your records.' : 'Nothing is waiting for you.' %><br><span class="muted">Open <a href="/admin/sourcing">Requests</a> or <a href="/admin/rfqs">RFQs</a> to start something new.</span></p>
+    <% } else { %>
+    <ul class="db-act2">
+      <% const row = a => { %>
+        <li class="lv-<%= a.level %>"><a href="<%= a.href %>">
+          <span class="lvl"><%= LV[a.level] %></span>
+          <span class="main"><span class="t"><b><%= a.ref %></b><% if (a.party) { %> <span class="muted">· <%= trunc(a.party, 30) %></span><% } %></span><span class="a"><%= a.action %></span></span>
+          <span class="w"><%= a.when %><span class="cta"><%= a.cta %> →</span></span></a></li>
+      <% }; shownAttn.forEach(row) %>
+    </ul>
+    <% if (moreAttn.length) { %>
+      <details class="db-moreact"><summary>Show <%= moreAttn.length %> more</summary><ul class="db-act2"><% moreAttn.forEach(row) %></ul></details>
+    <% } %>
+    <% } %>
+  </section>
+
+  <section class="db-card s-ship" aria-labelledby="h-ship">
+    <div class="db-ch"><h2 id="h-ship">Shipments</h2><a class="more" href="/admin/logistics">View all<%= shipTotal > shipments.length ? ` (${shipTotal})` : '' %></a></div>
+    <% if (!shipments.length) { %>
+      <p class="db-empty">No shipments on the move.<br><a href="/admin/logistics">Open Logistics</a></p>
+    <% } else { %>
+    <div class="tblwrap"><table class="db-tbl">
+      <thead><tr><th>Order</th><th class="c-cust">Customer</th><th>Status</th><th>ETA</th></tr></thead><tbody>
       <% shipments.forEach(s => { %>
         <tr>
-          <td><a href="/admin/logistics/shipments/<%= s.id %>"><%= s.orders?.order_no %></a><div class="muted small"><%= s.orders?.organizations?.name %></div></td>
-          <td><%= fmt.status(s.mode).toUpperCase() %></td>
+          <td><a class="ref" href="/admin/logistics/shipments/<%= s.id %>"><%= s.orders?.order_no || 'Shipment' %></a><% if (s.mode) { %><div class="muted small"><%= fmt.status(s.mode).toUpperCase() %></div><% } %><div class="mob muted small"><%= trunc(s.orders?.organizations?.name, 24) %></div></td>
+          <td class="clip c-cust" title="<%= s.orders?.organizations?.name %>"><%= s.orders?.organizations?.name || '—' %></td>
           <td><span class="pill <%= s.status %>"><%= fmt.status(s.status) %></span></td>
-          <td class="muted small">ETA <%= fmt.date(s.eta) %></td>
+          <td class="nowrap"><%= s.eta ? fmt.date(s.eta) : '—' %>
+            <% if (s.flag?.kind === 'late') { %><span class="flag bad">Late <%= s.flag.days %> d</span>
+            <% } else if (s.flag?.kind === 'soon') { %><span class="flag warn">In <%= s.flag.days %> d</span>
+            <% } else if (s.flag?.kind === 'notrack') { %><span class="flag info">No tracking</span><% } %></td>
         </tr>
       <% }) %>
-    </tbody></table>
-  </div>
-  <div class="card">
-    <h2>Recent activity</h2>
-    <ul class="timeline">
+      </tbody></table></div>
+    <% } %>
+  </section>
+</div>
+<div class="db-col">
+  <section class="db-card s-ord" aria-labelledby="h-orders">
+    <div class="db-ch"><h2 id="h-orders">Active orders</h2>
+      <% if (openTotal) { %><span class="db-meta"><%= groups.production %> in production · <%= groups.shipping %> shipping</span><% } %>
+      <a class="more" href="/admin/orders">View all<%= openTotal > 6 ? ` (${openTotal})` : '' %></a></div>
+    <% if (!orders.length) { %>
+      <p class="db-empty">No active orders.<br><a href="/admin/orders/new">Create an order</a> <span class="muted">or accept a quote to start one.</span></p>
+    <% } else { %>
+    <div class="tblwrap"><table class="db-tbl">
+      <thead><tr><th>Order</th><th class="c-cust">Customer</th><th>Status</th><th class="r">Value</th><th class="c-exp">Expected</th><th class="c-upd">Updated</th></tr></thead>
+      <tbody>
+      <% orders.slice(0, 6).forEach(o => { const exp = o.latest_eta || o.expected_ship_date; %>
+        <tr>
+          <td><a class="ref" href="/admin/orders/<%= o.id %>"><%= o.order_no %></a><div class="mob muted small"><%= trunc(o.client_name, 26) %></div></td>
+          <td class="clip c-cust" title="<%= o.client_name %>"><%= o.client_name %></td>
+          <td><span class="pill <%= o.status %>"><%= fmt.status(o.status) %></span></td>
+          <td class="r"><%= Number(o.subtotal) > 0 ? mon(o.subtotal, o.currency) : '—' %></td>
+          <td class="nowrap c-exp <%= exp && exp < today && ['shipped','in_transit','customs'].includes(o.status) ? 'bad' : '' %>"><%= exp ? fmt.date(exp) : '—' %></td>
+          <td class="muted nowrap c-upd"><%= o.updated_at ? ago(o.updated_at) : '—' %></td>
+        </tr>
+      <% }) %>
+      </tbody></table></div>
+    <% } %>
+  </section>
+
+  <section class="db-card s-feed" aria-labelledby="h-act">
+    <div class="db-ch"><h2 id="h-act">Recent activity</h2></div>
+    <% if (!activity.length) { %><p class="db-empty">No activity yet.</p><% } else { %>
+    <ul class="db-feed">
       <% activity.forEach(e => { %>
-        <li><span class="t"><%= fmt.datetime(e.created_at) %></span>
-          <a href="/admin/<%= e.entity_type === 'request' ? 'sourcing' : e.entity_type === 'order' ? 'orders' : e.entity_type === 'shipment' ? 'logistics/shipments' : e.entity_type + 's' %>/<%= e.entity_id %>"><%= e.entity_type %></a>
-          <%= fmt.status(e.action) %><% if (e.detail?.note) { %> — <%= e.detail.note %><% } %>
-          <span class="muted small">· <%= e.profiles?.full_name || e.profiles?.email || 'system' %></span></li>
+        <li><span class="a"><% if (e.href) { %><a href="<%= e.href %>"><%= e.text %></a><% } else { %><%= e.text %><% } %><%= e.n > 1 ? ` ×${e.n}` : '' %><% if (e.record) { %><span class="muted"> · <%= e.record %></span><% } %></span>
+          <span class="m"><%= e.who || 'System' %> · <%= ago(e.at) %></span></li>
       <% }) %>
     </ul>
-  </div>
+    <% } %>
+  </section>
 </div>
+</div>
+</div>
+<script>
+(function () {
+  var t = document.getElementById('gen');
+  function stamp() { try { t.textContent = 'updated ' + new Date(t.getAttribute('datetime')).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch (e) {} }
+  stamp();
+  // keep supplier replies and task states fresh: reload every 5 minutes while the tab is visible and nothing is being typed
+  setInterval(function () { if (!document.hidden && !/INPUT|SELECT|TEXTAREA/.test((document.activeElement || {}).tagName || '')) location.reload(); }, 300000);
+})();
+</script>
 <%- include('../partials/foot') %>

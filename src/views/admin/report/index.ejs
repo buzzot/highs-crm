@@ -45,4 +45,11 @@
   </div>
   <p class="muted small">Income = confirmed client payments (faded = waiting for confirmation, not in the balance). Expenses = payments recorded to the supplier (or, until recorded, the supplier orders; faded = estimate from the order cost) plus logistics costs. Balance = income − expenses.</p>
 </div>
+<details class="db db-fold" id="finfold" open>
+  <summary><span class="chev" aria-hidden="true"></span>Financial performance <span class="muted small">· revenue and gross profit, last 6 months</span></summary>
+  <%- include('../../partials/finance_perf') %>
+</details>
+<script>
+(function () { var d = document.getElementById('finfold'); try { if (localStorage.getItem('finfold') === 'closed') d.open = false; d.addEventListener('toggle', function () { localStorage.setItem('finfold', d.open ? 'open' : 'closed'); }); } catch (e) {} })();
+</script>
 <%- include('../../partials/foot') %>
