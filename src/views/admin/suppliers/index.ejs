@@ -1,62 +1,142 @@
 <%- include('../../partials/head') %>
 <%
-  const c = typeof counts !== 'undefined' ? counts : { all: suppliers.length };
-  const st = typeof status !== 'undefined' ? status : 'all';
-  const crm = typeof crmStatuses !== 'undefined' ? crmStatuses : {};
+  const c = counts, rel = typeof status !== 'undefined' ? status : '', crm = typeof crmStatuses !== 'undefined' ? crmStatuses : {};
   const td = typeof today !== 'undefined' ? today : new Date().toISOString().slice(0, 10);
-  const here = '/admin/suppliers' + (st !== 'all' || query.q ? '?' + new URLSearchParams(Object.fromEntries([['status', st !== 'all' ? st : ''], ['q', query.q || '']].filter(([, v]) => v))).toString() : '');
-  const tab = (key, label) => `<a href="/admin/suppliers?status=${key}${query.q ? '&q=' + encodeURIComponent(query.q) : ''}" class="${st === key ? 'on' : ''}">${label} <span>${c[key] || 0}</span></a>`;
+  const nFilters = (rel ? 1 : 0) + (query.portal ? 1 : 0), filtered = !!(query.q || nFilters);
+  // every link keeps the current search, filters, quick view and sort
+  const link = o => { const p = new URLSearchParams(Object.entries({ q: query.q, view: view === 'all' ? '' : view, status: rel, portal: query.portal, sort: sort === 'name' || (view === 'followup' && sort === 'followup') ? '' : sort, dir: dir === 'asc' ? '' : dir, ...o }).filter(e => e[1])); const x = p.toString(); return '/admin/suppliers' + (x ? '?' + x : ''); };
+  const th = (key, label, cls, tip) => { const on = sort === key, next = on && dir === 'asc' ? 'desc' : 'asc'; return `<th class="${cls || ''}" aria-sort="${on ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}"><a class="sortlnk${on ? ' on' : ''}" href="${link({ sort: key === 'name' && next === 'asc' ? '' : key, dir: next === 'asc' ? '' : next })}"${tip ? ' title="' + tip + '"' : ''}>${label}<i aria-hidden="true">${on ? (dir === 'asc' ? '▲' : '▼') : ''}</i></a></th>`; };
+  const vtab = (key, label, n, tip) => `<a href="${link({ view: key === 'all' ? '' : key })}" class="${view === key ? 'on' : ''}"${view === key ? ' aria-current="page"' : ''}${tip ? ' title="' + tip + '"' : ''}>${label} <span>${n}</span></a>`;
+  const here = link({});
+  const showRating = sort === 'rating', showLead = sort === 'lead';
+  const PORTAL = { active: ['ok', 'Active'], invited: ['warn', 'Invited'], expired: ['off', 'Invitation expired'], none: ['none', 'No access'] };
+  const PTIP = { active: 'Has signed up to the supplier portal', invited: 'Invitation sent — the supplier has not registered yet', expired: 'The invitation link expired before the supplier registered', none: 'No portal login — you manage this supplier yourself' };
+  const dueDays = d => Math.max(0, Math.round((Date.parse(td) - Date.parse(d)) / 864e5));
+  const EMPTY = { followup: ['No follow-ups are due.', 'Suppliers appear here when their follow-up date is today or earlier.'], invites: ['No outstanding invitations.', 'Suppliers appear here while an invitation is waiting for them to register, or after it has expired.'] };
 %>
-<div class="pagehead">
-  <div><h1>Suppliers</h1><p class="muted"><%= c.all %> suppliers<%= c.followup ? ' · ' + c.followup + ' follow-up' + (c.followup === 1 ? '' : 's') + ' due' : '' %></p></div>
+<div class="pagehead cl-head">
+  <div><h1>Suppliers <span class="cl-count" title="Total suppliers"><%= all %></span></h1><% if (all && !hasFollow) { %><p class="muted small">Add a follow-up date when logging an activity on a supplier and it shows up in “Follow-up due”.</p><% } %></div>
   <div class="actions"><a class="btn" href="/admin/suppliers/new?mode=manual">+ Enter manually</a><a class="btn primary" href="/admin/suppliers/new"><%- icon('mail') %> Invite supplier</a></div>
 </div>
 
-<div class="tabs2 crmtabs">
-  <%- tab('all', 'All') %>
-  <% Object.entries(crm).forEach(([k, l]) => { if (c[k] || st === k) { %><%- tab(k, l) %><% } }) %>
-  <% if (c.followup) { %><%- tab('followup', 'Follow-up due') %><% } %>
-</div>
+<nav class="sp-views" aria-label="Supplier views">
+  <%- vtab('all', 'All suppliers', c.all, 'Every supplier, whatever its relationship status') %>
+  <%- vtab('followup', 'Follow-up due', c.followup, 'Suppliers whose follow-up date is today or earlier') %>
+  <%- vtab('invites', 'Invitations', c.invites, 'Suppliers invited to the portal who have not registered yet (pending or expired)') %>
+</nav>
 
-<form class="filterbar" method="get">
-  <% if (st !== 'all') { %><input type="hidden" name="status" value="<%= st %>"><% } %>
-  <input name="q" value="<%= query.q || '' %>" placeholder="Search name, city, contact, email, products…">
-  <button class="btn">Search</button>
-  <% if (query.q) { %><a class="link small" href="/admin/suppliers<%= st !== 'all' ? '?status=' + st : '' %>">Clear</a><% } %>
-</form>
+<div class="card cl-card">
+  <form class="cl-bar" method="get" action="/admin/suppliers" role="search">
+    <input type="search" name="q" id="spq" value="<%= query.q %>" placeholder="Search name, location, contact, email, WeChat, products…" aria-label="Search suppliers" autocomplete="off">
+    <% if (view !== 'all') { %><input type="hidden" name="view" value="<%= view %>"><% } %>
+    <% if (sort !== 'name' && !(view === 'followup' && sort === 'followup')) { %><input type="hidden" name="sort" value="<%= sort %>"><% } %><% if (dir !== 'asc') { %><input type="hidden" name="dir" value="<%= dir %>"><% } %>
+    <details class="sp-pop sp-filters"><summary class="btn<%= nFilters ? ' active' : '' %>" aria-label="Filters<%= nFilters ? ', ' + nFilters + ' applied' : '' %>">Filters<% if (nFilters) { %><span class="sp-badge"><%= nFilters %></span><% } %></summary>
+      <div class="menu" role="group" aria-label="Filters">
+        <label>Relationship<select name="status" onchange="this.form.submit()"><option value="">Any relationship</option><% Object.entries(crm).forEach(([k, l]) => { %><option value="<%= k %>" <%= rel === k ? 'selected' : '' %>><%= l %> (<%= c[k] || 0 %>)</option><% }) %></select></label>
+        <label>Portal access<select name="portal" onchange="this.form.submit()" title="Portal access is separate from the relationship status"><option value="">Any portal access</option><% [['active', 'Portal active'], ['invited', 'Invited — awaiting registration'], ['expired', 'Invitation expired'], ['none', 'No portal access']].forEach(o => { %><option value="<%= o[0] %>" <%= query.portal === o[0] ? 'selected' : '' %>><%= o[1] %></option><% }) %></select></label>
+      </div>
+    </details>
+    <details class="sp-pop sp-cols"><summary class="btn" title="Show or hide the optional columns">Columns</summary>
+      <div class="menu"><label class="chk"><input type="checkbox" data-col="rating" <%= showRating ? 'checked' : '' %>> Rating</label><label class="chk"><input type="checkbox" data-col="lead" <%= showLead ? 'checked' : '' %>> Lead time</label></div>
+    </details>
+    <noscript><button class="btn" type="submit">Search</button></noscript>
+    <% if (filtered) { %><a class="cl-clear" href="<%= link({ q: '', status: '', portal: '' }) %>">Clear filters</a><% } %>
+  </form>
 
-<div class="card tablecard">
-  <table class="tbl">
-    <thead><tr><th>Supplier</th><th>Status</th><th>Location</th><th>Contact</th><th>Next follow-up</th><th>Rating</th><th class="right">Lead time</th><th class="right">Products</th><th class="right">Orders</th></tr></thead>
+  <% if (!all) { %>
+    <p class="cl-empty"><strong>No suppliers yet.</strong><br>Invite a supplier by email — they fill in their own company details — or enter one manually.<br><a class="btn primary small" href="/admin/suppliers/new">Invite supplier</a></p>
+  <% } else if (!total && !filtered && EMPTY[view]) { %>
+    <p class="cl-empty"><strong><%= EMPTY[view][0] %></strong><br><span class="muted"><%= EMPTY[view][1] %></span><br><a href="/admin/suppliers">Show all suppliers</a></p>
+  <% } else if (!total) { %>
+    <p class="cl-empty"><strong>No suppliers match.</strong><br><span class="muted">Try a different spelling, or</span> <a href="<%= link({ q: '', status: '', portal: '' }) %>">clear filters</a><%= view !== 'all' ? ' or ' : '' %><% if (view !== 'all') { %><a href="<%= link({ view: '', q: '', status: '', portal: '' }) %>">show all suppliers</a><% } %>.</p>
+  <% } else { %>
+  <div class="tblwrap"><table class="cl-tbl sp-tbl<%= showRating ? ' show-rating' : '' %><%= showLead ? ' show-lead' : '' %>" id="supTbl">
+    <thead><tr>
+      <%- th('name', 'Supplier') %>
+      <%- th('status', 'Relationship', 'c-rel', 'Your working relationship with the supplier. Changed here or on the supplier profile.') %>
+      <th class="c-portal" title="Whether the supplier has a login to the supplier portal. Independent of the relationship status.">Portal</th>
+      <%- th('location', 'Location', 'c-loc') %>
+      <th class="c-contact">Primary contact</th>
+      <% if (hasFollow) { %><%- th('followup', 'Next follow-up', 'c-fu', 'Set when an activity is logged with a follow-up date.') %><% } %>
+      <%- th('rating', 'Rating', 'c-rating', 'Entered by your team on the supplier profile (1–5 stars). Not calculated.') %>
+      <%- th('lead', 'Lead time', 'r c-lead', 'Days entered on the supplier profile (or by the supplier in their company details). Not calculated from orders.') %>
+      <%- th('products', 'Products', 'r c-cnt', 'Products in your catalogue from this supplier') %>
+      <%- th('pos', 'Purchase orders', 'r c-cnt c-po', 'All purchase orders sent to this supplier, any status') %>
+    </tr></thead>
     <tbody>
-    <% if (!suppliers.length) { %><tr><td colspan="9" class="muted">No suppliers found.</td></tr><% } %>
-    <% suppliers.forEach(s => { const ps = typeof portal !== 'undefined' ? portal[s.id] : null; const due = s.next_follow_up && s.next_follow_up <= td; %>
-      <tr>
-        <td>
-          <a href="/admin/suppliers/<%= s.id %>"><strong><%= s.name %></strong></a>
-          <div class="muted small">
-            <% if (ps === 'active') { %><span class="oktext">portal active</span><% } else if (ps === 'invited') { %><span class="warntext">invited<%= s.details_completed_at ? '' : ' · awaiting registration' %></span><% } else if (ps === 'expired') { %>invitation expired<% } else { %>no portal access<% } %>
-            <%= s.can_export_official ? ' · official exporter' : '' %>
+    <% rows.forEach(s => { const pt = PORTAL[s.portal]; %>
+      <tr class="<%= s.status === 'blocked' ? 'dim' : '' %>">
+        <td class="c-name">
+          <a href="/admin/suppliers/<%= s.id %>" class="nm<%= s.placeholder ? ' ph' : '' %>"><strong><%= s.shownName %></strong></a><span class="tip" role="tooltip"><%= s.placeholder ? s.shownName + ' — company name not provided yet; shown as the email domain' : s.name %></span>
+          <div class="cl-sub">
+            <% if (s.awaiting) { %><span class="sp-await" title="The supplier was invited but has not filled in their company details yet. Nothing here is their legal name.">Awaiting company details</span>
+            <% } else { %><%= s.role || 'Business role not set' %><% } %><%= s.can_export_official ? ' · Official exporter' : '' %>
+          </div>
+          <div class="sp-mob">
+            <span class="m-md"><span class="sp-pt <%= pt[0] %>"><%= s.portal === 'none' ? 'No portal access' : pt[1] %></span> <%= s.place || 'No location' %></span>
+            <span class="m-sm"><%= s.contact_name || s.email || 'No contact' %></span>
+            <span class="m-xs"><% if (s.nProducts) { %><a href="/admin/products?supplier=<%= s.id %>"><%= s.nProducts %> product<%= s.nProducts === 1 ? '' : 's' %></a><% } else { %>0 products<% } %> · <% if (s.nPos) { %><a href="/admin/purchasing?supplier=<%= s.id %>"><%= s.nPos %> PO<%= s.nPos === 1 ? '' : 's' %></a><% } else { %>0 POs<% } %></span>
+            <% if (s.next_follow_up) { %><span class="m-sm <%= s.overdue ? 'bad' : '' %>">Follow-up <%= fmt.date(s.next_follow_up) %><%= s.overdue ? ' · overdue' : '' %></span><% } %>
           </div>
         </td>
-        <td>
-          <form method="post" action="/admin/suppliers/<%= s.id %>/status" class="autosubmit inline">
-            <input type="hidden" name="back" value="<%= here %>">
-            <select name="crm_status" class="pillselect crm-<%= s.crm_status || 'active' %>" aria-label="CRM status of <%= s.name %>">
-              <% Object.entries(crm).forEach(([k, l]) => { %><option value="<%= k %>" <%= (s.crm_status || 'active') === k ? 'selected' : '' %>><%= l %></option><% }) %>
-            </select>
-          </form>
+        <td class="c-rel">
+          <details class="sp-relmenu">
+            <summary class="sp-rel crm-<%= s.status %>" aria-label="Relationship: <%= crm[s.status] || s.status %> — change" title="Relationship status. Click to change."><%= crm[s.status] || s.status %><i aria-hidden="true">▾</i></summary>
+            <form method="post" action="/admin/suppliers/<%= s.id %>/status" class="menu" aria-label="Change relationship status of <%= s.shownName %>">
+              <input type="hidden" name="back" value="<%= here %>">
+              <% Object.entries(crm).forEach(([k, l]) => { %><button name="crm_status" value="<%= k %>" class="<%= s.status === k ? 'cur' : '' %>" <%= s.status === k ? 'aria-current=true' : '' %>><span class="dot crm-<%= k %>"></span><%= l %></button><% }) %>
+            </form>
+          </details>
         </td>
-        <td><%= [s.city, s.country].filter(Boolean).join(', ') || '—' %></td>
-        <td><%= s.contact_name || '—' %><% if (s.wechat || s.email) { %><div class="muted small"><%= s.wechat ? 'WeChat ' + s.wechat : s.email %></div><% } %></td>
-        <td class="<%= due ? 'bad' : '' %>"><%= s.next_follow_up ? fmt.date(s.next_follow_up) : '—' %><%= due ? ' · due' : '' %></td>
-        <td class="stars"><%= s.rating ? '★'.repeat(s.rating) : '—' %></td>
-        <td class="right num"><%= s.lead_time_days ? s.lead_time_days + ' d' : '—' %></td>
-        <td class="right num"><%= s.products?.[0]?.count ?? 0 %></td>
-        <td class="right num"><%= s.orders?.[0]?.count ?? 0 %></td>
+        <td class="c-portal"><span class="sp-pt <%= pt[0] %>" title="<%= PTIP[s.portal] %>"><%= pt[1] %></span><% if (s.portal === 'invited' || s.portal === 'expired') { %><div class="cl-sub"><a href="/admin/suppliers/<%= s.id %>#portal">Manage invitation</a></div><% } %></td>
+        <td class="c-loc"><%= s.place || '' %><% if (!s.place) { %><span class="muted">Not set</span><% } %></td>
+        <td class="c-contact">
+          <% if (s.contact_name) { %><span class="sp-ct" title="<%= s.contact_name %>"><%= s.contact_name %></span><% } else if (s.email) { %><span class="sp-ct" title="<%= s.email %>"><%= s.email %></span><% } else { %><span class="muted">No contact</span><% } %>
+          <% const ch = [s.contact_name ? s.email : null, s.wechat ? 'WeChat ' + s.wechat : null].filter(Boolean).join(' · '); %>
+          <% if (ch) { %><div class="cl-sub sp-ch" title="<%= ch %>"><%= ch %></div><% } %>
+          <% if (s.otherContacts.length) { %><div class="cl-sub" title="<%= s.otherContacts.map(p => p.full_name || p.email).join(', ') %>">+ <%= s.otherContacts.length %> more portal user<%= s.otherContacts.length === 1 ? '' : 's' %></div><% } %>
+        </td>
+        <% if (hasFollow) { %><td class="c-fu"><% if (s.next_follow_up) { %><a href="/admin/suppliers/<%= s.id %>#activity" class="sp-fu <%= s.overdue ? 'bad' : s.dueToday ? 'warn' : '' %>" title="Open the activity history"><%= fmt.date(s.next_follow_up) %></a><div class="cl-sub <%= s.overdue ? 'bad' : '' %>"><%= s.overdue ? dueDays(s.next_follow_up) + ' day' + (dueDays(s.next_follow_up) === 1 ? '' : 's') + ' overdue' : s.dueToday ? 'Due today' : '' %></div><% } else { %><span class="muted">—</span><% } %></td><% } %>
+        <td class="c-rating stars"><%= s.rating ? '★'.repeat(s.rating) : '' %><% if (!s.rating) { %><span class="muted small">Not rated</span><% } %></td>
+        <td class="r c-lead"><%= s.lead_time_days ? s.lead_time_days + ' d' : '' %><% if (!s.lead_time_days) { %><span class="muted small">Not set</span><% } %></td>
+        <td class="r c-cnt"><% if (s.nProducts) { %><a href="/admin/products?supplier=<%= s.id %>" title="Show this supplier's products"><%= s.nProducts %></a><% } else { %><span class="muted">0</span><% } %></td>
+        <td class="r c-cnt c-po"><% if (s.nPos) { %><a href="/admin/purchasing?supplier=<%= s.id %>" title="Show purchase orders to this supplier"><%= s.nPos %></a><% } else { %><span class="muted">0</span><% } %></td>
       </tr>
     <% }) %>
     </tbody>
-  </table>
+  </table></div>
+  <div class="cl-foot"><span class="muted"><%= filtered || view !== 'all' ? total + ' of ' + all + ' suppliers' : all + ' supplier' + (all === 1 ? '' : 's') %></span></div>
+  <% } %>
 </div>
+
+<script>
+(function () {
+  var f = document.querySelector('.cl-bar'), q = document.getElementById('spq'); if (!f || !q) return;
+  var t, last = q.value;
+  q.addEventListener('input', function () { clearTimeout(t); t = setTimeout(function () { if (q.value !== last) f.submit(); }, 300); });
+  if (q.value && /[?&]q=/.test(location.search)) { q.focus(); try { q.setSelectionRange(q.value.length, q.value.length); } catch (e) {} }
+  // names cut off by the column: full name on hover and on keyboard focus
+  document.querySelectorAll('.c-name').forEach(function (td) {
+    var a = td.querySelector('a.nm'), tip = td.querySelector('.tip'); if (!a || !tip) return;
+    if (a.scrollWidth > a.clientWidth + 1) { td.classList.add('cut'); a.setAttribute('aria-describedby', tip.id = tip.id || 'tip' + Math.random().toString(36).slice(2, 8)); }
+  });
+  // small popovers (Filters, Columns, relationship menu): one open at a time, close on outside click and Esc; row menus are fixed-positioned so the table never clips them
+  var pops = [].slice.call(document.querySelectorAll('details.sp-pop, details.sp-relmenu'));
+  function place(d) { var m = d.querySelector('.menu'), s = d.querySelector('summary'); if (!m || !d.classList.contains('sp-relmenu')) return; var r = s.getBoundingClientRect(); m.style.left = Math.max(8, Math.min(r.left, innerWidth - m.offsetWidth - 8)) + 'px'; m.style.top = (r.bottom + m.offsetHeight + 12 > innerHeight && r.top > m.offsetHeight + 12 ? r.top - m.offsetHeight - 4 : r.bottom + 4) + 'px'; }
+  pops.forEach(function (d) { d.addEventListener('toggle', function () { if (!d.open) return; pops.forEach(function (o) { if (o !== d) o.open = false; }); place(d); var f = d.querySelector('select,button,input'); if (f && d.classList.contains('sp-relmenu')) f.focus(); }); });
+  document.addEventListener('click', function (e) { pops.forEach(function (d) { if (d.open && !d.contains(e.target)) d.open = false; }); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') pops.forEach(function (d) { if (d.open) { d.open = false; d.querySelector('summary').focus(); } }); });
+  window.addEventListener('scroll', function () { pops.forEach(function (d) { if (d.open && d.classList.contains('sp-relmenu')) d.open = false; }); }, true);
+  window.addEventListener('resize', function () { pops.forEach(function (d) { d.open = false; }); });
+  // optional columns (rating, lead time): a per-person preference
+  var tbl = document.getElementById('supTbl'), KEY = 'lt.suppliers.cols';
+  function stored() { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { return {}; } }
+  document.querySelectorAll('.sp-cols [data-col]').forEach(function (b) {
+    var s = stored(); if (s[b.dataset.col] != null && !b.checked) b.checked = !!s[b.dataset.col];
+    function apply() { if (tbl) tbl.classList.toggle('show-' + b.dataset.col, b.checked); }
+    apply();
+    b.addEventListener('change', function () { var x = stored(); x[b.dataset.col] = b.checked; try { localStorage.setItem(KEY, JSON.stringify(x)); } catch (e) {} apply(); });
+  });
+})();
+</script>
 <%- include('../../partials/foot') %>

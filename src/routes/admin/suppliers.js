@@ -9,6 +9,7 @@ import { log } from '../../lib/activity.js';
 import { COMPANY_TYPES } from '../../lib/supplier-company.js';
 import { usageSummary, setCompanyAi } from '../../lib/ai-access.js';
 import { getPrices } from '../../lib/ai-usage.js';
+import { buildSuppliers, portalMap } from '../../lib/suppliers.js';
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 /** Placeholder name until the supplier fills in their company details. */
@@ -22,40 +23,56 @@ export const ACTIVITY_TYPES = { ...BASE_TYPES, visit: 'Factory visit' };
 const body = b => ({ ...clean(b, FIELDS), can_export_official: bool(b.can_export_official) });
 const like = q => String(q || '').replace(/[,()%]/g, ' ').trim();
 
+// every row, page by page — a directory must never be cut short by the API's row limit
+async function fetchAll(make) {
+  const out = [];
+  for (let from = 0; from < 100000; from += 1000) {
+    const { data, error } = await make().range(from, from + 999);
+    if (error || !data) break;
+    out.push(...data);
+    if (data.length < 1000) break;
+  }
+  return out;
+}
+
 r.get('/', async (req, res) => {
-  let q = admin.from('suppliers').select('*, products(count), orders(count)').order('name');
-  const s = like(req.query.q);
-  if (s) q = q.or(`name.ilike.%${s}%,city.ilike.%${s}%,contact_name.ilike.%${s}%,email.ilike.%${s}%,main_products.ilike.%${s}%`);
-  const [{ data }, { data: users }, { data: invites }] = await Promise.all([
-    q,
-    admin.from('profiles').select('supplier_id, accepted_at, active').eq('role', 'supplier'),
+  const safe = async f => { try { return await f(); } catch { return []; } };
+  const [suppliers, { data: users }, { data: invites }, products, pos] = await Promise.all([
+    fetchAll(() => admin.from('suppliers').select('*').order('name').order('id')),
+    admin.from('profiles').select('supplier_id, accepted_at, active, full_name, email').eq('role', 'supplier'),
     admin.from('invitations').select('supplier_id, expires_at').eq('role', 'supplier').is('accepted_at', null).is('revoked_at', null),
+    safe(() => fetchAll(() => admin.from('products').select('id, supplier_id, name, category').not('supplier_id', 'is', null).order('id'))),
+    // purchase orders to each supplier (any status); a Manager only sees the ones they created, like on the Purchasing page
+    safe(() => fetchAll(() => admin.from('supplier_pos').select('id, supplier_id').not('supplier_id', 'is', null).order('id'))),
   ]);
-  // portal status per supplier: active users, open invitation, or nothing
-  const portal = {};
-  for (const u of users || []) if (u.supplier_id && u.accepted_at && u.active) portal[u.supplier_id] = 'active';
-  for (const i of invites || []) if (i.supplier_id && !portal[i.supplier_id]) portal[i.supplier_id] = new Date(i.expires_at) > new Date() ? 'invited' : 'expired';
-  const all = data || [];
-  const counts = { all: all.length };
-  for (const x of all) counts[x.crm_status || 'active'] = (counts[x.crm_status || 'active'] || 0) + 1;
   const today = new Date().toISOString().slice(0, 10);
-  counts.followup = all.filter(x => x.next_follow_up && x.next_follow_up <= today).length;
-  const status = req.query.status || 'all';
-  const list = status === 'all' ? all : status === 'followup' ? all.filter(x => x.next_follow_up && x.next_follow_up <= today) : all.filter(x => (x.crm_status || 'active') === status);
-  res.render('admin/suppliers/index', { title: 'Suppliers', suppliers: list, portal, counts, status, crmStatuses: CRM_STATUSES, today, msg: req.query.msg });
+  const q = req.query;
+  // ?status= is the relationship filter; an old ?status=followup link opens the Follow-up due view
+  const view = q.view === 'followup' || q.status === 'followup' ? 'followup' : q.view === 'invites' ? 'invites' : 'all';
+  const rel = CRM_STATUSES[q.status] ? q.status : '', pf = ['active', 'invited', 'expired', 'none'].includes(q.portal) ? q.portal : '';
+  const list = buildSuppliers({ suppliers, portal: portalMap(users || [], invites || []), products, pos, people: (users || []).filter(u => u.accepted_at), crmOrder: Object.keys(CRM_STATUSES) },
+    { q: q.q, view, status: rel, portal: pf, sort: q.sort || (view === 'followup' ? 'followup' : ''), dir: q.dir }, today);
+  res.render('admin/suppliers/index', { title: 'Suppliers', ...list, status: rel, crmStatuses: CRM_STATUSES, today, msg: q.msg, query: { q: q.q || '', status: rel, portal: pf } });
 });
 
-// change the CRM status straight from the list
+// change the relationship status straight from the list (same permission as editing the supplier: any staff member)
 r.post('/:id/status', async (req, res) => {
-  if (CRM_STATUSES[req.body.crm_status]) {
-    const { data: before } = await admin.from('suppliers').select('crm_status').eq('id', req.params.id).single();
-    await admin.from('suppliers').update({ crm_status: req.body.crm_status }).eq('id', req.params.id);
-    if (before && before.crm_status !== req.body.crm_status) {
-      await log({ entityType: 'supplier', entityId: req.params.id, action: 'crm_status', actorId: req.user.id, detail: { note: `${CRM_STATUSES[before.crm_status] || before.crm_status} → ${CRM_STATUSES[req.body.crm_status]}` } });
-    }
-  }
   const backTo = String(req.body.back || '');
-  res.redirect(backTo.startsWith('/admin/suppliers') ? backTo : '/admin/suppliers');
+  const to = (m, k = 'msg') => {
+    const u = new URL(backTo.startsWith('/admin/suppliers') && !backTo.startsWith('//') ? backTo : '/admin/suppliers', 'http://x');
+    u.searchParams.delete('msg'); u.searchParams.delete('err'); u.searchParams.set(k, m);
+    res.redirect(u.pathname + u.search);
+  };
+  const want = req.body.crm_status;
+  if (!CRM_STATUSES[want]) return to('That relationship status does not exist.', 'err');
+  const { data: before } = await admin.from('suppliers').select('name, crm_status').eq('id', req.params.id).maybeSingle();
+  if (!before) return to('Supplier not found.', 'err');
+  const was = before.crm_status || 'active';
+  if (was === want) return to(`${before.name} is already “${CRM_STATUSES[want]}”.`);
+  const { error } = await admin.from('suppliers').update({ crm_status: want }).eq('id', req.params.id);
+  if (error) return to(error.message, 'err');
+  await log({ entityType: 'supplier', entityId: req.params.id, action: 'crm_status', actorId: req.user.id, detail: { note: `${CRM_STATUSES[was] || was} → ${CRM_STATUSES[want]}` } });
+  to(`${before.name}: ${CRM_STATUSES[was] || was} → ${CRM_STATUSES[want]}.`);
 });
 
 r.get('/new', (req, res) => res.render('admin/suppliers/form', {

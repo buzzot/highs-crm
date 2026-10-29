@@ -8,6 +8,7 @@ import { clean as spClean, missing as spMissing, containerFit as spFit, catalogI
 import { cargoLine, cargoTotals } from '../src/lib/cargo.js';
 // Realistic sample data shaped like the Supabase query results each route passes to its view.
 import { fmt } from '../src/lib/format.js';
+import { buildSuppliers } from '../src/lib/suppliers.js';
 import { icon } from '../src/lib/icons.js';
 import { showValue, deliveryLabel, snapshot, diff } from '../src/lib/request-revisions.js';
 import { productMetrics } from '../src/lib/product-metrics.js';
@@ -171,6 +172,29 @@ export function clientsFx(kind) {
   const q = kind === 'nomatch' ? { q: 'zzzz' } : kind === 'filtered' ? { currency: 'CNY', sort: 'orders', dir: 'desc' } : kind === 'many' ? { page: '2', sort: 'activity', dir: 'desc' } : {};
   return { title: 'Clients', ...buildClients({ orgs, users, reqs, ords }, q), query: { q: q.q || '', country: '', currency: q.currency || '', state: '' } };
 }
+
+// ---- suppliers directory fixtures (built with the real list logic) ----
+const CRM = { prospect: 'Prospect', contacted: 'Contacted', sampling: 'Sampling', approved: 'Approved', active: 'Active supplier', on_hold: 'On hold', blocked: 'Blocked' };
+function supIdx(query = {}, over = {}) {
+  const S = (id, o) => ({ id, country: 'China', city: 'Shenzhen', crm_status: 'active', created_at: d(-100), details_completed_at: d(-90), company_type: 'factory', ...o });
+  const suppliers = over.suppliers || [
+    S('s1', { name: 'Shenzhen Brightway Electronics', contact_name: 'Li Wei', email: 'liwei@brightway.example', wechat: 'liwei_bw', rating: 4, lead_time_days: 30, can_export_official: true, next_follow_up: day(-3), main_products: 'LED lamps, USB cables' }),
+    S('s2', { name: 'Yiwu Sunhome Houseware', city: 'Yiwu', contact_name: 'Chen Fang', wechat: 'sunhome88', company_type: 'trading', crm_status: 'contacted', next_follow_up: day(6), lead_time_days: 25 }),
+    S('s3', { name: '(huayuanwire.com)', contact_name: 'Eva', email: 'eva@huayuanwire.com', crm_status: 'contacted', details_completed_at: null, company_type: null, city: null }),
+    S('s4', { name: '(sw-steelwirerope.com)', email: 'annaguo@sw-steelwirerope.com', crm_status: 'contacted', details_completed_at: null, company_type: null, city: null }),
+    S('s5', { name: '深圳市明亮电子科技有限公司（国际贸易事业部）', city: null, country: null, contact_name: '王小明', email: 'wang@mingliang.example', crm_status: 'on_hold', company_type: 'both' }),
+    S('s6', { name: 'Общество с ограниченной ответственностью «Научно-производственное объединение Казанский приборостроительный завод»', country: 'RU', city: 'Казань', contact_name: 'Иван Петров', email: 'ivan@kpz.example', crm_status: 'approved', rating: 5 }),
+    S('s7', { name: 'The International Association of Precision Wire Rope and Industrial Cable Manufacturers Co., Ltd', contact_name: 'Frank Shu', wechat: '+8615358551009', city: 'Gaoyou', crm_status: 'sampling', next_follow_up: day(0) }),
+    S('s8', { name: 'Luminaton LLC', city: 'Irvine', contact_name: 'Marcus', email: 'marsello83@hotmail.com', crm_status: 'blocked', company_type: 'trading' }),
+    S('s9', { name: 'Anonymous Plastics', city: null, country: null, crm_status: 'prospect', company_type: null })];
+  const portal = over.portal || { s1: 'active', s3: 'invited', s4: 'expired', s6: 'active' };
+  const products = over.products || [...Array(6)].map((_, i) => ({ supplier_id: 's1', name: 'LED desk lamp ' + i, category: 'Lighting' })).concat([{ supplier_id: 's2', name: 'Tumbler 500ml', category: 'Houseware' }, { supplier_id: 's6', name: 'Steel wire rope 8mm', category: 'Hardware' }]);
+  const pos = over.pos || [...Array(4)].map(() => ({ supplier_id: 's1' })).concat([{ supplier_id: 's2' }]);
+  const people = over.people || [{ supplier_id: 's1', full_name: 'Li Wei', email: 'liwei@brightway.example', accepted_at: d(-80) }, { supplier_id: 's1', full_name: 'Zhang Min', email: 'zhang@brightway.example', accepted_at: d(-60) }, { supplier_id: 's6', full_name: 'Иван Петров', email: 'ivan@kpz.example', accepted_at: d(-10) }];
+  const list = buildSuppliers({ suppliers, portal, products, pos, people, crmOrder: Object.keys(CRM) }, query, day(0));
+  return base(staffUser, '/admin/suppliers', { title: 'Suppliers', ...list, status: query.status || '', today: day(0), crmStatuses: CRM, query: { q: query.q || '', status: query.status || '', portal: query.portal || '' } });
+}
+
 export const pages = {
   // ---- admin ----
   'admin/dashboard': base(staffUser, '/admin', dashFx('normal')),
@@ -193,7 +217,7 @@ export const pages = {
   ], requests, orders: ordersList }),
   'admin/clients/staff': base(staffUser, '/admin/clients/staff/list', { title: 'Staff', staff: [{ ...staffUser, active: true, state: 'accepted', accepted_at: d(-400) }, { id: null, email: 'new@highs.example', role: 'staff', state: 'pending', sent_at: d(0), days_left: 14 }] }),
   'admin/suppliers/detail_new': ['admin/suppliers/detail', base(staffUser, '/admin/suppliers/s9', { aiUse: { ready: true, current: { calls: 3, input: 9000, output: 1200, total: 10200 }, all: { calls: 14, input: 41000, output: 5200, total: 46200 }, months: [{ key: '2026-10', label: 'October 2026', calls: 3, input: 9000, output: 1200, total: 10200 }, { key: '2026-09', label: 'September 2026', calls: 11, input: 32000, output: 4000, total: 36000 }] }, aiPrices: { input_per_m: 3, output_per_m: 15 }, title: '(factory.example)', photoOf: {}, portalBlocked: false, crmStatuses: { contacted: 'Contacted' }, activityTypes: { call: 'Call' }, events: [], types: {}, members: [{ id: null, email: 'sales@factory.example', state: 'pending', sent_at: d(0), days_left: 14 }], s: { id: 's9', name: '(factory.example)', email: 'sales@factory.example', country: 'China', crm_status: 'contacted', created_at: d(0) }, products: [], orders: [], docs: [], spend: 0, msg: null, err: null })],
-  'admin/suppliers/index': base(staffUser, '/admin/suppliers', { title: 'Suppliers', portal: { s1: 'active', s2: 'invited' }, counts: { all: 2, active: 1, contacted: 1, followup: 1 }, status: 'all', today: day(0), crmStatuses: { prospect: 'Prospect', contacted: 'Contacted', sampling: 'Sampling', approved: 'Approved', active: 'Active supplier', on_hold: 'On hold', blocked: 'Blocked' }, suppliers: [{ ...sup, crm_status: 'active', next_follow_up: day(-1), products: [{ count: 6 }], orders: [{ count: 4 }] }, { ...sup, id: 's2', crm_status: 'contacted', next_follow_up: day(6), name: 'Yiwu Sunhome Houseware', city: 'Yiwu', rating: 3, can_export_official: false, products: [{ count: 2 }], orders: [{ count: 1 }] }] }),
+  'admin/suppliers/index': supIdx(),
   'admin/suppliers/form': base(staffUser, '/admin/suppliers/new', { title: 'New supplier', s: { country: 'China' }, error: null, mode: 'invite', inv: {} }),
   'admin/suppliers/form_manual': ['admin/suppliers/form', base(staffUser, '/admin/suppliers/new', { title: 'New supplier', s: { country: 'China' }, error: null, mode: 'manual', inv: {} })],
   'admin/suppliers/form_edit': ['admin/suppliers/form', base(staffUser, '/admin/suppliers/s1/edit', { title: 'Edit supplier', s: { ...sup, company_type: 'factory', main_products: 'LED lamps' }, error: null, mode: 'manual', inv: {} })],
@@ -374,3 +398,12 @@ export const pages = {
       events: Array.from({ length: 30 }, (_, i) => i % 4 === 0 ? { id: 100 + i, action: 'crm_call', detail: { note: 'Call ' + i + ': ' + name, date: day(-i), follow_up: i < 8 ? day(i + 1) : null, next_action: 'Send quote' }, created_at: d(-i), profiles: { full_name: 'Anna Lee' } } : { id: 100 + i, action: 'company_details_updated', detail: { note: name }, created_at: d(-i), profiles: { full_name: 'Tom Baker' } }) }];
   }
 }
+
+// ---- suppliers directory variants ----
+{
+  const v = (name, q, over) => { pages['admin/suppliers/index#' + name] = ['admin/suppliers/index', supIdx(q, over)]; };
+  v('search', { q: 'wire' }); v('nomatch', { q: 'zzzz' }); v('invited', { portal: 'invited' }); v('contacted', { status: 'contacted' }); v('followup', { view: 'followup', sort: 'followup' }); v('invites', { view: 'invites' }); v('filtered2', { status: 'contacted', portal: 'invited' }); v('emptyview', { view: 'followup' }, { suppliers: [{ id: 'z1', name: 'Calm Supplier', country: 'China', city: 'Ningbo', crm_status: 'active', created_at: d(-5), details_completed_at: d(-4), contact_name: 'Z', email: 'z@calm.example' }], portal: {}, products: [], pos: [], people: [] });
+  v('rating', { sort: 'rating', dir: 'desc' }); v('empty', {}, { suppliers: [], portal: {}, products: [], pos: [], people: [] }); v('cn', { q: '王小明' }); v('ru', { q: 'казань' });
+  v('nofollow', {}, { suppliers: ['a', 'b', 'c'].map((x, i) => ({ id: 'n' + x, name: 'Plain Supplier ' + x, country: 'China', city: 'Ningbo', crm_status: 'active', created_at: d(-5), details_completed_at: d(-4), contact_name: 'Contact ' + x, email: x + '@plain.example' })), portal: {}, products: [], pos: [], people: [] });
+}
+pages['admin/purchasing/index#supplier'] = ['admin/purchasing/index', { ...pages['admin/purchasing/index'], supplier: { id: 's1', name: 'Shenzhen Brightway Electronics' } }];
