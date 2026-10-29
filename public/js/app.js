@@ -154,9 +154,10 @@ document.querySelectorAll('time.localtime').forEach(function (t) { var d = new D
       list.appendChild(li); items.push(li);
     };
     const opts = [...sel.options];
+    if (sel.dataset.newFirst !== undefined) opts.filter(o => o.value.startsWith('__') && !o.disabled).forEach(o => add(o, 'new'));   // "+ Add new…" as the first row
     opts.filter(o => o.value === '' && !sel.required && !needle).forEach(o => add(o, 'none'));
     opts.filter(o => o.value !== '' && !o.value.startsWith('__') && (!needle || o.text.toLowerCase().includes(needle))).forEach(o => add(o, 'opt'));
-    opts.filter(o => o.value.startsWith('__') && !o.disabled).forEach(o => add(o, 'new'));
+    if (sel.dataset.newFirst === undefined) opts.filter(o => o.value.startsWith('__') && !o.disabled).forEach(o => add(o, 'new'));
     if (!items.some(li => li.classList.contains('opt'))) { const e = document.createElement('li'); e.className = 'empty'; e.textContent = RU ? 'Ничего не найдено' : 'Nothing found'; list.insertBefore(e, list.firstChild); }
     active = items.findIndex(li => li.classList.contains('sel')); if (needle) active = Math.max(0, items.findIndex(li => li.classList.contains('opt')));
     items.forEach((li, i) => li.classList.toggle('on', i === active));

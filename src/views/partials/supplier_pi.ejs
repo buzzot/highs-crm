@@ -58,11 +58,11 @@
         <label>Total printed on the PI <input name="declared_total" type="number" step="0.01" min="0" value="<%= pi && pi.declared_total != null ? pi.declared_total : '' %>" placeholder="must match the lines"></label>
       </div>
       <div class="tablewrap"><table class="tbl compact spilines">
-        <thead><tr><th>Product</th><th>Description</th><th>SKU</th><th class="right">Qty</th><th>Unit</th><th class="right">Unit price</th><th class="right">Amount</th></tr></thead>
+        <thead><tr><th class="c-prod">Product</th><th class="c-desc">Description</th><th class="c-sku">SKU</th><th class="c-qty right">Qty</th><th class="c-unit">Unit</th><th class="c-price right">Unit price</th><th class="c-amt right">Amount</th></tr></thead>
         <tbody>
         <% rowsAll.forEach((l, i) => { %>
           <tr class="spirow" <%= i >= shown ? 'hidden' : '' %>>
-            <td><select data-picker="Product" name="lines[<%= i %>][product_id]"><option value="">— choose —</option><% prods.forEach(p => { %><option value="<%= p.id %>" data-name="<%= p.name %>" data-sku="<%= p.sku || '' %>" data-cost="<%= p.unit_cost ?? '' %>" data-cur="<%= p.cost_currency || '' %>" <%= l.product_id === p.id ? 'selected' : '' %>><%= p.name %><%= p.sku ? ' · ' + p.sku : '' %></option><% }) %></select></td>
+            <td><select data-picker="Product" data-new-first name="lines[<%= i %>][product_id]"><option value="">— choose —</option><option value="__new">+ New product…</option><% prods.forEach(p => { %><option value="<%= p.id %>" data-name="<%= p.name %>" data-sku="<%= p.sku || '' %>" data-cost="<%= p.unit_cost ?? '' %>" data-cur="<%= p.cost_currency || '' %>" <%= l.product_id === p.id ? 'selected' : '' %>><%= p.name %><%= p.sku ? ' · ' + p.sku : '' %></option><% }) %></select></td>
             <td><input name="lines[<%= i %>][description]" value="<%= l.description || '' %>"></td>
             <td><input name="lines[<%= i %>][sku]" value="<%= l.sku || '' %>" class="short"></td>
             <td class="right"><input type="number" step="any" min="0" name="lines[<%= i %>][quantity]" value="<%= l.quantity ?? '' %>" class="short"></td>
@@ -75,7 +75,7 @@
         <tfoot><tr><td colspan="6" class="right"><strong>Lines total</strong> <span class="spidiff small"></span></td><td class="right num"><strong id="spitotal">0.00</strong></td></tr></tfoot>
       </table></div>
       <div class="spiactions"><button type="button" class="link small" id="spimore">+ Add line</button>
-        <a class="link small" href="/admin/products/new" target="_blank" rel="noopener">+ New product (opens in a new tab — then reload this page)</a></div>
+        <span class="muted small">New product? Choose “+ New product…” in the Product list.</span></div>
       <label>Notes <input name="notes" value="<%= pi?.notes || '' %>"></label>
       <div class="dropwrap"><div class="filedrop compact slim" data-dropzone data-max="8" data-max-mb="20" tabindex="0"><input type="file" name="files" multiple aria-label="Attach the supplier's PI file"><span class="dicon"><%- icon('upload') %></span><strong data-drop-count>Attach the supplier's PI file — drop it here, or <span class="dlink">browse</span></strong></div><div class="fgrid" data-drop-list></div></div>
       <div class="actions"><% if (pi) { %><label class="check small"><input type="checkbox" onchange="this.form.pid.disabled = this.checked"> save as a new revision (keep the old PI in the history)</label><% } %><button class="btn primary">Save PI</button></div>
@@ -137,6 +137,20 @@
   <% }) %>
   <% } %>
 
+  <dialog id="spnew" class="bookdlg">
+    <h2>New product</h2>
+    <form id="spnewform" class="payrec dlg">
+      <label class="wide">Name <input name="name" required maxlength="200" autocomplete="off"></label>
+      <label>SKU <input name="sku" maxlength="80" autocomplete="off"></label>
+      <label>Unit price (from the supplier) <input name="unit_cost" type="number" step="0.0001" min="0"></label>
+      <label>Currency <select name="cost_currency"><% ['CNY', 'USD', 'EUR'].forEach(c => { %><option <%= c === cur ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+      <label>MOQ <input name="moq" type="number" min="0"></label>
+      <input type="hidden" name="supplier_id" value="<%= po.supplier_id || '' %>">
+      <div class="wide small" id="spnewerr" style="color:#b42318" hidden></div>
+      <div class="actions"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn primary">Create product</button></div>
+    </form>
+    <p class="muted small">A simple card — add photos, packing and specs later on the product page.</p>
+  </dialog>
   <% if (pi) { %>
   <dialog id="spifile" class="bookdlg">
     <h2>Attach the supplier's PI file</h2>
@@ -161,15 +175,32 @@
       diff.textContent = d == null ? '' : Math.abs(d) < 0.01 ? '✓ matches the printed total' : '⚠ differs from the printed total by ' + f2(d);
       diff.style.color = d == null ? '' : Math.abs(d) < 0.01 ? '#0b8a7a' : '#b42318';
     }
+    let target = null;
+    const nd = document.getElementById('spnew'), nf = document.getElementById('spnewform'), ne = document.getElementById('spnewerr');
     rows.forEach(r => {
       r.addEventListener('input', calc);
       r.querySelector('select').addEventListener('change', e => {
         const o = e.target.selectedOptions[0]; if (!o || !o.value) return;
+        if (o.value === '__new') { e.target.value = ''; target = e.target; nf.reset(); ne.hidden = true; nd.showModal(); nf.name.focus(); return; }
         const set = (sel, v) => { const i = r.querySelector(sel); if (i && v !== '') i.value = v; };
         set('[name$="[description]"]', o.dataset.name || ''); set('[name$="[sku]"]', o.dataset.sku || '');
         const price = r.querySelector('[name$="[unit_price]"]'); if (o.dataset.cost) { price.value = o.dataset.cost; price.title = 'Price from the product record (' + (o.dataset.cur || '') + ') — change it if the supplier quoted differently'; }
         calc();
       });
+    });
+    nf.addEventListener('submit', async e => {
+      e.preventDefault(); ne.hidden = true;
+      const body = Object.fromEntries(new FormData(nf).entries());
+      try {
+        const res = await fetch('/admin/products/quick', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(body) });
+        const p = await res.json(); if (!res.ok) throw new Error(p.error || 'Could not create the product.');
+        form.querySelectorAll('tr.spirow select').forEach(sel => {   // the new product is available in every row
+          const op = new Option(p.name + (p.sku ? ' · ' + p.sku : ''), p.id); op.dataset.name = p.name; op.dataset.sku = p.sku || ''; op.dataset.cost = p.unit_cost ?? ''; op.dataset.cur = p.cost_currency || '';
+          sel.add(op, sel.options[2] || null);
+        });
+        if (target) { target.value = p.id; target.dispatchEvent(new Event('change', { bubbles: true })); }
+        nd.close();
+      } catch (err) { ne.textContent = err.message; ne.hidden = false; }
     });
     decl.addEventListener('input', calc);
     document.getElementById('spimore').addEventListener('click', e => { const h = rows.find(r => r.hidden); if (h) h.hidden = false; if (!rows.some(r => r.hidden)) e.target.hidden = true; });

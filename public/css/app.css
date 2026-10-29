@@ -1612,3 +1612,9 @@ details.spiedit[open] > summary { margin-bottom: 12px; }
 .presets { display: flex; gap: 6px; flex-wrap: wrap; }
 form.payrec.dlg .wide { grid-column: 1 / -1; }
 @media (max-width: 760px) { .pisum { grid-template-columns: 1fr 1fr; } .spiread { flex-direction: column; } }
+.spilines { table-layout: fixed; width: 100%; }
+.spilines th.c-prod { width: 25%; } .spilines th.c-sku { width: 140px; } .spilines th.c-qty { width: 84px; } .spilines th.c-unit { width: 74px; } .spilines th.c-price { width: 108px; } .spilines th.c-amt { width: 108px; }
+.spilines select, .spilines .picker-btn { width: 100%; max-width: none; }
+.spilines td { padding-left: 4px; padding-right: 4px; }
+.spilines input.short { min-width: 0; }
+.spilines td.right input { text-align: right; }
