@@ -1749,3 +1749,9 @@ dialog.catdlg[open] { display: flex; flex-direction: column; }
 @media (max-width: 760px) { .npo-main, .npo-grid { grid-template-columns: 1fr; } .cat-row { grid-template-columns: 40px 1fr 90px; } .cat-price { display: none; } }
 .npo-lines .tag, .npo-review .tag { text-transform: none; }
 .npo-addl > summary .muted { margin-left: 10px; font-weight: 400; }
+.fieldlbl { font-size: 13px; font-weight: 500; margin: 10px 0 4px; color: var(--ink-2); }
+.spirecv { margin: 8px 0; }
+.spirow2 { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; margin: 4px 0; background: var(--surface); cursor: pointer; font-weight: 400; }
+.spirow2 svg { width: 16px; height: 16px; flex: none; color: var(--muted); }
+.spirow2 .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.spirow2 input { width: auto; margin: 0; }

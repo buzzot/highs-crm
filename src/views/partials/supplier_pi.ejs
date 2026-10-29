@@ -9,6 +9,7 @@
   const base = pi ? pi.lines : (fromPo ? po.lines : []), shown = Math.max(base.length, 1);   // manual entry starts with one line
   const ROWS = Math.max(30, base.length + 10);
   const rowsAll = Array.from({ length: ROWS }, (_, i) => base[i] || {});
+  const recv = (typeof docs !== 'undefined' ? docs : []).filter(d => !((pi && pi.file_doc_ids) || []).includes(d.id));   // files the supplier already sent us
   const docT = ids => (ids || []).map(i => sd.find(z => z.id === i)).filter(Boolean);
 %>
 <div class="card" id="supplier-pi">
@@ -39,6 +40,7 @@
     <form method="post" action="/admin/purchasing/<%= po.id %>/pi/<%= pi.id %>/files" enctype="multipart/form-data" class="spiread">
       <div class="dropwrap"><div class="filedrop compact slim" data-dropzone data-max="8" data-max-mb="20" tabindex="0"><input type="file" name="files" multiple aria-label="Supplier PI file"><span class="dicon"><%- icon('upload') %></span><strong data-drop-count>Drop the supplier's PI file here, or <span class="dlink">browse</span></strong></div><div class="fgrid" data-drop-list></div></div>
       <button class="btn">Attach</button>
+      <%- include('supplier_pi_recv', { recv, pre: true }) %>
     </form>
     <% } %>
     <%- include('po_lines', { lines: pi.lines, currency: pi.currency, edit: false }) %>
@@ -61,6 +63,7 @@
       <span class="dicon"><%- icon('upload') %></span><strong data-drop-count>Drop the supplier's PI here, or <span class="dlink">browse</span></strong>
       <span class="muted small dsub">PDF, Excel or screenshot<%= typeof aiOn !== 'undefined' && aiOn ? ' — AI can fill the lines, you check them' : '' %></span></div><div class="fgrid" data-drop-list></div></div>
   </div>
+  <%- include('supplier_pi_recv', { recv, pre: true }) %>
   <div class="spiacts">
     <button type="button" class="btn" id="spiman" onclick="var d=document.querySelector('#supplier-pi details.spiedit');d.open=true;d.scrollIntoView({behavior:'smooth',block:'nearest'})">Enter manually</button>
     <% if (typeof aiOn !== 'undefined' && aiOn) { %><button type="button" class="btn" id="spiaibtn" data-url="/admin/purchasing/<%= po.id %>/pi/read">Read with AI</button><% } %>
@@ -188,6 +191,7 @@
     <h2>Attach the supplier's PI file</h2>
     <form method="post" action="/admin/purchasing/<%= po.id %>/pi/<%= pi.id %>/files" enctype="multipart/form-data">
       <input type="hidden" name="replace" value="">
+      <%- include('supplier_pi_recv', { recv, pre: false }) %>
       <div class="dropwrap"><div class="filedrop compact" data-dropzone data-max="8" data-max-mb="20" tabindex="0"><input type="file" name="files" multiple aria-label="PI file"><span class="dicon"><%- icon('upload') %></span><strong data-drop-count>Drop files here, or <span class="dlink">browse</span></strong></div><div class="fgrid" data-drop-list></div></div>
       <div class="actions"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn primary">Upload</button></div>
     </form>

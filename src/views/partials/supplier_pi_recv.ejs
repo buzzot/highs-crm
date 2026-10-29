@@ -1,0 +1,9 @@
+<%# Files the supplier already sent us (email / logged replies) — tick one to use it as the PI file. locals: recv, pre (tick the ones tagged as PI) %>
+<% if (recv.length) { %>
+<div class="spirecv">
+  <div class="fieldlbl">Already received from the supplier <span class="muted small">— tick the PI file, no need to upload it again</span></div>
+  <% recv.forEach(dd => { const t = String(dd.title || '').replace(/^Supplier [^—]*—\s*/, ''); %>
+  <label class="spirow2"><input type="checkbox" name="use_doc" value="<%= dd.id %>" <%= pre && dd.kind === 'proforma_invoice' ? 'checked' : '' %>><%- icon('file') %><span class="nm" title="<%= t %>"><%= t %></span><% if (dd.kind === 'proforma_invoice') { %><span class="tag ok">PI</span><% } else if (dd.kind === 'packing_list') { %><span class="tag">packing list</span><% } %><a class="link small" href="/admin/documents/<%= dd.id %>/download" target="_blank">View</a></label>
+  <% }) %>
+</div>
+<% } %>

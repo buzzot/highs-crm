@@ -11,7 +11,7 @@ import { spoEmail } from '../../lib/email-templates.js';
 import { replyAddress, subjectTag } from '../../lib/freight.js';
 import { saveSupplierReply } from '../../lib/purchasing-store.js';
 import { back, notFound, bool, CURRENCIES } from '../../lib/util.js';
-import { uploadDocument } from '../../lib/storage.js';
+import { uploadDocument, downloadDocument } from '../../lib/storage.js';
 import { canDelete } from '../../lib/access.js';
 import { aiEnabled, extractSupplierPi } from '../../lib/ai.js';
 import { readXlsx, workbookToText } from '../../lib/xlsx-read.js';
@@ -222,6 +222,16 @@ async function attach(req, po, files, kind) {
   for (const file of files || []) ids.push((await uploadDocument({ file, entityType: type, entityId: id, kind, title: file.originalname, clientVisible: false, uploadedBy: req.user.id })).id);
   return ids;
 }
+// files the supplier already sent (email / logged replies) can be used as the PI file without uploading them again
+const pickIds = b => [].concat(b?.use_doc || []).filter(isId);
+async function receivedDocs(po, ids) {
+  if (!ids.length) return [];
+  const { data: resp } = await admin.from('supplier_po_responses').select('extracted').eq('po_id', po.id);
+  const ok = new Set((resp || []).flatMap(x => (x.extracted?.files || []).map(f => f.id)));
+  const want = ids.filter(i => ok.has(i));
+  if (!want.length) return [];
+  return (await admin.from('documents').select('id, title, storage_path').in('id', want)).data || [];
+}
 r.post('/:id/pi', upload.array('files', 8), async (req, res) => {
   const po = await load(req.params.id);
   if (!po) return notFound(res, 'Purchase order');
@@ -236,7 +246,7 @@ r.post('/:id/pi', upload.array('files', 8), async (req, res) => {
   let pid = isId(req.body.pid) ? req.body.pid : null, old = null;
   if (pid) { old = (await admin.from('supplier_pis').select('file_doc_ids').eq('id', pid).eq('po_id', po.id).maybeSingle()).data; if (!old) pid = null; }
   let newIds;
-  try { newIds = await attach(req, po, req.files, 'other'); } catch (e) { return back(res, to, { err: e.message }); }
+  try { newIds = [...await attach(req, po, req.files, 'other'), ...(await receivedDocs(po, pickIds(req.body))).map(d => d.id)]; } catch (e) { return back(res, to, { err: e.message }); }
   const file_doc_ids = [...(old?.file_doc_ids || []), ...newIds];
   const q = pid ? admin.from('supplier_pis').update({ ...row, file_doc_ids }).eq('id', pid) : admin.from('supplier_pis').insert({ ...row, file_doc_ids, created_by: req.user.id });
   const { error } = await q;
@@ -252,9 +262,10 @@ r.post('/:id/pi/:pid/files', upload.array('files', 8), async (req, res) => {
   const to = `/admin/purchasing/${po.id}#supplier-pi`;
   const { data: pi } = await admin.from('supplier_pis').select('id, file_doc_ids').eq('id', req.params.pid).eq('po_id', po.id).maybeSingle();
   if (!pi) return notFound(res, 'Supplier PI');
-  if (!req.files?.length) return back(res, to, { err: 'Choose at least one file.' });
+  const picked = await receivedDocs(po, pickIds(req.body));
+  if (!req.files?.length && !picked.length) return back(res, to, { err: 'Choose at least one file.' });
   const rep = String(req.body.replace || '');
-  try { const ids = await attach(req, po, req.files, 'other'); await admin.from('supplier_pis').update({ file_doc_ids: [...(pi.file_doc_ids || []).filter(x => x !== rep), ...ids] }).eq('id', pi.id); } catch (e) { return back(res, to, { err: e.message }); }
+  try { const ids = [...await attach(req, po, req.files, 'other'), ...picked.map(d => d.id)].filter(x => !(pi.file_doc_ids || []).includes(x) || x === rep); await admin.from('supplier_pis').update({ file_doc_ids: [...(pi.file_doc_ids || []).filter(x => x !== rep), ...ids] }).eq('id', pi.id); } catch (e) { return back(res, to, { err: e.message }); }
   back(res, to, { msg: rep ? 'File replaced.' : 'File attached.' });
 });
 r.post('/:id/pi/:pid/files/:did/remove', async (req, res) => {
@@ -292,7 +303,10 @@ r.post('/:id/pi/:pid/delete', async (req, res) => {
 r.post('/:id/pi/read', upload.array('files', 8), async (req, res) => {
   const po = await load(req.params.id);
   if (!po) return notFound(res, 'Purchase order');
-  const to = `/admin/purchasing/${po.id}#supplier-pi`, f = req.files?.[0];
+  const to = `/admin/purchasing/${po.id}#supplier-pi`;
+  const picked = await receivedDocs(po, pickIds(req.body));
+  let f = req.files?.[0];
+  if (!f && picked[0]) { try { f = { originalname: String(picked[0].title || 'pi').replace(/^Supplier [^—]*—\s*/, ''), buffer: await downloadDocument(picked[0].storage_path) }; } catch (e) { return back(res, to, { err: `Could not open the file: ${e.message}` }); } }
   if (!f) return back(res, to, { err: "Choose or drop the supplier's PI file." });
   if (!aiEnabled()) return back(res, to, { err: 'AI is not configured (ANTHROPIC_API_KEY). Attach the file and type the lines instead.' });
   const ext = (f.originalname.split('.').pop() || '').toLowerCase();
@@ -308,7 +322,7 @@ r.post('/:id/pi/read', upload.array('files', 8), async (req, res) => {
     if (!lines.length) return back(res, to, { err: 'The AI found no lines in that file — attach it and type the lines.' });
     const currency = CURRENCIES.includes(ai.currency) ? ai.currency : po.currency;
     const chk = checkPi({ lines, declared: ai.printed_total });
-    const ids = await attach(req, po, req.files, 'other');
+    const ids = [...await attach(req, po, req.files, 'other'), ...picked.map(d => d.id)];
     const { error } = await admin.from('supplier_pis').insert({ po_id: po.id, pi_no: ai.pi_no, pi_date: day(ai.pi_date), currency, lines, total: chk.total, declared_total: chk.declared, file_doc_ids: ids, notes: ai.notes || null, status: 'draft', created_by: req.user.id });
     if (error) return back(res, to, { err: migErr(error) });
     back(res, to, chk.matches ? { msg: `Read by AI — ${lines.length} lines, total ${money(chk.total, currency)} matches the PI. Check the lines, then approve it.` } : { err: `Read by AI as a draft — the lines add up to ${money(chk.total, currency)}${chk.declared != null ? ` but the PI says ${money(chk.declared, currency)}` : ''}. Check every line against the file before relying on it.` });
