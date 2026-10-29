@@ -5,7 +5,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 export const aiContext = new AsyncLocalStorage();
 
 export const FEATURES = {
-  quote_check: 'Quote check', sourcing_brief: 'Sourcing brief', product_extract: 'Product import — reading the file',
+  quote_check: 'Quote check', supplier_pi_extract: 'Supplier PI — reading the file', sourcing_brief: 'Sourcing brief', product_extract: 'Product import — reading the file',
   product_review: 'Product import — row check', request_product_fill: 'Client request — product fill', request_staff_summary: 'Staff request — email summary', request_staff_item: 'Staff request — product read', product_compare: 'Product compare', packing_extract: 'Packing list reading', freight_quote_read: 'Freight quote reading', supplier_reply_read: 'Supplier reply reading', product_scan: 'Product card — AI scan', rfq_file_check: 'RFQ — file check',
 };
 

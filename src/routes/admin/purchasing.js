@@ -10,6 +10,12 @@ import { spoEmail } from '../../lib/email-templates.js';
 import { replyAddress, subjectTag } from '../../lib/freight.js';
 import { saveSupplierReply } from '../../lib/purchasing-store.js';
 import { back, notFound, bool, CURRENCIES } from '../../lib/util.js';
+import { uploadDocument } from '../../lib/storage.js';
+import { canDelete } from '../../lib/access.js';
+import { aiEnabled, extractSupplierPi } from '../../lib/ai.js';
+import { readXlsx, workbookToText } from '../../lib/xlsx-read.js';
+import { readCsv } from './imports.js';
+import { piTotal, checkPi, paymentPlan, matchProducts } from '../../lib/supplier-pi.js';
 
 const r = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 8 } });
@@ -159,6 +165,126 @@ async function load(id) {
   return po;
 }
 
+
+// ---- the supplier's PI and our payments to the supplier (migration 0037) ----
+const SPI_IMG = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif' };
+const migErr = e => (/supplier_pis|supplier_payments/.test(e.message) ? 'Run supabase/migrations/0037_supplier_pi.sql in the Supabase SQL editor first.' : e.message);
+const day = v => (/^\d{4}-\d{2}-\d{2}$/.test(v || '') ? v : null);
+const money = (v, c) => `${c} ${Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+async function attach(req, po, files, kind) {
+  const [type, id] = ent(po), ids = [];
+  for (const file of files || []) ids.push((await uploadDocument({ file, entityType: type, entityId: id, kind, title: file.originalname, clientVisible: false, uploadedBy: req.user.id })).id);
+  return ids;
+}
+r.post('/:id/pi', upload.array('files', 8), async (req, res) => {
+  const po = await load(req.params.id);
+  if (!po) return notFound(res, 'Purchase order');
+  const to = `/admin/purchasing/${po.id}#supplier-pi`;
+  const lines = parseLines(req.body);
+  if (!lines.length) return back(res, to, { err: 'Add at least one line with a quantity.' });
+  const declared = String(req.body.declared_total ?? '').trim() === '' ? null : Math.round(Number(String(req.body.declared_total).replace(',', '.')) * 100) / 100;
+  const chk = checkPi({ lines, declared: Number.isFinite(declared) ? declared : null });
+  const currency = CURRENCIES.includes(req.body.currency) ? req.body.currency : po.currency;
+  const row = { po_id: po.id, pi_no: String(req.body.pi_no || '').trim().slice(0, 80) || null, pi_date: day(req.body.pi_date), currency, lines, total: chk.total, declared_total: chk.declared,
+    notes: String(req.body.notes || '').trim().slice(0, 1000) || null, status: chk.matches ? 'confirmed' : 'draft' };
+  let pid = isId(req.body.pid) ? req.body.pid : null, old = null;
+  if (pid) { old = (await admin.from('supplier_pis').select('file_doc_ids').eq('id', pid).eq('po_id', po.id).maybeSingle()).data; if (!old) pid = null; }
+  let newIds;
+  try { newIds = await attach(req, po, req.files, 'other'); } catch (e) { return back(res, to, { err: e.message }); }
+  const file_doc_ids = [...(old?.file_doc_ids || []), ...newIds];
+  const q = pid ? admin.from('supplier_pis').update({ ...row, file_doc_ids }).eq('id', pid) : admin.from('supplier_pis').insert({ ...row, file_doc_ids, created_by: req.user.id });
+  const { error } = await q;
+  if (error) return back(res, to, { err: migErr(error) });
+  await log({ entityType: ent(po)[0], entityId: ent(po)[1], action: 'supplier_pi_saved', actorId: req.user.id, detail: { note: `${po.ref}: ${money(chk.total, currency)}` } });
+  if (!chk.matches) return back(res, to, { err: chk.declared == null ? "Saved as a draft — enter the total printed on the supplier's PI so it can be checked." : `Saved as a draft — the lines add up to ${money(chk.total, currency)} but the PI says ${money(chk.declared, currency)} (difference ${money(chk.diff, currency)}). Check quantities and prices.` });
+  back(res, to, { msg: `Supplier PI saved — total ${money(chk.total, currency)} matches.` });
+});
+r.post('/:id/pi/:pid/files', upload.array('files', 8), async (req, res) => {
+  const po = await load(req.params.id);
+  if (!po) return notFound(res, 'Purchase order');
+  const to = `/admin/purchasing/${po.id}#supplier-pi`;
+  const { data: pi } = await admin.from('supplier_pis').select('id, file_doc_ids').eq('id', req.params.pid).eq('po_id', po.id).maybeSingle();
+  if (!pi) return notFound(res, 'Supplier PI');
+  if (!req.files?.length) return back(res, to, { err: 'Choose at least one file.' });
+  try { const ids = await attach(req, po, req.files, 'other'); await admin.from('supplier_pis').update({ file_doc_ids: [...(pi.file_doc_ids || []), ...ids] }).eq('id', pi.id); } catch (e) { return back(res, to, { err: e.message }); }
+  back(res, to, { msg: 'File attached.' });
+});
+r.post('/:id/pi/:pid/delete', async (req, res) => {
+  const po = await load(req.params.id);
+  if (!po) return notFound(res, 'Purchase order');
+  const to = `/admin/purchasing/${po.id}#supplier-pi`;
+  const { data: pi } = await admin.from('supplier_pis').select('id, created_by').eq('id', req.params.pid).eq('po_id', po.id).maybeSingle();
+  if (!pi) return notFound(res, 'Supplier PI');
+  if (!canDelete(req.user, pi)) return back(res, to, { err: 'You can delete only records you created.' });
+  await admin.from('supplier_pis').delete().eq('id', pi.id);
+  back(res, to, { msg: 'Supplier PI deleted (the files stay in the documents).' });
+});
+// attach the supplier's file and let AI fill the lines — saved as a draft to check
+r.post('/:id/pi/read', upload.single('file'), async (req, res) => {
+  const po = await load(req.params.id);
+  if (!po) return notFound(res, 'Purchase order');
+  const to = `/admin/purchasing/${po.id}#supplier-pi`, f = req.file;
+  if (!f) return back(res, to, { err: "Choose or drop the supplier's PI file." });
+  if (!aiEnabled()) return back(res, to, { err: 'AI is not configured (ANTHROPIC_API_KEY). Attach the file and type the lines instead.' });
+  const ext = (f.originalname.split('.').pop() || '').toLowerCase();
+  try {
+    let src;
+    if (['xlsx', 'xlsm', 'csv', 'txt'].includes(ext)) src = { text: workbookToText(ext === 'csv' || ext === 'txt' ? readCsv(f.buffer.toString('utf8').replace(/^﻿/, '')) : readXlsx(f.buffer)), filename: f.originalname };
+    else if (ext === 'pdf') src = { pdf: f.buffer, filename: f.originalname };
+    else if (SPI_IMG[ext]) src = { image: { data: f.buffer, mediaType: SPI_IMG[ext] }, filename: f.originalname };
+    else return back(res, to, { err: 'Upload a PDF, Excel, CSV or screenshot.' });
+    const ai = await extractSupplierPi(src, { type: 'supplier_po', id: po.id });
+    const { data: products } = await admin.from('products').select('id, name, sku');
+    const lines = matchProducts(parseLines({ lines: ai.lines.map(l => ({ description: l.description, sku: l.sku, quantity: l.quantity, unit: l.unit, unit_price: l.unit_price })) }), products || []);
+    if (!lines.length) return back(res, to, { err: 'The AI found no lines in that file — attach it and type the lines.' });
+    const currency = CURRENCIES.includes(ai.currency) ? ai.currency : po.currency;
+    const chk = checkPi({ lines, declared: ai.printed_total });
+    const ids = await attach(req, po, [f], 'other');
+    const { error } = await admin.from('supplier_pis').insert({ po_id: po.id, pi_no: ai.pi_no, pi_date: day(ai.pi_date), currency, lines, total: chk.total, declared_total: chk.declared, file_doc_ids: ids, notes: ai.notes || null, status: chk.matches ? 'confirmed' : 'draft', created_by: req.user.id });
+    if (error) return back(res, to, { err: migErr(error) });
+    back(res, to, chk.matches ? { msg: `Read by AI — ${lines.length} lines, total ${money(chk.total, currency)} matches the PI. Please glance over the lines.` } : { err: `Read by AI as a draft — the lines add up to ${money(chk.total, currency)}${chk.declared != null ? ` but the PI says ${money(chk.declared, currency)}` : ''}. Check every line against the file before relying on it.` });
+  } catch (e) { back(res, to, { err: `Could not read the file: ${e.message}` }); }
+});
+// payments to the supplier (shares of the PI total)
+const payBody = b => ({ amount: Math.round(Number(String(b.amount || '').replace(',', '.')) * 100) / 100, paid_on: day(b.paid_on),
+  label: String(b.label || '').trim().slice(0, 40) || null, reference: String(b.reference || '').trim().slice(0, 120) || null });
+r.post('/:id/payments', async (req, res) => {
+  const po = await load(req.params.id);
+  if (!po) return notFound(res, 'Purchase order');
+  const to = `/admin/purchasing/${po.id}#supplier-pi`, b = payBody(req.body);
+  if (!(b.amount > 0)) return back(res, to, { err: 'Enter the amount paid.' });
+  const { data: pi } = await admin.from('supplier_pis').select('currency').eq('po_id', po.id).order('created_at', { ascending: false }).limit(1).maybeSingle();
+  const { error } = await admin.from('supplier_payments').insert({ ...b, paid_on: b.paid_on || new Date().toISOString().slice(0, 10), po_id: po.id, currency: pi?.currency || po.currency, created_by: req.user.id });
+  if (error) return back(res, to, { err: migErr(error) });
+  await log({ entityType: ent(po)[0], entityId: ent(po)[1], action: 'supplier_payment_recorded', actorId: req.user.id, detail: { note: `${po.ref}: ${money(b.amount, pi?.currency || po.currency)}` } });
+  back(res, to, { msg: 'Payment to the supplier recorded.' });
+});
+r.post('/:id/payments/:sid/edit', async (req, res) => {
+  const to = `/admin/purchasing/${req.params.id}#supplier-pi`, b = payBody(req.body);
+  if (!(b.amount > 0)) return back(res, to, { err: 'Enter the amount.' });
+  const upd = { amount: b.amount, label: b.label, reference: b.reference }; if (b.paid_on) upd.paid_on = b.paid_on;
+  const { error } = await admin.from('supplier_payments').update(upd).eq('id', req.params.sid).eq('po_id', req.params.id);
+  back(res, to, error ? { err: migErr(error) } : { msg: 'Payment updated.' });
+});
+r.post('/:id/payments/:sid/delete', async (req, res) => {
+  const to = `/admin/purchasing/${req.params.id}#supplier-pi`;
+  const { data: rec } = await admin.from('supplier_payments').select('id, created_by').eq('id', req.params.sid).eq('po_id', req.params.id).maybeSingle();
+  if (!rec) return notFound(res, 'Payment');
+  if (!canDelete(req.user, rec)) return back(res, to, { err: 'You can delete only records you created.' });
+  await admin.from('supplier_payments').delete().eq('id', rec.id);
+  back(res, to, { msg: 'Payment record deleted.' });
+});
+r.post('/:id/payments/:sid/files', upload.array('files', 8), async (req, res) => {
+  const po = await load(req.params.id);
+  if (!po) return notFound(res, 'Purchase order');
+  const to = `/admin/purchasing/${po.id}#supplier-pi`;
+  const { data: sp } = await admin.from('supplier_payments').select('id, proof_doc_ids').eq('id', req.params.sid).eq('po_id', po.id).maybeSingle();
+  if (!sp) return notFound(res, 'Payment');
+  if (!req.files?.length) return back(res, to, { err: 'Choose at least one file.' });
+  try { const ids = await attach(req, po, req.files, 'payment_proof'); await admin.from('supplier_payments').update({ proof_doc_ids: [...(sp.proof_doc_ids || []), ...ids] }).eq('id', sp.id); } catch (e) { return back(res, to, { err: e.message }); }
+  back(res, to, { msg: `${req.files.length} proof file${req.files.length === 1 ? '' : 's'} added.` });
+});
+
 r.get('/:id', async (req, res) => {
   const po = await load(req.params.id);
   if (!po) return notFound(res, 'Purchase order');
@@ -166,7 +292,14 @@ r.get('/:id', async (req, res) => {
   const ids = [...new Set((responses || []).flatMap(x => (x.extracted?.files || []).map(f => f.id)))];
   const { data: docs } = ids.length ? await admin.from('documents').select('id, title, kind, mime_type').in('id', ids) : { data: [] };
   const { data: openOrders } = po.order_id ? { data: [] } : await admin.from('orders').select('id, order_no, status, organizations(name)').not('status', 'in', '("closed","cancelled","delivered")').order('created_at', { ascending: false }).limit(100);
-  res.render('admin/purchasing/detail', { openOrders: openOrders || [], title: po.ref, po, supplier: po.suppliers, order: po.orders, responses: responses || [], docs: docs || [], labels: SPO_LABEL, replyTo: replyAddress(po.token, ''), msg: req.query.msg, err: req.query.err });
+  const [{ data: spis }, { data: spays }, { data: products }] = await Promise.all([
+    admin.from('supplier_pis').select('*').eq('po_id', po.id).order('created_at', { ascending: false }),   // empty before migration 0037
+    admin.from('supplier_payments').select('*').eq('po_id', po.id).order('created_at'),
+    admin.from('products').select('id, name, sku, unit_cost, cost_currency').order('name'),
+  ]);
+  const sdocIds = [...(spis || []).flatMap(x => x.file_doc_ids || []), ...(spays || []).flatMap(x => x.proof_doc_ids || [])];
+  const { data: sdocs } = sdocIds.length ? await admin.from('documents').select('id, title').in('id', sdocIds) : { data: [] };
+  res.render('admin/purchasing/detail', { aiOn: aiEnabled(), checkPi, paymentPlan, spis: spis || [], spays: spays || [], sdocs: sdocs || [], products: products || [], openOrders: openOrders || [], title: po.ref, po, supplier: po.suppliers, order: po.orders, responses: responses || [], docs: docs || [], labels: SPO_LABEL, replyTo: replyAddress(po.token, ''), msg: req.query.msg, err: req.query.err });
 });
 
 r.post('/:id', async (req, res) => {

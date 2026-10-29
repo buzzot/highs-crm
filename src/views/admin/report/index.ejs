@@ -12,6 +12,7 @@
     <label class="small muted">From <input type="date" name="from" value="<%= query.from || '' %>"></label>
     <label class="small muted">To <input type="date" name="to" value="<%= query.to || '' %>"></label>
     <button class="btn">Filter</button>
+    <% if (rows.length) { %><a class="btn" href="/admin/report/archive-all?<%= new URLSearchParams(Object.fromEntries(Object.entries({ q: query.q, status, from: query.from, to: query.to }).filter(e => e[1]))).toString() %>" title="One zip with a folder per order (max 20 orders)">⬇ Save all (<%= rows.length %>)</a><% } %>
   </form>
   <div class="repsum">
     <div><span>Income</span><b class="pos"><%= fmt.money(totals.income, cur, 0) %></b></div>
@@ -26,7 +27,7 @@
     <% if (!rows.length) { %><tr><td colspan="5" class="muted">No orders.</td></tr><% } %>
     <% rows.forEach(r => { const o = r.order; %>
       <tr class="<%= r.cancelled ? 'dim' : '' %>">
-        <td class="c-order"><a href="/admin/orders/<%= o.id %>" class="repno"><%= o.order_no %></a><div class="repsub"><%= o.client_name %></div><div class="repsub"><%= fmt.date(o.created_at) %><% if (r.cancelled) { %> · cancelled<% } %></div></td>
+        <td class="c-order"><a href="/admin/orders/<%= o.id %>" class="repno"><%= o.order_no %></a><div class="repsub"><%= o.client_name %></div><div class="repsub repdate"><%= fmt.date(o.created_at) %><% if (r.cancelled) { %> · cancelled<% } %><a class="repsave" href="/admin/report/<%= o.id %>/archive" title="Download all documents of this order as a zip (Client / Supplier / Logistics)">⬇ Save</a></div></td>
         <td class="c-staff repsmall"><%= r.staff || '—' %></td>
         <td><div class="repcells">
           <% if (!r.incomes.length) { %><span class="repnone">—</span><% } %>
@@ -42,6 +43,6 @@
     </tbody>
   </table>
   </div>
-  <p class="muted small">Income = confirmed client payments (faded = waiting for confirmation, not in the balance). Expenses = supplier orders sent/confirmed (faded = estimate from the order cost) plus logistics costs. Balance = income − expenses.</p>
+  <p class="muted small">Income = confirmed client payments (faded = waiting for confirmation, not in the balance). Expenses = payments recorded to the supplier (or, until recorded, the supplier orders; faded = estimate from the order cost) plus logistics costs. Balance = income − expenses.</p>
 </div>
 <%- include('../../partials/foot') %>

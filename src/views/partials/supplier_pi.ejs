@@ -1,0 +1,178 @@
+<%# The supplier's proforma invoice (PI) + our payments to the supplier, on a supplier PO. locals: po, spis, spays, sdocs, products, aiOn %>
+<%
+  const pis = typeof spis !== 'undefined' ? spis : [], pays = typeof spays !== 'undefined' ? spays : [], sd = typeof sdocs !== 'undefined' ? sdocs : [], prods = typeof products !== 'undefined' ? products : [];
+  const pi = pis[0] || null, hist = pis.slice(1);
+  const chk = pi ? checkPi({ lines: pi.lines, declared: pi.declared_total, poTotal: po.total }) : null;
+  const plan = pi ? paymentPlan(pi.total, pays) : null, cur = pi ? pi.currency : po.currency;
+  const M = v => fmt.money(v, cur);
+  const ROWS = 30, base = pi ? pi.lines : [], shown = Math.max(base.length + 3, 6);
+  const rowsAll = Array.from({ length: ROWS }, (_, i) => base[i] || {});
+  const docT = ids => (ids || []).map(i => sd.find(z => z.id === i)).filter(Boolean);
+%>
+<div class="card" id="supplier-pi">
+  <h2>Supplier PI <span class="muted small">— the supplier's proforma invoice; it sets what we owe</span>
+    <% if (pi) { %><span class="pill <%= pi.status === 'confirmed' ? 'ok' : 'pending' %>"><%= pi.status === 'confirmed' ? 'Checked' : 'Draft' %></span><% } %></h2>
+
+  <% if (pi) { %>
+    <div class="pisum">
+      <div><span class="muted small">PI no.</span><strong><%= pi.pi_no || '—' %></strong><span class="muted small"><%= pi.pi_date ? fmt.date(pi.pi_date) : '' %></span></div>
+      <div><span class="muted small">PI total</span><strong class="big"><%= M(pi.total) %></strong></div>
+      <div><span class="muted small">Printed on the PI</span><strong><%= chk.declared != null ? M(chk.declared) : '—' %></strong></div>
+      <div><span class="muted small">Our PO</span><strong><%= fmt.money(po.total, po.currency) %></strong></div>
+    </div>
+    <% if (chk.declared == null) { %><div class="alert warn">Enter the total printed on the supplier's PI to check it.</div>
+    <% } else if (!chk.matches) { %><div class="alert err"><strong>The lines add up to <%= M(chk.total) %> but the supplier's PI says <%= M(chk.declared) %></strong> (difference <%= M(chk.diff) %>). Check quantities and prices against the file.</div><% } %>
+    <% if (chk.samePo === false && pi.currency === po.currency) { %><div class="alert warn small">PI is <%= M(Math.abs(chk.vsPo)) %> <%= chk.vsPo > 0 ? 'higher' : 'lower' %> than our PO to the supplier.</div><% } %>
+    <% if (pi.currency !== po.currency) { %><div class="alert warn small">The PI is in <%= pi.currency %>, our PO in <%= po.currency %> — amounts can't be compared directly.</div><% } %>
+    <div class="payfiles" style="margin:8px 0">
+      <% docT(pi.file_doc_ids).forEach(dd => { %><a class="fchip" href="/admin/documents/<%= dd.id %>/download" target="_blank" title="<%= dd.title %>"><%- icon('file') %>&nbsp;<%= dd.title.length > 32 ? dd.title.slice(0, 30) + '…' : dd.title %></a><% }) %>
+      <button type="button" class="link small" onclick="document.getElementById('spifile').showModal()">+ File</button>
+    </div>
+    <%- include('po_lines', { lines: pi.lines, currency: pi.currency, edit: false }) %>
+    <% if (pi.notes) { %><p class="muted small">Note: <%= pi.notes %></p><% } %>
+    <% if (hist.length) { %><p class="muted small">Earlier versions: <%= hist.map(h => (h.pi_no || 'PI') + ' · ' + fmt.money(h.total, h.currency) + ' · ' + fmt.date(h.created_at)).join('  |  ') %></p><% } %>
+  <% } else { %>
+    <p class="muted small">Attach the supplier's proforma invoice and enter its lines — or let AI read the file. Everything we pay is then counted from this PI.</p>
+  <% } %>
+
+  <% if (typeof aiOn !== 'undefined' && aiOn) { %>
+  <form method="post" action="/admin/purchasing/<%= po.id %>/pi/read" enctype="multipart/form-data" class="spiread">
+    <div class="dropwrap"><div class="filedrop compact slim" data-dropzone data-max="1" data-max-mb="20" tabindex="0">
+      <input type="file" name="file" aria-label="Supplier PI file" accept=".pdf,.xlsx,.xlsm,.csv,.txt,image/*">
+      <span class="dicon"><%- icon('upload') %></span><strong data-drop-count>Drop the supplier's PI here, or <span class="dlink">browse</span></strong>
+      <span class="muted small dsub">PDF, Excel or screenshot — AI fills the lines, you check them</span></div><div class="fgrid" data-drop-list></div></div>
+    <button class="btn">Read with AI</button>
+  </form>
+  <% } %>
+
+  <details class="spiedit" <%= pi ? '' : 'open' %>>
+    <summary class="btn small"><%= pi ? 'Edit / new revision' : 'Enter the PI manually' %></summary>
+    <form method="post" action="/admin/purchasing/<%= po.id %>/pi" enctype="multipart/form-data" id="spiform">
+      <% if (pi) { %><input type="hidden" name="pid" value="<%= pi.id %>"><% } %>
+      <div class="row">
+        <label>Supplier's PI no. <input name="pi_no" value="<%= pi?.pi_no || '' %>"></label>
+        <label>Date <input type="date" name="pi_date" value="<%= pi?.pi_date || new Date().toISOString().slice(0, 10) %>"></label>
+        <label>Currency <select name="currency"><% ['CNY', 'USD', 'EUR', 'GBP'].forEach(c => { %><option <%= c === cur ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+        <label>Total printed on the PI <input name="declared_total" type="number" step="0.01" min="0" value="<%= pi && pi.declared_total != null ? pi.declared_total : '' %>" placeholder="must match the lines"></label>
+      </div>
+      <div class="tablewrap"><table class="tbl compact spilines">
+        <thead><tr><th>Product</th><th>Description</th><th>SKU</th><th class="right">Qty</th><th>Unit</th><th class="right">Unit price</th><th class="right">Amount</th></tr></thead>
+        <tbody>
+        <% rowsAll.forEach((l, i) => { %>
+          <tr class="spirow" <%= i >= shown ? 'hidden' : '' %>>
+            <td><select data-picker="Product" name="lines[<%= i %>][product_id]"><option value="">— choose —</option><% prods.forEach(p => { %><option value="<%= p.id %>" data-name="<%= p.name %>" data-sku="<%= p.sku || '' %>" data-cost="<%= p.unit_cost ?? '' %>" data-cur="<%= p.cost_currency || '' %>" <%= l.product_id === p.id ? 'selected' : '' %>><%= p.name %><%= p.sku ? ' · ' + p.sku : '' %></option><% }) %></select></td>
+            <td><input name="lines[<%= i %>][description]" value="<%= l.description || '' %>"></td>
+            <td><input name="lines[<%= i %>][sku]" value="<%= l.sku || '' %>" class="short"></td>
+            <td class="right"><input type="number" step="any" min="0" name="lines[<%= i %>][quantity]" value="<%= l.quantity ?? '' %>" class="short"></td>
+            <td><input name="lines[<%= i %>][unit]" value="<%= l.unit || 'pcs' %>" class="short"></td>
+            <td class="right"><input type="number" step="0.0001" min="0" name="lines[<%= i %>][unit_price]" value="<%= l.unit_price ?? '' %>" class="short"></td>
+            <td class="right num spiamt">0.00</td>
+          </tr>
+        <% }) %>
+        </tbody>
+        <tfoot><tr><td colspan="6" class="right"><strong>Lines total</strong> <span class="spidiff small"></span></td><td class="right num"><strong id="spitotal">0.00</strong></td></tr></tfoot>
+      </table></div>
+      <div class="spiactions"><button type="button" class="link small" id="spimore">+ Add line</button>
+        <a class="link small" href="/admin/products/new" target="_blank" rel="noopener">+ New product (opens in a new tab — then reload this page)</a></div>
+      <label>Notes <input name="notes" value="<%= pi?.notes || '' %>"></label>
+      <div class="dropwrap"><div class="filedrop compact slim" data-dropzone data-max="8" data-max-mb="20" tabindex="0"><input type="file" name="files" multiple aria-label="Attach the supplier's PI file"><span class="dicon"><%- icon('upload') %></span><strong data-drop-count>Attach the supplier's PI file — drop it here, or <span class="dlink">browse</span></strong></div><div class="fgrid" data-drop-list></div></div>
+      <div class="actions"><% if (pi) { %><label class="check small"><input type="checkbox" onchange="this.form.pid.disabled = this.checked"> save as a new revision (keep the old PI in the history)</label><% } %><button class="btn primary">Save PI</button></div>
+    </form>
+    <% if (pi) { %><form method="post" action="/admin/purchasing/<%= po.id %>/pi/<%= pi.id %>/delete" onsubmit="return confirm('Delete this supplier PI? The files stay in the documents.')" class="inline"><button class="link small danger">Delete this PI</button></form><% } %>
+  </details>
+
+  <% if (pi) { %>
+  <h3 class="spih">Payments to the supplier</h3>
+  <div class="pay-kpis">
+    <div><span class="muted small">PI total</span><strong><%= M(plan.total) %></strong></div>
+    <div><span class="muted small">Paid</span><strong><%= M(plan.paid) %> <span class="muted small">(<%= plan.pctPaid %>%)</span></strong></div>
+    <div><span class="muted small">Open</span><strong class="<%= plan.open > 0.004 ? 'bad' : 'ok' %>"><%= M(Math.max(0, plan.open)) %></strong></div>
+    <div><span class="muted small">Status</span><strong><%= ({ unpaid: 'Unpaid', partial: 'Partially paid', paid: 'Paid', over: 'Overpaid' })[plan.status] %></strong></div>
+  </div>
+  <div class="paylist">
+    <% plan.rows.forEach(x => { const pf = docT(x.proof_doc_ids); %>
+    <div class="payrow"><div class="payline">
+      <strong class="payamt"><%= M(x.amount) %></strong>
+      <span class="paymeta"><b><%= x.label || 'Payment' %><%= x.pct != null ? ' · ' + x.pct + '% of PI' : '' %></b><span><%= fmt.date(x.paid_on || x.created_at) %><%= x.reference ? ' · ref ' + x.reference : '' %></span></span>
+      <span></span>
+      <span class="payfiles"><% pf.forEach((dd, i) => { %><a class="fchip" href="/admin/documents/<%= dd.id %>/download" target="_blank" title="<%= dd.title %>"><%- icon('file') %>&nbsp;Proof<%= pf.length > 1 ? ' ' + (i + 1) : '' %></a><% }) %><button type="button" class="link small" onclick="document.getElementById('spf-<%= x.id %>').showModal()"><%= pf.length ? '+' : '+ Proof' %></button></span>
+      <button type="button" class="link small payedit" onclick="document.getElementById('spe-<%= x.id %>').showModal()">Edit</button>
+    </div></div>
+    <% }) %>
+  </div>
+  <button type="button" class="btn primary payadd" onclick="document.getElementById('sprec').showModal()">+ Record a payment to the supplier</button>
+
+  <dialog id="sprec" class="bookdlg">
+    <h2>Payment to supplier <span class="muted small">PI total <%= M(plan.total) %> · open <%= M(Math.max(0, plan.open)) %></span></h2>
+    <form method="post" action="/admin/purchasing/<%= po.id %>/payments" class="payrec dlg">
+      <label class="wide">Amount (<%= cur %>) <input name="amount" id="spamt" type="number" step="0.01" min="0.01" required></label>
+      <div class="wide presets"><% [30, 50, 70].forEach(p => { %><button type="button" class="btn small" data-v="<%= (plan.total * p / 100).toFixed(2) %>" data-l="<%= p %>%"><%= p %>% = <%= M(plan.total * p / 100) %></button><% }) %><% if (plan.open > 0.004) { %><button type="button" class="btn small" data-v="<%= plan.open.toFixed(2) %>" data-l="Balance">Open balance = <%= M(plan.open) %></button><% } %></div>
+      <label>Date <input type="date" name="paid_on" value="<%= new Date().toISOString().slice(0, 10) %>"></label>
+      <label>Instalment <input name="label" id="splabel" placeholder="Deposit / Balance" autocomplete="off"></label>
+      <label class="wide">Reference <input name="reference" placeholder="Bank ref / invoice no"></label>
+      <div class="actions"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn primary">Record</button></div>
+    </form>
+  </dialog>
+  <% plan.rows.forEach(x => { %>
+  <dialog id="spe-<%= x.id %>" class="bookdlg">
+    <h2>Edit payment</h2>
+    <form method="post" action="/admin/purchasing/<%= po.id %>/payments/<%= x.id %>/edit" class="payrec dlg">
+      <label>Amount (<%= cur %>) <input name="amount" type="number" step="0.01" min="0.01" required value="<%= x.amount %>"></label>
+      <label>Date <input type="date" name="paid_on" value="<%= String(x.paid_on || x.created_at || '').slice(0, 10) %>"></label>
+      <label>Instalment <input name="label" value="<%= x.label || '' %>" autocomplete="off"></label>
+      <label>Reference <input name="reference" value="<%= x.reference || '' %>"></label>
+      <div class="actions"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn primary">Save</button></div>
+    </form>
+    <form method="post" action="/admin/purchasing/<%= po.id %>/payments/<%= x.id %>/delete" onsubmit="return confirm('Delete this payment record? The uploaded files stay in the documents.')" class="inline"><button class="link small danger">Delete this record</button></form>
+  </dialog>
+  <dialog id="spf-<%= x.id %>" class="bookdlg">
+    <h2>Proof of payment <span class="muted small"><%= M(x.amount) %></span></h2>
+    <form method="post" action="/admin/purchasing/<%= po.id %>/payments/<%= x.id %>/files" enctype="multipart/form-data">
+      <div class="dropwrap"><div class="filedrop compact" data-dropzone data-max="8" data-max-mb="20" tabindex="0"><input type="file" name="files" multiple aria-label="Proof of payment"><span class="dicon"><%- icon('upload') %></span><strong data-drop-count>Drop files here, or <span class="dlink">browse</span></strong><span class="muted small dsub">Bank slip, transfer confirmation, screenshot · paste with ⌘/Ctrl V</span></div><div class="fgrid" data-drop-list></div></div>
+      <div class="actions"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn primary">Upload</button></div>
+    </form>
+  </dialog>
+  <% }) %>
+  <% } %>
+
+  <% if (pi) { %>
+  <dialog id="spifile" class="bookdlg">
+    <h2>Attach the supplier's PI file</h2>
+    <form method="post" action="/admin/purchasing/<%= po.id %>/pi/<%= pi.id %>/files" enctype="multipart/form-data">
+      <div class="dropwrap"><div class="filedrop compact" data-dropzone data-max="8" data-max-mb="20" tabindex="0"><input type="file" name="files" multiple aria-label="PI file"><span class="dicon"><%- icon('upload') %></span><strong data-drop-count>Drop files here, or <span class="dlink">browse</span></strong></div><div class="fgrid" data-drop-list></div></div>
+      <div class="actions"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn primary">Upload</button></div>
+    </form>
+  </dialog>
+  <% } %>
+  <script>
+  (function () {
+    const root = document.getElementById('supplier-pi');
+    root.querySelectorAll('dialog.bookdlg').forEach(d => d.addEventListener('click', e => { if (e.target === d) d.close(); }));
+    const form = document.getElementById('spiform'); if (!form) return;
+    const rows = [...form.querySelectorAll('tr.spirow')], tot = document.getElementById('spitotal'), diff = form.querySelector('.spidiff'), decl = form.querySelector('[name=declared_total]');
+    const f2 = v => v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    function calc() {
+      let t = 0;
+      rows.forEach(r => { const q = parseFloat(r.querySelector('[name$="[quantity]"]').value) || 0, p = parseFloat(r.querySelector('[name$="[unit_price]"]').value) || 0, a = Math.round(q * p * 100) / 100; t += a; r.querySelector('.spiamt').textContent = a ? f2(a) : ''; });
+      t = Math.round(t * 100) / 100; tot.textContent = f2(t);
+      const d = decl.value === '' ? null : Math.round((parseFloat(decl.value) - t) * 100) / 100;
+      diff.textContent = d == null ? '' : Math.abs(d) < 0.01 ? '✓ matches the printed total' : '⚠ differs from the printed total by ' + f2(d);
+      diff.style.color = d == null ? '' : Math.abs(d) < 0.01 ? '#0b8a7a' : '#b42318';
+    }
+    rows.forEach(r => {
+      r.addEventListener('input', calc);
+      r.querySelector('select').addEventListener('change', e => {
+        const o = e.target.selectedOptions[0]; if (!o || !o.value) return;
+        const set = (sel, v) => { const i = r.querySelector(sel); if (i && v !== '') i.value = v; };
+        set('[name$="[description]"]', o.dataset.name || ''); set('[name$="[sku]"]', o.dataset.sku || '');
+        const price = r.querySelector('[name$="[unit_price]"]'); if (o.dataset.cost) { price.value = o.dataset.cost; price.title = 'Price from the product record (' + (o.dataset.cur || '') + ') — change it if the supplier quoted differently'; }
+        calc();
+      });
+    });
+    decl.addEventListener('input', calc);
+    document.getElementById('spimore').addEventListener('click', e => { const h = rows.find(r => r.hidden); if (h) h.hidden = false; if (!rows.some(r => r.hidden)) e.target.hidden = true; });
+    calc();
+    root.querySelectorAll('.presets button').forEach(b => b.addEventListener('click', () => { document.getElementById('spamt').value = b.dataset.v; const l = document.getElementById('splabel'); if (!l.value) l.value = b.dataset.l; }));
+  })();
+  </script>
+</div>

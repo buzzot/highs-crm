@@ -418,6 +418,50 @@ Never invent values — use null when something is not in the document. Skip TOT
 }
 
 // ---------------------------------------------------------------------------------------------
+// Supplier proforma invoice (PDF, Excel text or screenshot) → number, date, currency, printed total, lines.
+// ---------------------------------------------------------------------------------------------
+const SUPPLIER_PI_TOOL = {
+  name: 'record_supplier_pi',
+  description: "Record the supplier's proforma invoice exactly as printed.",
+  input_schema: {
+    type: 'object',
+    properties: {
+      pi_no: { ...strOrNull, description: "The supplier's invoice / PI number" },
+      pi_date: { ...strOrNull, description: 'YYYY-MM-DD' },
+      currency: { ...strOrNull, description: 'ISO code: CNY, USD, EUR …' },
+      printed_total: { ...numOrNull, description: 'The grand total printed on the document (after any discount, tax or freight line), as a number' },
+      lines: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            description: { type: 'string', description: 'Goods description in English (translate Chinese, keep model numbers)' },
+            sku: { ...strOrNull, description: 'Item / model / article number' },
+            quantity: numOrNull, unit: { ...strOrNull, description: 'pcs, set, m …' }, unit_price: numOrNull,
+          },
+          required: ['description'],
+        },
+      },
+      notes: { type: 'string', description: 'Anything unclear: unreadable values, totals that do not add up, extra charges not on a line' },
+    },
+    required: ['lines'],
+  },
+};
+
+export async function extractSupplierPi(src, entity = null) {
+  const system = `You read proforma invoices (PI) from Chinese suppliers (PDF, Excel exports, phone screenshots).
+Return every goods line with quantity and UNIT price exactly as printed. Do not compute or invent values — use null when something is not in the document.
+Skip TOTAL / subtotal rows, but report the grand total printed on the document in printed_total.`;
+  const content = [];
+  if (src.pdf) content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: src.pdf.toString('base64') } });
+  if (src.image) content.push({ type: 'image', source: { type: 'base64', media_type: src.image.mediaType, data: src.image.data.toString('base64') } });
+  content.push({ type: 'text', text: `File: ${src.filename}\n${src.text ? `Spreadsheet contents (row number first, tab-separated):\n\n${src.text.slice(0, 120000)}\n\n` : ''}Record the proforma invoice.` });
+  const { input, truncated, usage } = await forcedTool({ tool: SUPPLIER_PI_TOOL, content, system, maxTokens: 8000, feature: 'supplier_pi_extract', entity });
+  return { pi_no: input.pi_no || null, pi_date: input.pi_date || null, currency: input.currency || null, printed_total: input.printed_total ?? null, lines: input.lines || [],
+    notes: [input.notes, truncated ? 'The document was long — the AI may have stopped early. Check the last lines.' : null].filter(Boolean).join(' '), usage };
+}
+
+// ---------------------------------------------------------------------------------------------
 // Freight quote reply (email or WeChat text) → price, transit, validity.
 // ---------------------------------------------------------------------------------------------
 const QUOTE_TOOL = {
