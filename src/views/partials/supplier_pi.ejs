@@ -26,10 +26,21 @@
     <% } else if (!chk.matches) { %><div class="alert err"><strong>The lines add up to <%= M(chk.total) %> but the supplier's PI says <%= M(chk.declared) %></strong> (difference <%= M(chk.diff) %>). Check quantities and prices against the file.</div><% } %>
     <% if (chk.samePo === false && pi.currency === po.currency) { %><div class="alert warn small">PI is <%= M(Math.abs(chk.vsPo)) %> <%= chk.vsPo > 0 ? 'higher' : 'lower' %> than our PO to the supplier.</div><% } %>
     <% if (pi.currency !== po.currency) { %><div class="alert warn small">The PI is in <%= pi.currency %>, our PO in <%= po.currency %> — amounts can't be compared directly.</div><% } %>
-    <div class="payfiles" style="margin:8px 0">
-      <% docT(pi.file_doc_ids).forEach(dd => { %><a class="fchip" href="/admin/documents/<%= dd.id %>/download" target="_blank" title="<%= dd.title %>"><%- icon('file') %>&nbsp;<%= dd.title.length > 32 ? dd.title.slice(0, 30) + '…' : dd.title %></a><% }) %>
-      <button type="button" class="link small" onclick="document.getElementById('spifile').showModal()">+ File</button>
+    <% const pf0 = docT(pi.file_doc_ids); %>
+    <% if (pf0.length) { %>
+    <div class="spifiles">
+      <% pf0.forEach(dd => { %><div class="spifile"><%- icon('file') %><span class="nm" title="<%= dd.title %>"><%= dd.title %></span>
+        <a class="link small" href="/admin/documents/<%= dd.id %>/download" target="_blank">View</a>
+        <button type="button" class="link small" onclick="var d=document.getElementById('spifile');d.querySelector('[name=replace]').value='<%= dd.id %>';d.querySelector('h2').textContent='Replace the supplier\u2019s PI file';d.showModal()">Replace</button>
+        <form method="post" action="/admin/purchasing/<%= po.id %>/pi/<%= pi.id %>/files/<%= dd.id %>/remove" class="inline" onsubmit="return confirm('Remove this file from the PI? It stays in the documents.')"><button class="link small danger">Remove</button></form></div><% }) %>
+      <button type="button" class="link small" onclick="var d=document.getElementById('spifile');d.querySelector('[name=replace]').value='';d.querySelector('h2').textContent='Add another file';d.showModal()">+ Add another file</button>
     </div>
+    <% } else { %>
+    <form method="post" action="/admin/purchasing/<%= po.id %>/pi/<%= pi.id %>/files" enctype="multipart/form-data" class="spiread">
+      <div class="dropwrap"><div class="filedrop compact slim" data-dropzone data-max="8" data-max-mb="20" tabindex="0"><input type="file" name="files" multiple aria-label="Supplier PI file"><span class="dicon"><%- icon('upload') %></span><strong data-drop-count>Drop the supplier's PI file here, or <span class="dlink">browse</span></strong></div><div class="fgrid" data-drop-list></div></div>
+      <button class="btn">Attach</button>
+    </form>
+    <% } %>
     <%- include('po_lines', { lines: pi.lines, currency: pi.currency, edit: false }) %>
     <% if (pi.notes) { %><p class="muted small">Note: <%= pi.notes %></p><% } %>
     <% if (hist.length) { %><p class="muted small">Earlier versions: <%= hist.map(h => (h.pi_no || 'PI') + ' · ' + fmt.money(h.total, h.currency) + ' · ' + fmt.date(h.created_at)).join('  |  ') %></p><% } %>
@@ -37,19 +48,20 @@
     <p class="muted small">Attach the supplier's proforma invoice and enter its lines — or let AI read the file. Everything we pay is then counted from this PI.<%= fromPo ? ' The lines below start from our PO — change them to match what the supplier invoiced.' : '' %></p>
   <% } %>
 
-  <% if (typeof aiOn !== 'undefined' && aiOn) { %>
-  <form method="post" action="/admin/purchasing/<%= po.id %>/pi/read" enctype="multipart/form-data" class="spiread">
-    <div class="dropwrap"><div class="filedrop compact slim" data-dropzone data-max="1" data-max-mb="20" tabindex="0">
-      <input type="file" name="file" aria-label="Supplier PI file" accept=".pdf,.xlsx,.xlsm,.csv,.txt,image/*">
+  <% if (!pi) { %>
+  <form method="post" action="/admin/purchasing/<%= po.id %>/pi" enctype="multipart/form-data" id="spiform">
+  <div class="spiread">
+    <div class="dropwrap"><div class="filedrop compact slim" data-dropzone data-max="8" data-max-mb="20" tabindex="0">
+      <input type="file" name="files" multiple aria-label="Supplier PI file" accept=".pdf,.xlsx,.xlsm,.csv,.txt,image/*">
       <span class="dicon"><%- icon('upload') %></span><strong data-drop-count>Drop the supplier's PI here, or <span class="dlink">browse</span></strong>
-      <span class="muted small dsub">PDF, Excel or screenshot — AI fills the lines, you check them</span></div><div class="fgrid" data-drop-list></div></div>
-    <button class="btn">Read with AI</button>
-  </form>
+      <span class="muted small dsub">PDF, Excel or screenshot<%= typeof aiOn !== 'undefined' && aiOn ? ' — AI can fill the lines, you check them' : '' %></span></div><div class="fgrid" data-drop-list></div></div>
+    <% if (typeof aiOn !== 'undefined' && aiOn) { %><button type="button" class="btn" onclick="var f=this.form;f.action='/admin/purchasing/<%= po.id %>/pi/read';f.submit()">Read with AI</button><% } %>
+  </div>
   <% } %>
 
   <details class="spiedit" <%= pi ? '' : 'open' %>>
     <summary class="btn small"><%= pi ? 'Edit / new revision' : (fromPo ? 'Check / edit the PI (prefilled from our PO)' : 'Enter the PI manually') %></summary>
-    <form method="post" action="/admin/purchasing/<%= po.id %>/pi" enctype="multipart/form-data" id="spiform">
+    <% if (pi) { %><form method="post" action="/admin/purchasing/<%= po.id %>/pi" enctype="multipart/form-data" id="spiform"><% } %>
       <% if (pi) { %><input type="hidden" name="pid" value="<%= pi.id %>"><% } %>
       <div class="row">
         <label>Supplier's PI no. <input name="pi_no" value="<%= pi?.pi_no || '' %>"></label>
@@ -77,11 +89,11 @@
       <div class="spiactions"><button type="button" class="link small" id="spimore">+ Add line</button>
         <span class="muted small">New product? Choose “+ New product…” in the Product list.</span></div>
       <label>Notes <input name="notes" value="<%= pi?.notes || '' %>"></label>
-      <div class="dropwrap"><div class="filedrop compact slim" data-dropzone data-max="8" data-max-mb="20" tabindex="0"><input type="file" name="files" multiple aria-label="Attach the supplier's PI file"><span class="dicon"><%- icon('upload') %></span><strong data-drop-count>Attach the supplier's PI file — drop it here, or <span class="dlink">browse</span></strong></div><div class="fgrid" data-drop-list></div></div>
       <div class="actions"><% if (pi) { %><label class="check small"><input type="checkbox" onchange="this.form.pid.disabled = this.checked"> save as a new revision (keep the old PI in the history)</label><% } %><button class="btn primary">Save PI</button></div>
-    </form>
+    <% if (pi) { %></form><% } %>
     <% if (pi) { %><form method="post" action="/admin/purchasing/<%= po.id %>/pi/<%= pi.id %>/delete" onsubmit="return confirm('Delete this supplier PI? The files stay in the documents.')" class="inline"><button class="link small danger">Delete this PI</button></form><% } %>
   </details>
+  <% if (!pi) { %></form><% } %>
 
   <% if (pi) { %>
   <h3 class="spih">Payments to the supplier</h3>
@@ -155,6 +167,7 @@
   <dialog id="spifile" class="bookdlg">
     <h2>Attach the supplier's PI file</h2>
     <form method="post" action="/admin/purchasing/<%= po.id %>/pi/<%= pi.id %>/files" enctype="multipart/form-data">
+      <input type="hidden" name="replace" value="">
       <div class="dropwrap"><div class="filedrop compact" data-dropzone data-max="8" data-max-mb="20" tabindex="0"><input type="file" name="files" multiple aria-label="PI file"><span class="dicon"><%- icon('upload') %></span><strong data-drop-count>Drop files here, or <span class="dlink">browse</span></strong></div><div class="fgrid" data-drop-list></div></div>
       <div class="actions"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn primary">Upload</button></div>
     </form>

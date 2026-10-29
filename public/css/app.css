@@ -1680,3 +1680,9 @@ form.payrec.dlg .wide { grid-column: 1 / -1; }
 .po2-kpis .tag, .po2-tl .tag { text-transform: none; }
 .po2-nextact form .btn { margin: 0; }
 .po2-sendbar[hidden], .po2-decide[hidden] { display: none; }
+.spifiles { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 12px; }
+.spifile { display: flex; align-items: center; gap: 12px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; background: var(--surface); }
+.spifile svg { width: 16px; height: 16px; flex: none; color: var(--muted); }
+.spifile .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.spifile form { display: inline; margin: 0; }
+.spifiles > .link { align-self: flex-start; }

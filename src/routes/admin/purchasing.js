@@ -206,8 +206,18 @@ r.post('/:id/pi/:pid/files', upload.array('files', 8), async (req, res) => {
   const { data: pi } = await admin.from('supplier_pis').select('id, file_doc_ids').eq('id', req.params.pid).eq('po_id', po.id).maybeSingle();
   if (!pi) return notFound(res, 'Supplier PI');
   if (!req.files?.length) return back(res, to, { err: 'Choose at least one file.' });
-  try { const ids = await attach(req, po, req.files, 'other'); await admin.from('supplier_pis').update({ file_doc_ids: [...(pi.file_doc_ids || []), ...ids] }).eq('id', pi.id); } catch (e) { return back(res, to, { err: e.message }); }
-  back(res, to, { msg: 'File attached.' });
+  const rep = String(req.body.replace || '');
+  try { const ids = await attach(req, po, req.files, 'other'); await admin.from('supplier_pis').update({ file_doc_ids: [...(pi.file_doc_ids || []).filter(x => x !== rep), ...ids] }).eq('id', pi.id); } catch (e) { return back(res, to, { err: e.message }); }
+  back(res, to, { msg: rep ? 'File replaced.' : 'File attached.' });
+});
+r.post('/:id/pi/:pid/files/:did/remove', async (req, res) => {
+  const po = await load(req.params.id);
+  if (!po) return notFound(res, 'Purchase order');
+  const to = `/admin/purchasing/${po.id}#supplier-pi`;
+  const { data: pi } = await admin.from('supplier_pis').select('id, file_doc_ids').eq('id', req.params.pid).eq('po_id', po.id).maybeSingle();
+  if (!pi) return notFound(res, 'Supplier PI');
+  await admin.from('supplier_pis').update({ file_doc_ids: (pi.file_doc_ids || []).filter(x => x !== req.params.did) }).eq('id', pi.id);
+  back(res, to, { msg: 'File removed from the PI (it stays in the documents).' });
 });
 r.post('/:id/pi/:pid/delete', async (req, res) => {
   const po = await load(req.params.id);
@@ -220,10 +230,10 @@ r.post('/:id/pi/:pid/delete', async (req, res) => {
   back(res, to, { msg: 'Supplier PI deleted (the files stay in the documents).' });
 });
 // attach the supplier's file and let AI fill the lines — saved as a draft to check
-r.post('/:id/pi/read', upload.single('file'), async (req, res) => {
+r.post('/:id/pi/read', upload.array('files', 8), async (req, res) => {
   const po = await load(req.params.id);
   if (!po) return notFound(res, 'Purchase order');
-  const to = `/admin/purchasing/${po.id}#supplier-pi`, f = req.file;
+  const to = `/admin/purchasing/${po.id}#supplier-pi`, f = req.files?.[0];
   if (!f) return back(res, to, { err: "Choose or drop the supplier's PI file." });
   if (!aiEnabled()) return back(res, to, { err: 'AI is not configured (ANTHROPIC_API_KEY). Attach the file and type the lines instead.' });
   const ext = (f.originalname.split('.').pop() || '').toLowerCase();
@@ -239,7 +249,7 @@ r.post('/:id/pi/read', upload.single('file'), async (req, res) => {
     if (!lines.length) return back(res, to, { err: 'The AI found no lines in that file — attach it and type the lines.' });
     const currency = CURRENCIES.includes(ai.currency) ? ai.currency : po.currency;
     const chk = checkPi({ lines, declared: ai.printed_total });
-    const ids = await attach(req, po, [f], 'other');
+    const ids = await attach(req, po, req.files, 'other');
     const { error } = await admin.from('supplier_pis').insert({ po_id: po.id, pi_no: ai.pi_no, pi_date: day(ai.pi_date), currency, lines, total: chk.total, declared_total: chk.declared, file_doc_ids: ids, notes: ai.notes || null, status: chk.matches ? 'confirmed' : 'draft', created_by: req.user.id });
     if (error) return back(res, to, { err: migErr(error) });
     back(res, to, chk.matches ? { msg: `Read by AI — ${lines.length} lines, total ${money(chk.total, currency)} matches the PI. Please glance over the lines.` } : { err: `Read by AI as a draft — the lines add up to ${money(chk.total, currency)}${chk.declared != null ? ` but the PI says ${money(chk.declared, currency)}` : ''}. Check every line against the file before relying on it.` });
