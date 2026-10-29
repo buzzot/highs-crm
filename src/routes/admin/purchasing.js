@@ -401,7 +401,8 @@ r.post('/:id/send', async (req, res) => {
   const company = await getCompany(admin);
   try {
     const m = spoEmail({ po, supplier: po.suppliers, order: po.orders, message: po.message, senderName: req.user.full_name });
-    const attachments = [{ filename: `${po.ref}.pdf`, content: Buffer.from(spoPdf(po, { supplier: po.suppliers, order: po.orders, company })) }];
+    const sentPo = { ...po, status: po.status === 'draft' ? 'sent' : po.status, sent_at: new Date().toISOString() };   // the PDF that goes out must not say "Draft"
+    const attachments = [{ filename: `${po.ref}.pdf`, content: Buffer.from(spoPdf(sentPo, { supplier: po.suppliers, order: po.orders, company })) }];
     if (po.want_packing) attachments.push({ filename: `${po.ref}-estimated-packing-list.xlsx`, content: Buffer.from(packingTemplate(po, { order: po.orders })) });
     await sendEmail({ to: sentTo, ...m, subject: `${m.subject} ${subjectTag(po.ref, po.token)}`, replyTo: replyAddress(po.token, req.user.email), attachments });
   } catch (e) { return back(res, to, { err: `Email failed: ${e.message}` }); }
