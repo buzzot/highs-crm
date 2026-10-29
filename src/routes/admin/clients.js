@@ -1,3 +1,4 @@
+import { buildClients } from '../../lib/clients.js';
 import { Router } from '../../lib/router.js';
 import { admin } from '../../lib/supabase.js';
 import { inviteUser, memberRows, stashInvite, takeInvite, wantsLinkOnly } from '../../lib/invites.js';
@@ -59,9 +60,29 @@ r.post('/staff/:uid/level', requireAdmin, async (req, res) => {
   res.redirect(`${to}?${error ? 'err=' + encodeURIComponent(/staff_level/.test(error.message) ? 'Run supabase/migrations/0036_access_levels.sql first.' : error.message) : 'msg=' + encodeURIComponent('Access level changed — it applies from their next page load.')}`);
 });
 
+// every row of a table, page by page — a client list must never be cut short by the API's row limit
+async function fetchAll(make) {
+  const out = [];
+  for (let from = 0; from < 100000; from += 1000) {
+    const { data, error } = await make().range(from, from + 999);
+    if (error || !data) break;
+    out.push(...data);
+    if (data.length < 1000) break;
+  }
+  return out;
+}
 r.get('/', async (req, res) => {
-  const { data } = await admin.from('organizations').select('*, profiles!profiles_org_id_fkey(count), orders(count), requests(count)').order('name');
-  res.render('admin/clients/index', { title: 'Clients', clients: data || [] });
+  const orgs = await fetchAll(() => admin.from('organizations').select('*').order('name').order('id'));
+  const ids = new Set(orgs.map(o => o.id));
+  // portal users = people who can log in to the client portal; requests / orders = every record of the client (cancelled ones included, as in the linked lists)
+  const [users, reqs, ords] = await Promise.all([
+    fetchAll(() => admin.from('profiles').select('id, org_id, full_name, email').not('org_id', 'is', null).order('id')),
+    fetchAll(() => admin.from('requests').select('id, org_id, created_at, updated_at').not('org_id', 'is', null).order('id')),
+    fetchAll(() => admin.from('orders').select('id, org_id, created_at, updated_at').not('org_id', 'is', null).order('id')),
+  ]);
+  const q = req.query;
+  const list = buildClients({ orgs, users: users.filter(u => ids.has(u.org_id)), reqs: reqs.filter(x => ids.has(x.org_id)), ords: ords.filter(x => ids.has(x.org_id)) }, q);
+  res.render('admin/clients/index', { title: 'Clients', ...list, query: { q: q.q || '', country: q.country || '', currency: q.currency || '', state: q.state || '' } });
 });
 
 r.get('/new', (req, res) => res.render('admin/clients/form', { title: 'New client', org: {}, error: null }));

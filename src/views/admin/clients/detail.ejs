@@ -77,7 +77,7 @@
       <%- include('../../partials/crm_activity', { events: evs, action: '/admin/clients/' + org.id + '/activity', types, today }) %>
     </div>
     <div class="card">
-      <h2>Requests <span class="count"><%= requests.length %></span></h2>
+      <h2>Requests <span class="count"><%= requests.length %></span><span class="hactions"><a class="btn small" href="/admin/sourcing/new?org=<%= org.id %>">+ Request</a><% if (requests.length) { %><a class="btn small" href="/admin/sourcing?client=<%= org.id %>&status=all">Open in Sourcing</a><% } %></span></h2>
       <% if (!requests.length) { %><p class="muted">No requests yet — the client sends them from the portal.</p><% } else { %>
       <table class="tbl reqtbl">
         <thead><tr><th>Request</th><th class="right">Items</th><th class="right">Quotes</th><th>Status</th></tr></thead>
@@ -98,7 +98,7 @@
 </div>
 
 <div class="card">
-  <h2>Orders <span class="count"><%= orders.length %></span><span class="hactions"><a class="btn small primary" href="/admin/orders/new?org_id=<%= org.id %>">+ Order</a></span></h2>
+  <h2>Orders <span class="count"><%= orders.length %></span><span class="hactions"><% if (orders.length) { %><a class="btn small" href="/admin/orders?client=<%= org.id %>&status=all">Open in Orders</a><% } %><a class="btn small primary" href="/admin/orders/new?org_id=<%= org.id %>">+ Order</a></span></h2>
   <% if (!orders.length) { %><p class="muted">No orders yet.</p><% } else { %>
   <table class="tbl">
     <thead><tr><th>Order</th><th>Supplier</th><th>Status</th><th class="right">Value</th><th class="right">Margin</th><th>Ship date</th><th>Created</th></tr></thead>

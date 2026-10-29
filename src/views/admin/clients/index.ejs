@@ -1,26 +1,75 @@
 <%- include('../../partials/head') %>
-<div class="pagehead">
-  <h1>Clients</h1>
+<% const trunc = (t, n) => { t = String(t || ''); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
+   const link = o => { const p = new URLSearchParams(Object.entries({ q: query.q, country: query.country, currency: query.currency, state: query.state, sort: sort === 'name' ? '' : sort, dir: dir === 'asc' ? '' : dir, ...o }).filter(e => e[1])); const s = p.toString(); return '/admin/clients' + (s ? '?' + s : ''); };
+   const th = (key, label, cls, tip) => { const on = sort === key, next = on && dir === 'asc' ? 'desc' : 'asc'; return `<th class="${cls || ''}" aria-sort="${on ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}"><a class="sortlnk${on ? ' on' : ''}" href="${link({ sort: key === 'name' ? '' : key, dir: next === 'asc' ? '' : next, page: '' })}"${tip ? ` title="${tip}"` : ''}>${label}<i aria-hidden="true">${on ? (dir === 'asc' ? '▲' : '▼') : '↕'}</i></a></th>`; };
+   const filtered = !!(query.q || query.country || query.currency || query.state); %>
+<div class="pagehead cl-head">
+  <div><h1>Clients <span class="cl-count" title="Total clients"><%= all %></span></h1></div>
   <a class="btn primary" href="/admin/clients/new">+ New client</a>
 </div>
-<div class="card">
-  <input class="filter" placeholder="Filter clients…" data-filter="#clientTbl">
-  <table class="tbl" id="clientTbl">
-    <thead><tr><th>Client</th><th>Country</th><th>Users</th><th>Requests</th><th>Orders</th><th>Currency</th><th></th></tr></thead>
+<div class="card cl-card">
+  <form class="cl-bar" method="get" action="/admin/clients" role="search">
+    <input type="search" name="q" id="clq" value="<%= query.q %>" placeholder="Search company, country or contact…" aria-label="Search clients" autocomplete="off">
+    <select name="country" aria-label="Country" onchange="this.form.submit()"><option value="">All countries</option><% countries.forEach(c => { %><option value="<%= c %>" <%= query.country === c ? 'selected' : '' %>><%= c %></option><% }) %><% if (hasNoCountry) { %><option value="_none" <%= query.country === '_none' ? 'selected' : '' %>>No country</option><% } %></select>
+    <select name="currency" aria-label="Currency" onchange="this.form.submit()"><option value="">All currencies</option><% currencies.forEach(c => { %><option value="<%= c %>" <%= query.currency === c ? 'selected' : '' %>><%= c %></option><% }) %></select>
+    <select name="state" aria-label="Status" onchange="this.form.submit()"><option value="">All clients</option><option value="active" <%= query.state === 'active' ? 'selected' : '' %>>Active</option><option value="inactive" <%= query.state === 'inactive' ? 'selected' : '' %>>Inactive</option></select>
+    <% if (sort !== 'name') { %><input type="hidden" name="sort" value="<%= sort %>"><% } %><% if (dir !== 'asc') { %><input type="hidden" name="dir" value="<%= dir %>"><% } %>
+    <noscript><button class="btn" type="submit">Search</button></noscript>
+    <% if (filtered) { %><a class="cl-clear" href="/admin/clients">Clear filters</a><% } %>
+  </form>
+
+  <% if (!all) { %>
+    <p class="cl-empty"><strong>No clients yet.</strong><br>Add a client, then invite their users by email.<br><a class="btn primary small" href="/admin/clients/new">+ New client</a></p>
+  <% } else if (!total) { %>
+    <p class="cl-empty"><strong>No clients match your search.</strong><br><span class="muted">Try a different spelling, or</span> <a href="/admin/clients">clear filters</a>.</p>
+  <% } else { %>
+  <div class="tblwrap"><table class="cl-tbl" id="clientTbl">
+    <thead><tr>
+      <%- th('name', 'Client') %>
+      <%- th('country', 'Country', 'c-ctry') %>
+      <%- th('requests', 'Requests', 'r') %>
+      <%- th('orders', 'Orders', 'r') %>
+      <th class="c-cur" title="The currency this client is quoted and invoiced in by default">Currency</th>
+      <%- th('activity', 'Last activity', 'c-act', 'Latest request created or changed, or order changed. Calls, emails and portal logins are not counted.') %>
+    </tr></thead>
     <tbody>
-    <% if (!clients.length) { %><tr><td colspan="7" class="muted">No clients yet. Add one, then invite their users by email.</td></tr><% } %>
-    <% clients.forEach(c => { %>
-      <tr class="<%= c.active ? '' : 'dim' %>">
-        <td><a href="/admin/clients/<%= c.id %>"><strong><%= c.name %></strong></a></td>
-        <td><%= c.country || '—' %></td>
-        <td><%= c.profiles?.[0]?.count ?? 0 %></td>
-        <td><%= c.requests?.[0]?.count ?? 0 %></td>
-        <td><%= c.orders?.[0]?.count ?? 0 %></td>
-        <td><%= c.default_currency %></td>
-        <td><%= c.active ? '' : 'inactive' %></td>
+    <% rows.forEach(c => { %>
+      <tr class="<%= c.active === false ? 'dim' : '' %>">
+        <td class="c-name">
+          <a href="/admin/clients/<%= c.id %>" class="nm"><strong><%= c.name %></strong></a><span class="tip" role="tooltip"><%= c.name %></span><% if (c.active === false) { %> <span class="pill">Inactive</span><% } %>
+          <div class="cl-sub"><span class="mob-ctry"><%= c.countryName || 'No country' %> · </span><%= c.users ? c.users + ' portal user' + (c.users === 1 ? '' : 's') : 'No portal access' %></div>
+        </td>
+        <td class="c-ctry"><%= c.countryName || '—' %></td>
+        <td class="r"><% if (c.requests) { %><a href="/admin/sourcing?client=<%= c.id %>&status=all" title="Show this client's requests"><%= c.requests %></a><% } else { %><span class="muted">0</span><% } %></td>
+        <td class="r"><% if (c.orders) { %><a href="/admin/orders?client=<%= c.id %>&status=all" title="Show this client's orders"><%= c.orders %></a><% } else { %><span class="muted">0</span><% } %></td>
+        <td class="c-cur"><%= c.default_currency || '—' %></td>
+        <td class="c-act muted"><%= c.lastActivity ? fmt.date(c.lastActivity) : '—' %></td>
       </tr>
     <% }) %>
     </tbody>
-  </table>
+  </table></div>
+  <div class="cl-foot">
+    <span class="muted"><% if (pages === 1) { %><%= total %> client<%= total === 1 ? '' : 's' %><%= filtered ? (total === 1 ? ' matches' : ' match') : '' %><% } else { %><%= filtered ? total + ' clients match · ' : '' %>Showing <%= from %>–<%= to %><%= filtered ? '' : ' of ' + total %><% } %></span>
+    <% if (pages > 1) { %><nav class="cl-pager" aria-label="Pages">
+      <% if (page > 1) { %><a class="btn small" href="<%= link({ page: page - 1 }) %>">← Previous</a><% } %>
+      <span class="muted">Page <%= page %> of <%= pages %></span>
+      <% if (page < pages) { %><a class="btn small" href="<%= link({ page: page + 1 }) %>">Next →</a><% } %>
+    </nav><% } %>
+  </div>
+  <% } %>
 </div>
+<script>
+(function () {
+  var f = document.querySelector('.cl-bar'), q = document.getElementById('clq'); if (!f || !q) return;
+  var t, last = q.value;
+  q.addEventListener('input', function () { clearTimeout(t); t = setTimeout(function () { if (q.value !== last) f.submit(); }, 300); });
+  // after a live search the page reloads: put the cursor back where it was
+  if (q.value && /[?&]q=/.test(location.search)) { q.focus(); try { q.setSelectionRange(q.value.length, q.value.length); } catch (e) {} }
+  // company names cut off by the column: show the full name on hover and on keyboard focus
+  document.querySelectorAll('.c-name').forEach(function (td) {
+    var a = td.querySelector('a.nm'), tip = td.querySelector('.tip'); if (!a || !tip) return;
+    if (a.scrollWidth > a.clientWidth + 1) { td.classList.add('cut'); a.setAttribute('aria-describedby', tip.id = tip.id || 'tip' + Math.random().toString(36).slice(2, 8)); }
+  });
+})();
+</script>
 <%- include('../../partials/foot') %>

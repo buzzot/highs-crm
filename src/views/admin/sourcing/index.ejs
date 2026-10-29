@@ -1,10 +1,11 @@
 <%- include('../../partials/head') %>
 <div class="pagehead">
   <h1>Sourcing</h1>
-  <% const mine = !!query.mine, mq = mine ? '&mine=1' : ''; %>
+  <% const mine = !!query.mine, mq = (mine ? '&mine=1' : '') + (clientFilter ? '&client=' + clientFilter.id : ''); %>
   <div class="headactions"><a class="btn primary" href="/admin/sourcing/new">+ New request</a>
   <a class="btn<%= mine ? ' primary' : '' %>" href="/admin/sourcing?status=<%= status %><%= mine ? '' : '&mine=1' %>" title="<%= mine ? 'Showing only requests assigned to you — click to show all' : 'Show only requests assigned to you' %>"><%= mine ? '✓ Assigned to me' : 'Assigned to me' %></a></div>
 </div>
+<% if (clientFilter) { %><p class="small" style="margin:0 0 10px">Client: <strong><%= clientFilter.name %></strong> · <a href="/admin/sourcing?status=<%= status %><%= mine ? '&mine=1' : '' %>">show all clients ✕</a></p><% } %>
 <div class="tabs">
   <% if (waiting > 0 || status === 'action') { %><a href="/admin/sourcing?status=action<%= mq %>" class="needtab <%= status === 'action' ? 'on' : '' %>">⚠ Needs your action <span class="navball"><%= waiting %></span></a><% } %>
   <a href="/admin/sourcing?status=open<%= mq %>" class="<%= status === 'open' ? 'on' : '' %>">Open <span><%= (byStatus.new||0)+(byStatus.reviewing||0)+(byStatus.quoted||0) %></span><% if ((waitBy.new||0)+(waitBy.reviewing||0)+(waitBy.quoted||0) > 0) { %><i class="tabdot" title="Something here is waiting for your approval"></i><% } %></a>

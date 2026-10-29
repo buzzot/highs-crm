@@ -29,12 +29,15 @@ r.get('/', async (req, res) => {
   else if (status === 'open') q = q.in('status', ['new', 'reviewing', 'quoted']);
   else if (status !== 'all') q = q.eq('status', status);
   if (req.query.mine) q = q.eq('assigned_to', req.user.id);
+  const clientId = /^[0-9a-f-]{36}$/i.test(String(req.query.client || '')) ? req.query.client : '';   // from the Clients list
+  if (clientId) q = q.eq('org_id', clientId);
   const s = like(req.query.q);
   if (s) q = q.or(`title.ilike.%${s}%,ref.ilike.%${s}%`);
   const [{ data }, { data: counts }] = await Promise.all([q, admin.from('requests').select('id, status')]);
   const byStatus = {}, waitBy = {};
   (counts || []).forEach(x => { byStatus[x.status] = (byStatus[x.status] || 0) + 1; if (waiting.includes(x.id)) waitBy[x.status] = (waitBy[x.status] || 0) + 1; });
-  res.render('admin/sourcing/index', { title: 'Sourcing', requests: data || [], pendingIds, poIds, newIds, waiting: waiting.length, waitBy, byStatus, statuses: REQUEST_STATUSES, status });
+  const clientRow = clientId ? (await admin.from('organizations').select('id, name').eq('id', clientId).maybeSingle()).data : null;
+  res.render('admin/sourcing/index', { title: 'Sourcing', clientFilter: clientRow, requests: data || [], pendingIds, poIds, newIds, waiting: waiting.length, waitBy, byStatus, statuses: REQUEST_STATUSES, status });
 });
 
 // Staff enter a request that reached them outside the system (client email, WeChat): pick the client, list the products
