@@ -31,6 +31,7 @@
     <button class="btn small" name="go" value="1" id="btnCompare" disabled>Compare</button>
     <button class="btn small ai" name="ai" value="1" id="btnAi" disabled>✦ AI compare</button>
     <button class="btn small primary" id="btnQuote" formaction="/admin/pricing/quotes/multi" disabled>Create quote</button>
+    <% if (user && (user.role === 'admin' || (user.role === 'staff' && user.staff_level !== 'manager'))) { %><button class="btn small danger-outline" id="btnDelete" formmethod="post" formaction="/admin/products/delete" disabled>Delete</button><% } %>
     <span class="muted small" id="selHint">Tick products to quote them together (any suppliers), or 2–6 to compare them side by side.</span>
   </div>
   <table class="tbl plist">
@@ -70,6 +71,7 @@
     document.getElementById('selCount').textContent = n;
     const ok = n >= 2 && n <= 6;
     document.getElementById('btnQuote').disabled = n < 1;
+    const bd = document.getElementById('btnDelete'); if (bd) { bd.disabled = n < 1; bd.textContent = n ? 'Delete (' + n + ')' : 'Delete'; }
     document.getElementById('btnCompare').disabled = !ok; document.getElementById('btnAi').disabled = !ok;
     document.getElementById('selHint').textContent = n > 6 ? 'Compare up to six products at a time.' : n === 1 ? 'Tick at least one more product.' : 'Tick products to quote them together (any suppliers), or 2–6 to compare them side by side.';
     boxes.forEach(b => b.closest('tr').classList.toggle('picked', b.checked));
@@ -77,6 +79,8 @@
   boxes.forEach(b => b.addEventListener('change', sync));
   all && all.addEventListener('change', () => { boxes.forEach(b => { b.checked = all.checked; }); sync(); });
   document.getElementById('btnAi').addEventListener('click', () => { document.getElementById('btnAi').textContent = '✦ AI is comparing…'; });
+  const bd0 = document.getElementById('btnDelete');
+  if (bd0) bd0.addEventListener('click', e => { const n = boxes.filter(b => b.checked).length; if (!confirm('Delete ' + n + ' selected product' + (n > 1 ? 's' : '') + '? Products used in orders, quotes or requests are kept. This cannot be undone.')) e.preventDefault(); });
   sync();
 })();
 </script>

@@ -3,6 +3,7 @@ import { admin } from '../../lib/supabase.js';
 import multer from '../../lib/multer-utf8.js';
 import { clean, notFound, getSettings, fxRate, back } from '../../lib/util.js';
 import { log } from '../../lib/activity.js';
+import { canAssign } from '../../lib/access.js';
 import { clean as cleanSub, missing as subMissing, toProduct, containerFit, changes, fromProduct } from '../../lib/supplier-product.js';
 import { productMetrics } from '../../lib/product-metrics.js';
 import { compareProducts, extractProductCard, aiEnabled } from '../../lib/ai.js';
@@ -203,6 +204,26 @@ r.post('/quick', async (req, res) => {
 
 // ---------- products submitted by suppliers (supplier portal "Add product") ----------
 const SUB_TABS = [['submitted', 'To review'], ['edit_requested', 'Edit requests'], ['updated', 'Updated'], ['unlocked', 'Open for editing'], ['returned', 'Sent back'], ['draft', 'Drafts'], ['approved', 'Approved']];
+// delete the ticked products (Admin / Director). A product used by an order, quote or request stays — only unused ones go.
+r.post('/delete', async (req, res) => {
+  const to = '/admin/products';
+  if (!canAssign(req.user)) return back(res, to, { err: 'Only an Admin or Director can delete products.' });
+  const ids = [].concat(req.body.ids || []).filter(v => /^[0-9a-f-]{36}$/i.test(v));
+  if (!ids.length) return back(res, to, { err: 'Tick the products to delete.' });
+  const { data: prods } = await admin.from('products').select('id, name').in('id', ids);
+  const gone = [], kept = [];
+  for (const p of prods || []) {
+    const { error } = await admin.from('products').delete().eq('id', p.id);
+    if (error) { kept.push(p.name); continue; }
+    const { data: docs } = await admin.from('documents').select('id').eq('entity_type', 'product').eq('entity_id', p.id);
+    for (const d of docs || []) await deleteDocument(d.id).catch(() => {});
+    await log({ entityType: 'product', entityId: p.id, action: 'product_deleted', actorId: req.user.id, detail: { note: p.name } });
+    gone.push(p.name);
+  }
+  const short = a => a.slice(0, 3).join(', ') + (a.length > 3 ? ` +${a.length - 3} more` : '');
+  if (!gone.length) return back(res, to, { err: `Not deleted — ${short(kept)} ${kept.length > 1 ? 'are' : 'is'} used in orders, quotes or requests.` });
+  back(res, to, { msg: `Deleted ${gone.length} product${gone.length > 1 ? 's' : ''}${kept.length ? `. Kept (used in orders, quotes or requests): ${short(kept)}` : ''}.` });
+});
 r.get('/submissions', async (req, res) => {
   const status = req.query.status === 'all' || SUB_TABS.some(t => t[0] === req.query.status) ? req.query.status : 'submitted';
   let rq = admin.from('supplier_products').select('id, status, data, submitted_at, updated_at, product_id, suppliers(id, name)').order('updated_at', { ascending: false });
