@@ -26,7 +26,7 @@
       <label>Incoterm <select name="incoterm"><% incoterms.forEach(i => { %><option <%= i === shared.incoterm ? 'selected' : '' %>><%= i %></option><% }) %></select></label>
       <label>Lead time (days) <input type="number" name="lead_time_days" min="0" value="<%= shared.lead_time_days %>"></label>
       <label>Valid until <input type="date" name="valid_until" value="<%= shared.valid_until || '' %>"></label>
-      <label>Freight on the quotation <select name="freight_mode"><option value="separate" <%= shared.freight_mode !== 'included' ? 'selected' : '' %>>Shown as a separate line</option><option value="included" <%= shared.freight_mode === 'included' ? 'selected' : '' %>>Included in the unit prices</option></select></label>
+      <label>Freight on the quotation <select name="freight_mode"><option value="none" <%= shared.freight_mode === 'none' ? 'selected' : '' %>>No freight on the quotation</option><option value="separate" <%= shared.freight_mode === 'separate' ? 'selected' : '' %>>Shown as a separate line</option><option value="included" <%= shared.freight_mode === 'included' ? 'selected' : '' %>>Included in the unit prices</option></select></label>
     </div>
   </div>
 
@@ -67,7 +67,7 @@
   <% }) %>
 
   <div class="card ql-log">
-    <h2>Logistics <span class="muted small">one amount for the whole shipment · the client sees a single freight line (or it is included in the unit prices)</span></h2>
+    <h2>Logistics <span class="muted small">one amount for the whole shipment · the client sees it as a single freight line, inside the unit prices, or not at all — see “Freight on the quotation” above</span></h2>
     <div class="pq-grid g4">
       <label class="ql-span2">Logistics note <span class="muted small">internal</span><input name="freight_note" maxlength="300" value="<%= shared.freight_note %>" placeholder="e.g. Sea freight FOB Shanghai → destination, 40HQ × 2"></label>
       <label>Total logistics <span class="muted small" id="ql_ltcur"><%= shared.sell_currency %></span><input type="number" step="0.01" min="0" name="freight_total" id="ql_ltot" value="<%= shared.freight_total %>"></label>

@@ -49,7 +49,7 @@ export function combineQuotes(quotes, { nameOf = () => 'Item', skuOf = () => '' 
   const shownSum = k => r2(lines.reduce((t, l) => t + l.shown[k], 0));
   return {
     // what the client sees: with freight included the goods already carry it and the freight line disappears
-    included: lines.length > 0 && lines.every(l => l.shown.included), shown: { goodsTotal: shownSum('goods'), logisticsTotal: shownSum('logistics'), grandTotal: shownSum('total') },
+    included: lines.length > 0 && lines.every(l => l.shown.included), none: lines.length > 0 && lines.every(l => l.shown.none), shown: { goodsTotal: shownSum('goods'), logisticsTotal: shownSum('logistics'), grandTotal: shownSum('total') },
     lines, count: lines.length, currency: currencies[0] || 'USD', mixed: currencies.length > 1,
     goodsTotal, freight: sum('freight'), duties: sum('duties'), other: sum('other'), logisticsTotal: sum('logistics'), grandTotal: sum('total'),
     cost, profit: cost != null ? r2(goodsTotal - cost) : null, marginPct: cost ? r2((goodsTotal - cost) / cost * 100) : null,
@@ -75,7 +75,7 @@ export function quotationDocument({ request, combined: c, org, company }) {
     seller: companyBlock(company), partyLabel: 'Quotation for', party: { name: o.name || '—', lines: clientLines({ phone: o.phone, address }, { delivery: false }) },
     meta: [['Request', request?.title], ['Incoterm', c.incoterm], ['Destination', dest], ['Lead time', c.lead_time_days ? `${c.lead_time_days} days` : null], ['Valid until', c.valid_until ? day(c.valid_until + 'T12:00:00') : null], ['Currency', c.currency]],
     currency: c.currency, lines: poLinesFromCombined(c),
-    sections: [{ heading: 'Payment terms', text: company.payment_terms }, { heading: 'Notes', text: c.included ? 'Prices are per unit for the quantities shown and include freight and logistics to the destination (estimate until the shipment is booked).' : 'Prices are per unit for the quantities shown. Freight and logistics are an estimate until the shipment is booked.' }],
+    sections: [{ heading: 'Payment terms', text: company.payment_terms }, { heading: 'Notes', text: c.none ? 'Prices are per unit for the quantities shown. Freight and logistics are not included.' : c.included ? 'Prices are per unit for the quantities shown and include freight and logistics to the destination (estimate until the shipment is booked).' : 'Prices are per unit for the quantities shown. Freight and logistics are an estimate until the shipment is booked.' }],
     footer: `${request?.ref || ''} · ${company.name}`,
   };
 }

@@ -6,7 +6,7 @@ import { poFromQuote, totalOf } from '../src/lib/purchase.js';
 
 const q = (o = {}) => ({ id: 'a', quantity: 200, unit_price: 148.2, freight_estimate: 500, duties_estimate: 0, other_costs: 0, sell_currency: 'CNY', ...o });
 
-test('modeOf accepts only the two modes', () => { assert.equal(modeOf('included'), 'included'); assert.equal(modeOf('x'), 'separate'); assert.equal(modeOf(undefined), 'separate'); });
+test('modeOf accepts only the known modes', () => { assert.equal(modeOf('included'), 'included'); assert.equal(modeOf('x'), 'separate'); assert.equal(modeOf(undefined), 'separate'); });
 
 test('separate: the client sees goods and a logistics amount', () => {
   const s = shownOf(q()); assert.equal(s.included, false); assert.equal(s.unit_price, 148.2); assert.equal(s.goods, 29640); assert.equal(s.logistics, 500); assert.equal(s.total, 30140);
@@ -52,4 +52,18 @@ test('proforma invoice freight buffer percentage is added to the freight', () =>
   const sep = piLines({ lines, freight: { amount: 1000, buffer_pct: 10, mode: 'separate' } });
   assert.equal(sep[1].unit_price, 1100);
   assert.equal(totalOf(piLines({ lines, freight: { amount: 1000, buffer_pct: 10, mode: 'included' } })), 2100);
+});
+
+test('none: the client sees goods only; the real freight stays on the quote for staff', () => {
+  assert.equal(modeOf('none'), 'none');
+  const s = shownOf(q({ freight_mode: 'none' }));
+  assert.equal(s.none, true); assert.equal(s.included, false); assert.equal(s.unit_price, 148.2); assert.equal(s.goods, 29640); assert.equal(s.logistics, 0); assert.equal(s.total, 29640);
+  const c = combineQuotes([q({ id: 'a', freight_mode: 'none' }), q({ id: 'b', quantity: 100, unit_price: 10, freight_estimate: 550, freight_mode: 'none' })]);
+  assert.equal(c.none, true); assert.equal(c.shown.logisticsTotal, 0); assert.equal(c.shown.grandTotal, 29640 + 1000); assert.equal(c.freight, 1050);
+  const lines = poLinesFromCombined(c);
+  assert.equal(lines.length, 2); assert.ok(lines.every(l => !/freight/i.test(l.description)));
+  const doc = quotationDocument({ request: {}, combined: c, org: {}, company: { name: 'Lumi', payment_terms: '' } });
+  assert.match(JSON.stringify(doc.sections), /Freight and logistics are not included/);
+  const po = poFromQuote({ quote: q({ freight_mode: 'none' }), item: { name: 'Rope' }, request: {}, org: {}, profile: {} });
+  assert.equal(po.lines.length, 1);
 });

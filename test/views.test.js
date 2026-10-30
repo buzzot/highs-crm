@@ -79,3 +79,10 @@ test('quote all products: internal packing, per-line freight and one logistics c
   assert.match(html, /data-fq-use data-amount="39000"/);
   assert.match(html, /\/admin\/logistics\/quotes\/fr1/);
 });
+
+test('quote all products: "No freight" is offered and is the default for a new quotation', () => {
+  const html = render(path.join(views, 'admin/pricing/quote_lines.ejs'), { ...pages['admin/pricing/quote_lines'], shared: { ...pages['admin/pricing/quote_lines'].shared, freight_mode: 'none' } });
+  assert.match(html, /<option value="none" selected>No freight on the quotation/);
+  assert.match(fs.readFileSync(path.join(views, 'admin/pricing/quote_multi.ejs'), 'utf8'), /<option value="none" selected>No freight/);
+  assert.match(fs.readFileSync(path.join(root, 'supabase/migrations/0041_freight_mode_none.sql'), 'utf8'), /'none'/);
+});

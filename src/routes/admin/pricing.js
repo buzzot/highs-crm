@@ -153,7 +153,7 @@ r.post('/quotes/multi', async (req, res) => {
     const p = byId.get(l.product_id), cur = CURRENCIES.includes(l.cost_currency) ? l.cost_currency : 'CNY', fx = fxRate(settings, cur, sell);
     const row = { product_id: p.id, supplier_id: p.supplier_id, quantity: Math.max(1, Math.round(Number(l.quantity) || 0)), unit_cost: Number(String(l.unit_cost).replace(',', '.')) || 0, cost_currency: cur, fx_rate: fx,
       margin_pct: Number(l.margin_pct) || settings.pricing.default_margin_pct, sell_currency: sell, freight_estimate: Number(l.freight) || 0, duties_estimate: 0, other_costs: 0,
-      ...(modeOf(b.freight_mode) === 'included' ? { freight_mode: 'included' } : {}), incoterm: b.incoterm || 'FOB', lead_time_days: Number(b.lead_time_days) > 0 ? Math.round(Number(b.lead_time_days)) : null, valid_until: /^\d{4}-\d{2}-\d{2}$/.test(b.valid_until || '') ? b.valid_until : null };
+      ...(modeOf(b.freight_mode) !== 'separate' ? { freight_mode: modeOf(b.freight_mode) } : {}), incoterm: b.incoterm || 'FOB', lead_time_days: Number(b.lead_time_days) > 0 ? Math.round(Number(b.lead_time_days)) : null, valid_until: /^\d{4}-\d{2}-\d{2}$/.test(b.valid_until || '') ? b.valid_until : null };
     return { p, row, calc: compute(row, settings) };
   });
   if (!lines.length) return bad('No valid products.');
@@ -260,7 +260,7 @@ r.get('/requests/:rid/quote-lines', async (req, res) => {
   const answer = answers.find(a => a.id === req.query.rs) || null;
   const d0 = drafts[0] || {};
   const shared = { sell_currency: d0.sell_currency || request.target_currency || res.locals.defCur || 'CNY', incoterm: d0.incoterm || 'FOB', lead_time_days: d0.lead_time_days ?? '',
-    valid_until: d0.valid_until || new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10), freight_mode: modeOf(d0.freight_mode),
+    valid_until: d0.valid_until || new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10), freight_mode: drafts.length ? modeOf(d0.freight_mode) : 'none',
     freight_basis: d0.freight_basis === 'air' ? 'air' : 'sea', freight_total: d0.freight_total ?? '', freight_note: d0.freight_note || '', freight_from: null };
   // the forwarder quotes for this request's packing lists; the accepted (else latest) one fills the total
   const fquotes = await forwarderQuotesFor(rid);
@@ -291,6 +291,7 @@ r.get('/requests/:rid/quote-lines', async (req, res) => {
 });
 
 // form values → quote rows (shared by "save" and "preview PDF" so both always agree)
+const NONE_MIGRATION = 'Run supabase/migrations/0041_freight_mode_none.sql in Supabase first — it adds the “No freight” option. Nothing was saved.';
 const numOrNull = v => { const n = Number(String(v ?? '').replace(/[,\s]/g, '')); return v === '' || v == null || !Number.isFinite(n) || n < 0 ? null : n; };
 const PACK_COLS = /pack_kg|pack_cbm|freight_basis|freight_total|freight_note/;   // columns from migration 0040
 const without = (o, re) => Object.fromEntries(Object.entries(o).filter(([k]) => !re.test(k)));
@@ -358,6 +359,7 @@ r.post('/requests/:rid/quote-lines', async (req, res) => {
       : admin.from('quotes').insert({ ...f, created_by: req.user.id, status: 'draft' }));
     let { error } = await write(full);
     if (error && PACK_COLS.test(error.message)) { full = without(full, PACK_COLS); packSkipped = true; ({ error } = await write(full)); }   // before migration 0040
+    if (error && /freight_mode/.test(error.message) && full.freight_mode === 'none') return back(res, to, { err: NONE_MIGRATION });
     if (error && /freight_mode/.test(error.message)) { const { freight_mode, ...rest } = full; ({ error } = await write(rest)); }   // before the freight-mode migration
     if (error) return back(res, to, { err: `${saved ? saved + ' saved, then: ' : ''}${error.message}` });
     saved++;
@@ -411,8 +413,8 @@ r.post('/requests/:rid/verify-all', async (req, res) => {
 r.post('/requests/:rid/freight-mode', async (req, res) => {
   const rid = req.params.rid, to = `/admin/pricing/requests/${rid}/quote`, mode = modeOf(req.body.freight_mode);
   const { data, error } = await admin.from('quotes').update({ freight_mode: mode }).eq('request_id', rid).eq('status', 'draft').select('id');
-  if (error) return back(res, to, { err: /freight_mode/.test(error.message) ? 'Run supabase/migrations/0023_freight_mode.sql in Supabase first.' : error.message });
-  back(res, to, { msg: mode === 'included' ? 'Freight is now included in the unit prices — the client will see all-in prices and no freight line.' : 'Freight will be shown as a separate line.' });
+  if (error) return back(res, to, { err: /freight_mode/.test(error.message) ? (mode === 'none' ? NONE_MIGRATION : 'Run supabase/migrations/0023_freight_mode.sql in Supabase first.') : error.message });
+  back(res, to, { msg: mode === 'none' ? 'Freight is left off the quotation — the client sees goods only. Your freight figures stay internal.' : mode === 'included' ? 'Freight is now included in the unit prices — the client will see all-in prices and no freight line.' : 'Freight will be shown as a separate line.' });
 });
 
 // send every draft quote of a request in one go (one email to the client)
@@ -523,11 +525,13 @@ async function saveQuote(req, res, id) {
     if (!cur) return notFound(res, 'Quote');
     if (!['draft', 'sent'].includes(cur.status)) return back(res, `/admin/pricing/quotes/${id}`, { err: `A ${cur.status} quote can't be edited — duplicate it instead.` });
     let { error } = await admin.from('quotes').update({ ...row, ai_check: null, status: 'draft' }).eq('id', id);
+    if (error && /freight_mode/.test(error.message) && row.freight_mode === 'none') return back(res, `/admin/pricing/quotes/${id}`, { err: NONE_MIGRATION });
     if (error && /freight_mode/.test(error.message)) { const { freight_mode, ...rest } = row; ({ error } = await admin.from('quotes').update({ ...rest, ai_check: null, status: 'draft' }).eq('id', id)); } // before migration 0023
     if (error) return back(res, `/admin/pricing/quotes/${id}`, { err: error.message });
   } else {
     let { data, error } = await admin.from('quotes').insert({ ...row, created_by: req.user.id }).select('id').single();
-    if (error && /freight_mode/.test(error.message)) { const { freight_mode, ...rest } = row; ({ data, error } = await admin.from('quotes').insert({ ...rest, created_by: req.user.id }).select('id').single()); } // before migration 0023
+    if (error && /freight_mode/.test(error.message) && row.freight_mode === 'none') error = { message: NONE_MIGRATION };
+    else if (error && /freight_mode/.test(error.message)) { const { freight_mode, ...rest } = row; ({ data, error } = await admin.from('quotes').insert({ ...rest, created_by: req.user.id }).select('id').single()); } // before migration 0023
     if (error) {
       const lists = await formLists();
       return res.status(400).render('admin/pricing/quote_form', { title: 'New quote', q: req.body, settings, ...lists, incoterms: INCOTERMS, currencies: CURRENCIES, error: error.message });
