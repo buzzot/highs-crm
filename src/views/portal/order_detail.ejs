@@ -60,7 +60,7 @@
             <label>Bank reference <span class="muted small">optional</span><input name="reference" maxlength="120"></label>
           </div>
           <div class="row">
-            <label>Proof of payment <span class="muted small">bank receipt, screenshot or PDF</span><input type="file" name="proofs" multiple accept="image/*,application/pdf" required></label>
+            <div class="fld"><div class="fieldlbl">Proof of payment <span class="muted small">bank receipt, screenshot or PDF</span></div><div class="dropwrap"><div class="filedrop compact" data-dropzone data-max="10" data-max-mb="20" tabindex="0"><input type="file" name="proofs" multiple required accept="image/*,application/pdf" aria-label="Proof of payment"><span class="dicon"><%- icon('upload') %></span><strong data-drop-count>Drop files here, or <span class="dlink">browse</span></strong><span class="muted small dsub">Bank receipt, screenshot or PDF · up to 10 files, 20 MB each · paste a screenshot with ⌘/Ctrl V</span></div><div class="fgrid" data-drop-list></div></div></div>
             <label>Note <span class="muted small">optional</span><input name="note" maxlength="500"></label>
           </div>
           <button class="btn primary">Submit payment</button>

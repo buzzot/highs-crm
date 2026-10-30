@@ -392,7 +392,7 @@
       <li><b>Review</b> the recognised products: matches with existing products and possible duplicates are flagged, and prices, currencies, quantities and packing are checked.</li>
       <li><b>Confirm</b> — nothing is saved before this step. Existing products stay unchanged unless you choose “Update”.</li>
     </ol>
-    <div class="fld"><label for="impfile">Price list file</label><input type="file" id="impfile" name="file" required accept=".xlsx,.xlsm,.csv,.pdf,.jpg,.jpeg,.png,.webp"></div>
+    <div class="fld"><div class="fieldlbl">Price list file</div><div class="dropwrap"><div class="filedrop compact" data-dropzone data-max="1" data-max-mb="20" tabindex="0"><input type="file" name="file" required accept=".xlsx,.xlsm,.csv,.pdf,.jpg,.jpeg,.png,.webp" aria-label="Price list file"><span class="dicon"><%- icon('upload') %></span><strong data-drop-count>Drop the price list here, or <span class="dlink">browse</span></strong><span class="muted small dsub">Excel, CSV, PDF or a photo of the price list · paste a screenshot with ⌘/Ctrl V</span></div><div class="fgrid" data-drop-list></div></div></div>
     <p class="muted small"><a href="/templates/lumi-trade-product-import-template.xlsx" download>Download the Excel template</a></p>
     <div class="actions"><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Upload &amp; review</button></div>
   </form>
@@ -403,7 +403,7 @@
     <input type="hidden" name="entity_type" value="supplier"><input type="hidden" name="entity_id" value="<%= s.id %>"><input type="hidden" name="redirect" value="/admin/suppliers/<%= s.id %>#overview">
     <h2 id="doctitle">Upload documents</h2>
     <div class="fld"><label for="dockind">Type</label><select id="dockind" name="kind"><% DOC_KINDS.forEach(k => { %><option value="<%= k %>"><%= fmt.status(k) %></option><% }) %></select></div>
-    <div class="fld"><label for="docfile">Files</label><input type="file" id="docfile" name="files" multiple required></div>
+    <div class="fld"><div class="fieldlbl">Files</div><div class="dropwrap"><div class="filedrop compact" data-dropzone data-max="20" data-max-mb="20" tabindex="0"><input type="file" name="files" multiple required aria-label="Files to upload"><span class="dicon"><%- icon('upload') %></span><strong data-drop-count>Drop files here, or <span class="dlink">browse</span></strong><span class="muted small dsub">Any document, photo or screenshot · up to 20 files, 20 MB each</span></div><div class="fgrid" data-drop-list></div></div></div>
     <p class="muted small">Uploaded as <b>internal</b>. You can share a document with clients afterwards, after a confirmation.</p>
     <div class="actions"><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Upload</button></div>
   </form>

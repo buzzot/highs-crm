@@ -136,7 +136,8 @@
         <label>Channel <select name="channel"><option value="wechat">WeChat</option><option value="email">Email</option><option value="manual">Phone / other</option></select></label>
       </div>
       <label>Their message <textarea name="text" rows="5" placeholder="Paste the reply — Chinese or English is fine"></textarea></label>
-      <label>Their quotation file <span class="muted small">— our filled form is read exactly; other Excel, PDF or screenshots are read by AI</span><input type="file" name="files" multiple accept=".xlsx,.pdf,image/*"></label>
+      <div class="fieldlbl">Their quotation file</div>
+      <div class="dropwrap"><div class="filedrop compact" data-dropzone data-max="5" data-max-mb="20" tabindex="0"><input type="file" name="files" multiple accept=".xlsx,.pdf,image/*" aria-label="Their quotation file"><span class="dicon"><%- icon('upload') %></span><strong data-drop-count>Drop their quotation here, or <span class="dlink">browse</span></strong><span class="muted small dsub">Our filled form is read exactly; other Excel, PDF or screenshots are read by AI · paste a screenshot with ⌘/Ctrl V</span></div><div class="fgrid" data-drop-list></div></div>
       <details class="manualq"><summary class="muted small">…or type the offer yourself</summary>
         <div class="row">
           <label>Amount <input type="number" step="0.01" name="amount"></label>

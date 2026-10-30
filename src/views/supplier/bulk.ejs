@@ -38,8 +38,8 @@
     <li><strong>Add photos</strong> in the Photo column of each product's row (Excel: Insert → Pictures → Place in Cell; WPS: paste the picture into the cell). Up to 10 per product. Save as <strong>.xlsx</strong>, not CSV.</li>
     <li><strong>Upload the file</strong> here. We create a draft for every row; you check them and send them to Lumi Trade.</li>
   </ol>
-  <form method="post" action="/supplier/products/bulk" enctype="multipart/form-data" class="row gap-top">
-    <input type="file" name="file" accept=".xlsx" required>
+  <form method="post" action="/supplier/products/bulk" enctype="multipart/form-data" class="gap-top bulkup">
+    <div class="dropwrap"><div class="filedrop compact" data-dropzone data-max="1" data-max-mb="20" tabindex="0"><input type="file" name="file" required accept=".xlsx" aria-label="Filled product template (.xlsx)"><span class="dicon"><%- icon('upload') %></span><strong data-drop-count>Drop the filled template here, or <span class="dlink">browse</span></strong><span class="muted small dsub">Excel .xlsx only — the filled template, not CSV</span></div><div class="fgrid" data-drop-list></div></div>
     <button class="btn primary"><%- icon('upload') %> Upload</button>
   </form>
 </div>

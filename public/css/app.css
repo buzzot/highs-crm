@@ -2748,3 +2748,12 @@ dialog.fqdlg::backdrop { background: rgba(15,30,50,.45); }
 .pe-card.over{outline:0;background:#fff}
 .pe-card.over .pe-dz{border-color:var(--accent);border-style:solid;background:var(--accent-soft);box-shadow:0 0 0 3px var(--accent-soft)}
 @media (max-width:560px){.pe-dz-t kbd,.pe-dz-t .pe-dz-or:last-child{display:none}}
+
+/* upload zones: forms where the zone sits beside a button */
+.bulkup { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+.bulkup .dropwrap { flex: 1; min-width: 260px; margin: 0; }
+.bulkup .filedrop { margin-bottom: 0; }
+.bulkup > .btn { margin-top: 0; height: 42px; }
+.dropform .dropwrap { margin-bottom: 10px; }
+.fld .dropwrap, .modalform .dropwrap { margin: 0; }
+.fld .filedrop, .modalform .filedrop { margin-bottom: 8px; }

@@ -75,7 +75,9 @@ const RU = document.documentElement.lang === 'ru';   // Russian client portal: t
     const add = async incoming => {
       const bad = [];
       for (const f of [...incoming]) {
-        if (!ok(f) || files.length >= max) continue;
+        if (!ok(f)) continue;
+        if (max === 1) files = [];        // single-file zone: a new file replaces the old one
+        else if (files.length >= max) continue;
         if (files.some(x => x.name === f.name && x.size === f.size)) continue;
         const copy = await snap(f);
         if (!copy) { bad.push(f.name); continue; }
@@ -97,9 +99,11 @@ const RU = document.documentElement.lang === 'ru';   // Russian client portal: t
   window.initDropzones();
   // paste screenshots: they go to the zone used last (or the first one), not while typing in a text field
   document.addEventListener('paste', ev => {
-    if (!zones.size || (ev.target.closest && ev.target.closest('input:not([type=file]), textarea'))) return;
+    if (!zones.size) return;
     const pasted = [...(ev.clipboardData?.files || [])];
     if (!pasted.length) return;
+    // in a text field: only a pure file/screenshot paste is taken (text, or Excel cells that carry a picture too, still paste as text)
+    if (ev.target.closest && ev.target.closest('input:not([type=file]), textarea') && ev.clipboardData.getData('text/plain')) return;
     const dlg = document.querySelector('dialog[open]');   // inside an open popup the paste goes to that popup's zone
     const z = dlg ? [...zones].find(x => dlg.contains(x)) : activeZone && document.contains(activeZone) ? activeZone : [...zones].find(x => document.contains(x));
     if (z) { ev.preventDefault(); z.add(pasted); z.scrollIntoView({ block: 'nearest' }); }
