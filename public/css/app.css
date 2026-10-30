@@ -2516,3 +2516,75 @@ input[hidden]{display:none!important}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 .pe-hsrow{display:flex;align-items:flex-end;gap:6px 16px;flex-wrap:wrap}.pe-hsrow label{margin:0}.pe-hsrow input{margin-top:4px}.pe-hsrow .pe-hsnote{margin:0 0 10px!important}
 .pe-card textarea{width:100%;box-sizing:border-box;min-height:64px}
+
+/* ---- Edit product: content-sized fields (short values get short inputs) ---- */
+.pe-row{display:flex;flex-wrap:wrap;align-items:flex-start;gap:14px 18px}
+.pe-row>label{margin:0;min-width:0;font-size:13px;color:var(--ink-2);font-weight:500}
+.pe-row>label input,.pe-row>label select,.pe-row>label textarea{margin-top:4px;width:100%;color:var(--ink);font-weight:400}
+.field--compact{flex:0 0 120px;width:120px}      /* numbers: cost, MOQ, lead time, weights, sizes, CBM, currency, price basis */
+.field--medium{flex:0 0 200px;width:200px}       /* SKU, category, HS code, dates */
+.field--wide{flex:0 1 420px;width:420px;max-width:100%}   /* supplier */
+.field--fill{flex:1 1 280px}                      /* product name */
+.field--full{flex:1 1 100%}                       /* description */
+.pe-row input[type=number]{-moz-appearance:textfield;appearance:textfield}
+.pe-row input[type=number]::-webkit-inner-spin-button,.pe-row input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.pe-unit{font-size:11.5px;color:var(--muted);font-weight:400;margin-left:2px}
+.pe-group{margin-top:18px;padding-top:16px;border-top:1px solid var(--line-2)}
+.pe-group.first{margin-top:10px;padding-top:0;border-top:0}
+.pe-group h3,.pe-attcol h3,.pe-sub h3{font-size:13.5px;font-weight:600;color:var(--ink);margin:0 0 10px}
+.pe-card>h2{margin-bottom:12px}
+.pe-card>h2 .pe-info{margin-left:6px}
+.pe-two{display:flex;flex-wrap:wrap;gap:20px 56px;margin-top:2px}
+.pe-two .pe-sub{flex:0 1 auto}
+.pe-cbm{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px 28px;margin-top:18px;padding-top:16px;border-top:1px solid var(--line-2)}
+.pe-cbm .pe-cbm-c{min-width:150px}
+.pe-cbm .pe-cbm-c strong{display:flex;align-items:center;min-height:40px;margin:0;padding:0 12px;background:var(--line-2);border-radius:8px;font-weight:600;font-size:13.5px}
+.pe-cbm .pe-cbm-c .lbl{font-size:13px;color:var(--ink-2);font-weight:500;margin-bottom:4px;display:block}
+.pe-cbm[hidden]{display:none}
+.pe-pick{max-width:520px}
+.pe-hsrow{align-items:flex-end}
+/* photos | documents side by side */
+.pe-attach{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:24px}
+.pe-attcol.over,#docPanel.over{outline:2px dashed var(--accent);outline-offset:4px;border-radius:8px}
+.pe-docs{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.pe-doc{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"t n a" "t m a";gap:0 10px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);position:relative}
+.pe-doc+.pe-doc,#docNew .pe-doc{margin-top:0}
+#docNew{display:grid;gap:6px;margin-top:6px}
+.pe-dtype{grid-area:t;font-size:11px;font-weight:600;color:var(--ink-2);background:var(--line-2);border-radius:6px;padding:4px 7px;min-width:52px;text-align:center}
+.pe-dname{grid-area:n;font-size:13.5px;font-weight:500;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-decoration:none}
+a.pe-dname:hover{text-decoration:underline}
+.pe-dmeta{grid-area:m;font-size:12px;color:var(--muted)}
+.pe-dact{grid-area:a;display:flex;align-items:center;gap:10px;font-size:12.5px}
+.pe-x2{width:24px;height:24px;border-radius:99px;border:1px solid var(--line);background:#fff;color:var(--ink-2);font:500 16px/1 var(--font);padding:0;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+.pe-x2:hover{background:var(--bad-soft);color:var(--bad);border-color:#f0c4be}
+.pe-rmnote2{grid-column:1/-1;font-size:12.5px;color:var(--bad);font-weight:500;margin-top:4px}.pe-rmnote2[hidden]{display:none}
+.pe-doc.rm .pe-dname,.pe-doc.rm .pe-dmeta,.pe-doc.rm .pe-dtype{opacity:.45;text-decoration:line-through}
+.pe-doc.new{border-style:dashed}.pe-doc.toobig{border-color:var(--bad)}.pe-doc.toobig .pe-dmeta{color:var(--bad);font-weight:600}
+.pe-mini{height:32px!important;width:auto!important;font-size:12.5px;padding:0 26px 0 10px;margin:0!important}
+.pe-tools{align-items:center}
+/* AI assistant */
+.pe-ai{margin-top:20px;padding-top:16px;border-top:1px solid var(--line-2)}
+.pe-opt{font-size:11px;font-weight:500;color:var(--muted);background:var(--line-2);border-radius:99px;padding:1px 8px;margin-left:4px}
+.pe-aipick{display:flex;flex-wrap:wrap;gap:6px 10px;margin:0 0 6px}
+.pe-pickit{display:inline-flex;align-items:center;gap:7px;max-width:100%;padding:5px 10px;border:1px solid var(--line);border-radius:99px;background:var(--surface);margin:0;font-size:12.5px;font-weight:400;cursor:pointer}
+.pe-pickit input{width:auto;height:auto;margin:0}
+.pe-pn{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}.pe-pt{color:var(--muted);font-size:11.5px}
+.aiscan-review td .aiv{width:100%;margin:0;font-size:13px;height:auto;min-height:32px;padding:5px 8px}
+.aiscan-review td textarea.aiv{resize:vertical}
+/* quieter section shortcuts */
+.pe-nav a{background:transparent;border-color:transparent;color:var(--ink-2)}
+.pe-nav a:hover{background:var(--line-2);border-color:transparent}
+.pe-nav a.on{background:var(--accent-soft);border-color:transparent;color:#0a6f62;font-weight:600}
+/* the sticky Save bar never covers the last field or its message */
+.pe{padding-bottom:28px}
+html:has(.pe){scroll-padding-bottom:110px}
+@media (max-width:900px){.pe-attach{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:560px){
+  .pe-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 12px}
+  .pe-row>label{width:auto!important;flex:none!important}
+  .pe-row>.field--wide,.pe-row>.field--medium,.pe-row>.field--fill,.pe-row>.field--full{grid-column:1/-1}
+  .pe-two{gap:18px}.pe-two .pe-sub{width:100%}
+  .pe-cbm{gap:12px}.pe-cbm .field--compact{width:auto}
+  .pe-doc{grid-template-columns:auto minmax(0,1fr);grid-template-areas:"t n" "t m" "a a"}.pe-dact{justify-content:flex-end}
+}
+.pe-pickit{min-width:0;flex:0 1 auto}.pe-pn{max-width:min(240px,46vw);min-width:0}.pe-pt{flex:0 0 auto}

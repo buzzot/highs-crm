@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { render } from './mini-ejs.js';
-import { pages } from './fixtures.js';
+import { pages, prodForm } from './fixtures.js';
 import { specParts, recordTypeOf, isNonPhysical, postedRows, buildSpec, cbmFromSize, cbmDiffers, cbmPlan, cbmFormState, cartonCbmToStore, validateProduct } from '../src/lib/product-form.js';
+import { isDocFile, docKindFor, docTypeLabel, aiReadable, fmtSize } from '../src/lib/product-docs.js';
+import fs from 'node:fs';
 import { splitSpec } from '../src/lib/product-detail.js';
 
 const html = k => render('src/views/admin/products/form.ejs', pages[k][1]);
@@ -72,7 +74,7 @@ test('form view: six sections, sticky footer, structured rows, supplier terms', 
   assert.match(h, /class="pe-foot"/); assert.match(h, /Save changes/); assert.match(h, /Cancel/);
   assert.match(h, /name="spec_k"/); assert.doesNotMatch(h, /<textarea[^>]*name="spec"/);
   for (const n of ['src_incoterm', 'src_lead', 'src_valid', 'supplier_sku', 'moq', 'unit_cost', 'hs_code']) assert.match(h, new RegExp(`name="${n}"`));
-  assert.match(h, /existing quotes or POs/); assert.match(h, /id="peTitle"/); assert.match(h, /Jump to section/);
+  assert.match(h, /keep the price they were created with/); assert.match(h, /id="peTitle"/); assert.match(h, /Jump to section/);
 });
 test('form view: primary radios only when supported; no photos → empty state', () => {
   assert.match(html('admin/products/form#edit'), /name="primary_photo_id"/);
@@ -81,7 +83,7 @@ test('form view: primary radios only when supported; no photos → empty state',
 test('form view: service records lock packing; mismatch offers the keep control', () => {
   assert.match(html('admin/products/form#service'), /is-off/);
   assert.doesNotMatch(html('admin/products/form#edit'), /packWrap" class="[^"]*is-off|pe-two is-off/);
-  assert.match(html('admin/products/form#cbm'), /name="cbm_use"/); assert.match(html('admin/products/form#cbm'), /Supplier-provided CBM/); assert.match(html('admin/products/form#cbm'), /Used for freight/);
+  assert.match(html('admin/products/form#cbm'), /name="cbm_use"/); assert.match(html('admin/products/form#cbm'), /Carton CBM/); assert.match(html('admin/products/form#cbm'), /Calculated/); assert.match(html('admin/products/form#cbm'), /Used for freight/);
 });
 test('form view: failed save keeps typed values and shows field errors', () => {
   const h = html('admin/products/form#errors');
@@ -119,4 +121,62 @@ test('header: a new product is called "New Product"; CJK and Cyrillic names are 
   const n = html('admin/products/form#new');
   assert.match(n, /id="peTitle">New Product</); assert.match(n, /aria-current="page">New product</); assert.doesNotMatch(n, /id="peSave" disabled/);
   const c = html('admin/products/form#cjk'); assert.match(c, /LED 台灯 10W/); assert.match(c, /Настольная лампа складная/);
+});
+
+test('five sections; specifications live inside Product information', () => {
+  const h = html('admin/products/form#edit');
+  const nav = h.slice(h.indexOf('id="peNav"'), h.indexOf('</nav>', h.indexOf('id="peNav"')));
+  assert.equal((nav.match(/<a /g) || []).length, 5);
+  for (const t of ['Product information', 'Photos, documents', 'Supplier', 'Dimensions', 'Customs']) assert.match(nav, new RegExp(t));
+  const basic = h.slice(h.indexOf('id="sec-basic"'), h.indexOf('id="sec-photos"'));
+  assert.match(basic, /id="sec-spec"/); assert.match(basic, /name="spec_k"/);
+});
+test('supplier terms are three groups with content-sized fields', () => {
+  const h = html('admin/products/form#edit'), sup = h.slice(h.indexOf('id="sec-supply"'), h.indexOf('id="sec-pack"'));
+  for (const g of ['<h3>Supplier information</h3>', '<h3>Purchase price</h3>', '<h3>Purchasing conditions</h3>']) assert.ok(sup.includes(g), g);
+  const cls = n => (sup.match(new RegExp(`<label class="([^"]+)">[^<]*(?:<span[^>]*>[^<]*</span>)?\\s*<(?:input|select)[^>]*name="${n}"`)) || [])[1];
+  assert.equal(cls('unit_cost'), 'field--compact'); assert.equal(cls('moq'), 'field--compact'); assert.equal(cls('src_lead'), 'field--compact'); assert.equal(cls('cost_currency'), 'field--compact');
+  assert.equal(cls('supplier_sku'), 'field--medium'); assert.equal(cls('supplier_id'), 'field--wide');
+  assert.doesNotMatch(sup, /pe-grid g6/);
+});
+test('measurements are compact rows; CBM sits below them in a compact summary', () => {
+  const h = html('admin/products/form#edit'), pack = h.slice(h.indexOf('id="sec-pack"'), h.indexOf('id="sec-customs"'));
+  assert.equal((pack.match(/field--compact/g) || []).length, 4 + 5 + 1);
+  assert.ok(pack.indexOf('name="carton_height_cm"') < pack.indexOf('id="cbmBox"'));
+  assert.match(pack, /Pieces \/ carton/); assert.match(pack, /Gross weight/);
+});
+test('field-size classes are shared, not one width per input', () => {
+  const css = fs.readFileSync('public/css/app.css', 'utf8');
+  for (const c of ['field--compact', 'field--medium', 'field--wide', 'field--fill']) assert.match(css, new RegExp('\\.' + c + '\\{'));
+  const form = fs.readFileSync('src/views/admin/products/form.ejs', 'utf8');
+  assert.doesNotMatch(form, /style="[^"]*width/);
+});
+test('documents: listed with type, date, size, View / Download; internal by default; removal only marked until save', () => {
+  const h = html('admin/products/form#edit'), docs = h.slice(h.indexOf('id="docList"'), h.indexOf('id="docNew"'));
+  assert.match(docs, /LED-lamp-datasheet\.pdf/); assert.match(docs, />PDF</); assert.match(docs, />Certificate</); assert.match(docs, />Excel</);
+  assert.match(docs, /2026-10-02 · 471 KB/); assert.match(docs, />View</); assert.match(docs, />Download</); assert.match(docs, /\/admin\/documents\/d1\/download/);
+  assert.match(docs, /name="remove_doc" value="d1" hidden/); assert.match(docs, /Removed when you save/);
+  assert.match(docs, /· visible to client/); assert.equal((docs.match(/visible to client/g) || []).length, 1, 'only the one that really is client-visible is flagged');
+  assert.match(h, /name="docs"/); assert.match(h, /name="doc_kind"/);
+  assert.match(html('admin/products/form#nophotos').replace(/\s+/g, ' '), /id="docCount">3</);
+});
+test('documents: the AI can read saved PDFs, not spreadsheets', () => {
+  const h = html('admin/products/form#edit');
+  assert.match(h, /data-id="d1" data-ai="1"/); assert.match(h, /data-id="d3" data-ai=""/);
+  assert.match(h, /Extract product details/); assert.match(h, /id="aiPick"/); assert.match(h, /AI suggests \(editable\)/);
+  const off = render('src/views/admin/products/form.ejs', prodForm({}, { aiOn: false }));
+  assert.doesNotMatch(off, /id="aiScan"/); assert.match(off, /id="docList"/, 'documents work without AI');
+});
+test('product-docs helpers', () => {
+  assert.ok(isDocFile('a.PDF')); assert.ok(isDocFile('x.xlsx')); assert.ok(isDocFile('plan.dwg')); assert.ok(!isDocFile('virus.exe')); assert.ok(!isDocFile('photo.png'));
+  assert.equal(docKindFor('certificate'), 'certificate'); assert.equal(docKindFor('x'), 'other'); assert.equal(docKindFor(undefined), 'other');
+  assert.equal(docTypeLabel({ kind: 'certificate', title: 'a.pdf' }), 'Certificate'); assert.equal(docTypeLabel({ kind: 'other', title: 'a.xlsx' }), 'Excel'); assert.equal(docTypeLabel({ kind: 'other', title: 'z.dwg' }), 'Drawing');
+  assert.ok(aiReadable({ title: 'a.pdf' })); assert.ok(aiReadable({ mime_type: 'image/png', title: 'x' })); assert.ok(!aiReadable({ title: 'a.xlsx', mime_type: 'application/vnd.ms-excel' }));
+  assert.equal(fmtSize(482113), '471 KB'); assert.equal(fmtSize(3 * 1048576), '3.0 MB'); assert.equal(fmtSize(0), '');
+});
+test('routes: documents are saved internal, removal is limited to this product, AI reads saved files by id', () => {
+  const r = fs.readFileSync('src/routes/admin/products.js', 'utf8');
+  assert.match(r, /clientVisible: false/); assert.match(r, /neq\('kind', 'product_photo'\)\.in\('id', rmDocs\)/);
+  assert.match(r, /req\.body\.stored/); assert.match(r, /entity_id', String\(req\.body\.product_id\)/); assert.match(r, /extractProductCard/);
+  assert.match(r, /name: 'docs', maxCount/);
 });

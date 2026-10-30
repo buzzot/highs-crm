@@ -10,17 +10,21 @@ import { specParts, recordTypeOf, buildSpec, postedRows, validateProduct, carton
 import { productPhotos as photosOf, splitSpec, physicalFacts, quoteRows, poRows, orderRows, requestRows } from '../../lib/product-detail.js';
 import { SORT_DEFS, PAGE_SIZE, filterProducts, paginate } from '../../lib/product-list.js';
 import { compareProducts, extractProductCard, aiEnabled } from '../../lib/ai.js';
-import { uploadDocument, deleteDocument } from '../../lib/storage.js';
+import { uploadDocument, deleteDocument, downloadDocument } from '../../lib/storage.js';
+import { isDocFile, docKindFor, aiReadable, DOC_MAX_BYTES, DOC_MAX_FILES } from '../../lib/product-docs.js';
 
 // product photos: up to 12 images per save, 10 MB each, stored in Supabase Storage (bucket "documents")
 const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const photos = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024, files: 12 },
-  fileFilter: (req, file, cb) => cb(null, PHOTO_TYPES.includes(file.mimetype)),
-}).array('photos', 12);
+  limits: { fileSize: DOC_MAX_BYTES, files: 12 + DOC_MAX_FILES },
+  fileFilter: (req, file, cb) => cb(null, file.fieldname === 'docs' ? isDocFile(file.originalname) : PHOTO_TYPES.includes(file.mimetype)),
+}).fields([{ name: 'photos', maxCount: 12 }, { name: 'docs', maxCount: DOC_MAX_FILES }]);
+// req.files = the photos (as before), req.docFiles = the attached documents (specification sheets, datasheets, drawings, certificates…)
 const withPhotos = (req, res, next) => photos(req, res, err => {
-  if (err) req.photoError = err.code === 'LIMIT_FILE_SIZE' ? 'A photo is larger than 10 MB.' : err.code === 'LIMIT_FILE_COUNT' ? 'Up to 12 photos at a time.' : err.message;
+  if (err) req.photoError = err.code === 'LIMIT_FILE_SIZE' ? 'A file is larger than 10 MB.' : err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE' ? `Up to 12 photos and ${DOC_MAX_FILES} documents at a time.` : err.message;
+  const by = req.files && !Array.isArray(req.files) ? req.files : {};
+  req.files = by.photos || []; req.docFiles = by.docs || [];
   next();
 });
 async function savePhotos(req, productId) {
@@ -31,11 +35,27 @@ async function savePhotos(req, productId) {
   }
   return n;
 }
+// documents attached to the product (everything except the photos); INTERNAL by default — never client-visible automatically
+async function saveDocs(req, productId) {
+  let n = 0;
+  for (const file of req.docFiles || []) {
+    await uploadDocument({ file, entityType: 'product', entityId: productId, kind: docKindFor(req.body.doc_kind), title: file.originalname, clientVisible: false, uploadedBy: req.user.id });
+    n++;
+  }
+  return n;
+}
+async function productDocs(id) {
+  if (!id) return [];
+  const { data } = await admin.from('documents').select('id, title, kind, mime_type, size_bytes, storage_path, created_at, client_visible').eq('entity_type', 'product').eq('entity_id', id).neq('kind', 'product_photo').order('created_at', { ascending: false });
+  return data || [];
+}
 async function productPhotos(id) {
   if (!id) return [];
   const { data } = await admin.from('documents').select('id, title, created_at').eq('entity_type', 'product').eq('entity_id', id).eq('kind', 'product_photo').order('created_at');
   return data || [];
 }
+
+const attached = (head, photos, docs) => { const bits = [photos ? `${photos} photo${photos === 1 ? '' : 's'}` : '', docs ? `${docs} document${docs === 1 ? '' : 's'}` : ''].filter(Boolean); return bits.length ? `${head}, ${bits.join(' and ')} added.` : `${head}.`; };
 
 const r = Router();
 r.use((req, res, next) => { res.locals.aiOn = aiEnabled(); next(); }); // shows the AI scan box on the product form
@@ -156,32 +176,42 @@ r.get('/compare', async (req, res) => {
 });
 
 r.get('/new', async (req, res) => res.render('admin/products/form', {
-  title: 'New product', suppliers: await formData(), photos: [], ...formLocals({ cost_currency: 'CNY', supplier_id: req.query.supplier_id }),
+  title: 'New product', suppliers: await formData(), photos: [], docs: [], ...formLocals({ cost_currency: 'CNY', supplier_id: req.query.supplier_id }),
 }));
 
 // AI scan: read photos / a PDF and SUGGEST field values. Nothing is saved here — the form shows the suggestions and staff approve each one.
-const scanUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 6 } }).array('files', 6);
+const scanUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 6 } }).array('files', 6);   // + body.stored[] = ids of this product's saved photos/documents
 r.post('/ai-scan', (req, res) => scanUpload(req, res, async err => {
   if (err) return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'A file is larger than 10 MB.' : err.message });
   if (!aiEnabled()) return res.status(503).json({ error: 'AI is not switched on (no API key).' });
   const IMG = /^image\/(png|jpe?g|gif|webp)$/i;
   const files = (req.files || []).flatMap(f => (f.mimetype === 'application/pdf' || /\.pdf$/i.test(f.originalname) ? [{ pdf: f.buffer }] : IMG.test(f.mimetype) ? [{ data: f.buffer, mediaType: f.mimetype.replace('jpg', 'jpeg') }] : []));
-  if (!files.length) return res.status(400).json({ error: 'Add a photo or a PDF of the product first.' });
+  // already-saved attachments of this product the person ticked (read from storage; the originals stay untouched)
+  const names = (req.files || []).map(f => f.originalname);
+  const ids = [].concat(req.body.stored || []).map(String).slice(0, 6);
+  if (ids.length && req.body.product_id) {
+    const { data: docs } = await admin.from('documents').select('id, title, mime_type, storage_path').eq('entity_type', 'product').eq('entity_id', String(req.body.product_id)).in('id', ids);
+    for (const d of docs || []) {
+      if (files.length >= 6 || !aiReadable(d)) continue;
+      try { const buf = await downloadDocument(d.storage_path); files.push(/pdf/i.test(d.mime_type || '') || /\.pdf$/i.test(d.title || '') ? { pdf: buf } : { data: buf, mediaType: String(d.mime_type).replace('jpg', 'jpeg') }); names.push(d.title || 'attachment'); } catch (e) { console.error('[product ai-scan] stored file', d.id, e.message); }
+    }
+  }
+  if (!files.length) return res.status(400).json({ error: 'Choose a photo or a PDF for the AI to read first.' });
   try {
     const out = await extractProductCard({ files, name: String(req.body.name || '').slice(0, 300), description: String(req.body.description || '').slice(0, 3000) });
     const { usage, ...card } = out;
-    res.json({ card, tokens: usage?.total ?? null });
+    res.json({ card, tokens: usage?.total ?? null, sources: names });
   } catch (e) { console.error('[product ai-scan]', e.message); res.status(502).json({ error: `AI could not read the files: ${e.message}` }); }
 }));
 r.post('/', withPhotos, async (req, res) => {
-  const again = async (error, errors = {}) => res.status(400).render('admin/products/form', { title: 'New product', suppliers: await formData(), photos: [], ...formLocals({ ...req.body }, { b: req.body, errors, error: `${error}${req.files?.length ? ' Please add the photos again.' : ''}` }) });
+  const again = async (error, errors = {}) => res.status(400).render('admin/products/form', { title: 'New product', suppliers: await formData(), photos: [], docs: [], ...formLocals({ ...req.body }, { b: req.body, errors, error: `${error}${req.files?.length || req.docFiles?.length ? ' Please add the files again.' : ''}` }) });
   if (req.photoError) return again(req.photoError);
   const errors = validateProduct(req.body);
   if (Object.keys(errors).length) return again('Some fields need attention — they are marked below. Nothing was saved.', errors);
   const { data, error } = await admin.from('products').insert(body(req.body)).select('id').single();
   if (error) return again(error.message);
-  const n = await savePhotos(req, data.id);
-  res.redirect(`/admin/products/${data.id}?msg=${encodeURIComponent(n ? `Product created with ${n} photo${n === 1 ? '' : 's'}.` : 'Product created.')}`);
+  const n = await savePhotos(req, data.id), nd = await saveDocs(req, data.id);
+  res.redirect(`/admin/products/${data.id}?msg=${encodeURIComponent(attached('Product created', n, nd))}`);
 });
 
 // quick-add a supplier from the product form (JSON): name is enough; an existing supplier with the same name is reused
@@ -347,14 +377,14 @@ r.get('/:id', async (req, res) => {
 r.get('/:id/edit', async (req, res) => {
   const { data: p } = await admin.from('products').select('*').eq('id', req.params.id).single();
   if (!p) return notFound(res, 'Product');
-  res.render('admin/products/form', { title: 'Edit product', suppliers: await formData(), photos: await productPhotos(p.id), ...formLocals(p) });
+  res.render('admin/products/form', { title: 'Edit product', suppliers: await formData(), photos: await productPhotos(p.id), docs: await productDocs(p.id), ...formLocals(p) });
 });
 r.post('/:id', withPhotos, async (req, res) => {
   const id = req.params.id;
   const { data: was } = await admin.from('products').select('*').eq('id', id).single();
   if (!was) return notFound(res, 'Product');
-  const again = async (error, errors = {}) => res.status(400).render('admin/products/form', { title: 'Edit product', suppliers: await formData(), photos: await productPhotos(id),
-    ...formLocals({ ...was, ...req.body, id, ...('primary_photo_id' in was ? { primary_photo_id: was.primary_photo_id } : {}), spec: was.spec }, { b: req.body, errors, error: `${error}${req.files?.length ? ' Please add the new photos again.' : ''}` }) });
+  const again = async (error, errors = {}) => res.status(400).render('admin/products/form', { title: 'Edit product', suppliers: await formData(), photos: await productPhotos(id), docs: await productDocs(id),
+    ...formLocals({ ...was, ...req.body, id, ...('primary_photo_id' in was ? { primary_photo_id: was.primary_photo_id } : {}), spec: was.spec }, { b: req.body, errors, error: `${error}${req.files?.length || req.docFiles?.length ? ' Please add the new files again.' : ''}` }) });
   if (req.photoError) return again(req.photoError);
   const errors = validateProduct(req.body, was.spec);
   if (Object.keys(errors).length) return again('Some fields need attention — they are marked below. Nothing was saved.', errors);
@@ -373,8 +403,14 @@ r.post('/:id', withPhotos, async (req, res) => {
     const { data: own } = await admin.from('documents').select('id').eq('entity_type', 'product').eq('entity_id', id).in('id', remove);
     for (const d of own || []) await deleteDocument(d.id);
   }
-  const n = await savePhotos(req, id);
-  res.redirect(`/admin/products/${id}?msg=${encodeURIComponent(n ? `Product saved, ${n} photo${n === 1 ? '' : 's'} added.` : 'Product saved.')}`);
+  // documents ticked for removal (only this product's own, never a photo through this list)
+  const rmDocs = [].concat(req.body.remove_doc || []);
+  if (rmDocs.length) {
+    const { data: own } = await admin.from('documents').select('id').eq('entity_type', 'product').eq('entity_id', id).neq('kind', 'product_photo').in('id', rmDocs);
+    for (const d of own || []) await deleteDocument(d.id);
+  }
+  const n = await savePhotos(req, id), nd = await saveDocs(req, id);
+  res.redirect(`/admin/products/${id}?msg=${encodeURIComponent(attached('Product saved', n, nd))}`);
 });
 
 export default r;

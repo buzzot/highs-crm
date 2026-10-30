@@ -256,7 +256,7 @@ export function prodForm(pr = {}, over = {}) {
   const f = { ...f0, cbm: cbmFormState(p, b) };
   const errors = over.errors ?? (b ? validateProduct(b, p.spec) : {});
   return base(staffUser, '/admin/products/' + p.id + '/edit', { title: over.title || 'Edit product', p: b ? { ...p, ...b } : p, f, errors, error: Object.keys(errors).length ? 'Some fields need attention — they are marked below. Nothing was saved.' : null, suppliers: lists.suppliers,
-    photos: over.photos ?? [{ id: 'ph-land', title: 'front.jpg' }, { id: 'ph-port', title: 'box.jpg' }, { id: 'ph-bad', title: 'gone.jpg' }], aiOn: over.aiOn ?? true, hasPrimary: over.hasPrimary ?? true,
+    photos: over.photos ?? [{ id: 'ph-land', title: 'front.jpg' }, { id: 'ph-port', title: 'box.jpg' }, { id: 'ph-bad', title: 'gone.jpg' }], docs: over.docs ?? [{ id: 'd1', title: 'LED-lamp-datasheet.pdf', kind: 'other', mime_type: 'application/pdf', size_bytes: 482113, storage_path: 'product/p1/a.pdf', created_at: '2026-10-02T08:00:00Z', client_visible: false }, { id: 'd2', title: 'CE-certificate.pdf', kind: 'certificate', mime_type: 'application/pdf', size_bytes: 90210, storage_path: 'product/p1/b.pdf', created_at: '2026-10-03T08:00:00Z', client_visible: false }, { id: 'd3', title: 'specs.xlsx', kind: 'other', mime_type: 'application/vnd.ms-excel', size_bytes: 12000, storage_path: 'product/p1/c.xlsx', created_at: '2026-10-04T08:00:00Z', client_visible: true }], aiOn: over.aiOn ?? true, hasPrimary: over.hasPrimary ?? true,
     recordTypes: RECORD_TYPES, incoterms: PF_INCOTERMS, currencies: PF_CURRENCIES });
 }
 
