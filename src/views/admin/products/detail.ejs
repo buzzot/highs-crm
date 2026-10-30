@@ -42,7 +42,7 @@
 
 <div class="cd-stats" aria-label="Product summary">
   <a href="#sourcing" title="What the factory charges, in its own currency"><span class="muted">Factory price</span> <b><%= p.unit_cost != null ? fmt.money(p.unit_cost, p.cost_currency, 3) : '—' %></b><% if (m.priceUsd != null && p.cost_currency !== 'USD') { %><span class="muted">≈ <%= fmt.money(m.priceUsd, 'USD', 3) %></span><% } %></a>
-  <a href="#sourcing" title="<%= m.landedUsd != null ? 'Estimate: factory price + 40HQ freight share' : 'Needs carton data' %>"><span class="muted">Est. landed</span> <b><%= m.landedUsd != null ? (m.landedBasis === 'volume' ? '≈ ' : '') + fmt.money(m.landedUsd, 'USD', 3) : '—' %></b></a>
+  <a href="#sourcing" title="<%= m.landedUsd != null ? 'Estimate: factory price + 40HQ freight share' : 'Needs carton data' %>"><span class="muted">Est. landed</span> <% const LC = m.localCur && m.landedLocal != null; %><b><%= m.landedUsd != null ? (m.landedBasis === 'volume' ? '≈ ' : '') + (LC ? fmt.money(m.landedLocal, m.localCur, 3) : fmt.money(m.landedUsd, 'USD', 3)) : '—' %></b><% if (LC && m.landedUsd != null) { %><span class="muted">≈ <%= fmt.money(m.landedUsd, 'USD', 3) %></span><% } %></a>
   <a href="#sourcing"><span class="muted">MOQ</span> <b><%= p.moq ? fmt.num(p.moq, 0) : '—' %></b></a>
   <a href="#quotes"><span class="muted">Quoted</span> <b><%= QS.length %></b> time<%= QS.length === 1 ? '' : 's' %></a>
 </div>
@@ -157,11 +157,12 @@
           <p class="pdd-warn small"><b>No landed cost shown.</b> It needs <%= m.critical.length ? m.critical.map(g => g.label.replace(/^no /, '')).join(', ') : 'complete price and carton data' %>.</p>
           <% if (m.critical.length) { %><p class="small"><a href="#overview">See what is missing</a></p><% } %>
         <% } else { %>
-          <table class="cd-tbl pdd-cost"><tbody>
-            <tr><td>Factory price</td><td class="r"><%= fmt.money(m.priceUsd, 'USD', 3) %></td></tr>
-            <tr><td>Freight per unit <span class="muted small">(<%= fmt.money(C.freight_40hq_usd, 'USD', 0) %> ÷ <%= fmt.num(m.unitsPer40hq, 0) %>)</span></td><td class="r"><%= fmt.money(m.freightPerUnit, 'USD', 3) %></td></tr>
-            <tr class="tot"><td>Estimated landed</td><td class="r"><b><%= m.landedBasis === 'volume' ? '≈ ' : '' %><%= fmt.money(m.landedUsd, 'USD', 3) %></b></td></tr>
-            <tr><td>Suggested wholesale <span class="muted small">(+<%= m.markupPct %>% markup)</span></td><td class="r"><%= fmt.money(m.wholesaleUsd, 'USD', 2) %></td></tr>
+          <% const T = !!m.localCur; const row = (label, local, usd, d, bold, extra) => '<tr' + (bold ? ' class="tot"' : '') + '><td>' + label + '</td>' + (T ? '<td class="r">' + (bold ? '<b>' : '') + (extra || '') + fmt.money(local, m.localCur, d) + (bold ? '</b>' : '') + '</td><td class="r muted">' + (extra || '') + fmt.money(usd, 'USD', d) + '</td>' : '<td class="r">' + (bold ? '<b>' : '') + (extra || '') + fmt.money(usd, 'USD', d) + (bold ? '</b>' : '') + '</td>') + '</tr>'; %>
+          <table class="cd-tbl pdd-cost"><% if (T) { %><thead><tr><th></th><th class="r"><%= m.localCur %></th><th class="r muted">USD</th></tr></thead><% } %><tbody>
+            <%- row('Factory price', p.unit_cost, m.priceUsd, 3) %>
+            <%- row('Freight per unit <span class="muted small">(' + fmt.money(C.freight_40hq_usd, 'USD', 0) + ' ÷ ' + fmt.num(m.unitsPer40hq, 0) + ')</span>', m.freightLocal, m.freightPerUnit, 3) %>
+            <%- row('Estimated landed', m.landedLocal, m.landedUsd, 3, true, m.landedBasis === 'volume' ? '≈ ' : '') %>
+            <%- row('Suggested wholesale <span class="muted small">(+' + m.markupPct + '% markup)</span>', m.wholesaleLocal, m.wholesaleUsd, 2) %>
           </tbody></table>
           <% if (m.landedBasis === 'volume') { %><p class="pdd-warn small">≈ Carton weight is missing, so the container load is counted by volume only and may be optimistic. <a href="<%= EDIT('carton_weight_kg') %>">Add it</a></p><% } %>
           <p class="small muted">A <%= m.markupPct %>% markup on cost is a <%= fmt.num(m.impliedMarginPct, 1) %>% gross margin on the wholesale price.</p>

@@ -86,3 +86,14 @@ test('product types: Service and Freight skip carton and container costing; samp
   assert.equal(m.physical, false); assert.equal(m.landedUsd, null);
   assert.equal([...m.critical, ...m.optional].some(g => /carton|pcs/.test(g.label)), false);
 });
+
+test('the same estimates are also given in the product currency (null for USD or without a rate)', () => {
+  const p = { unit_cost: 4.05, cost_currency: 'CNY', carton_cbm: 0.486, carton_qty: 500, carton_weight_kg: 410 };
+  const m = productMetrics(p, fx);
+  assert.equal(m.localCur, 'CNY');
+  assert.ok(Math.abs(m.landedLocal * 0.138 - m.landedUsd) < 0.001);
+  assert.ok(Math.abs(m.freightLocal * 0.138 - m.freightPerUnit) < 0.001);
+  assert.ok(Math.abs(m.wholesaleLocal * 0.138 - m.wholesaleUsd) < 0.01);
+  assert.equal(productMetrics({ ...p, cost_currency: 'USD' }, fx).localCur, null);
+  assert.equal(productMetrics(p, () => null).landedLocal, null);
+});

@@ -96,6 +96,9 @@ export function productMetrics(p, fxToUsd, cfg = CONTAINER_DEFAULTS) {
   if (!p.category) add('category');
   const critical = g.filter(x => x.level === 'critical'), optional = g.filter(x => x.level === 'optional');
   return {
+    // the same figures in the product's own currency (what the factory price is quoted in), so the product page can lead with it; null when it is USD or no rate exists
+    localCur: fxOk && (p.cost_currency || 'CNY') !== 'USD' ? (p.cost_currency || 'CNY') : null,
+    freightLocal: fxOk && freightPerUnit != null ? r(freightPerUnit / rate, 4) : null, landedLocal: fxOk && landed != null ? r(landed / rate, 4) : null, wholesaleLocal: fxOk && wholesale != null ? r(wholesale / rate, 2) : null,
     priceUsd: r(priceUsd, 4), unitsPer40hq: units, freightPerUnit: r(freightPerUnit, 4),
     landedUsd: r(landed, 4), landedBasis, wholesaleUsd: r(wholesale, 2), markupPct: c.wholesale_markup_pct,
     // wholesale = landed × (1 + markup): a MARKUP on cost. The gross margin it gives on the selling price is lower.

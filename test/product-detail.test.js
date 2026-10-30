@@ -134,3 +134,15 @@ test('download route: a record whose file is gone answers 404 instead of crashin
   const r = fs.readFileSync('src/routes/admin/documents.js', 'utf8');
   assert.match(r, /try \{ url = await signedUrl/); assert.match(r, /status\(404\)\.send\('File not found in storage'\)/);
 });
+
+test('product page leads the landed cost with the factory-price currency, USD beside it', async () => {
+  const { pages } = await import('./fixtures.js');
+  const { render } = await import('./mini-ejs.js');
+  const base = pages['admin/products/detail'], loc = Array.isArray(base) ? base[1] : base;
+  const m = { ...loc.m, localCur: 'CNY', landedLocal: 4.63, freightLocal: 0.47, wholesaleLocal: 6.71, landedUsd: 0.653, priceUsd: 0.559, freightPerUnit: 0.094, wholesaleUsd: 0.95, landedBasis: 'full', critical: [], unitsPer40hq: 1000 };
+  const html = render('src/views/admin/products/detail.ejs', { ...loc, m, p: { ...loc.p, cost_currency: 'CNY', unit_cost: 4.05 } });
+  assert.match(html, /Est\. landed<\/span> <[^>]*>?<b>[^<]*¥?4\.63|Est\. landed[\s\S]{0,200}4\.63/);
+  assert.match(html, /<th class="r">CNY<\/th><th class="r muted">USD<\/th>/);
+  const m2 = { ...m, localCur: null };
+  assert.doesNotMatch(render('src/views/admin/products/detail.ejs', { ...loc, m: m2, p: { ...loc.p, cost_currency: 'USD' } }), /<th class="r muted">USD<\/th>/);
+});
