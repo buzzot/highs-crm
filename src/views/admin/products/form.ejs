@@ -33,13 +33,12 @@
   <nav class="pe-crumb" aria-label="Breadcrumb"><a href="/admin/products">Products</a><span aria-hidden="true"> / </span><span aria-current="page"><%= isNew ? 'New product' : 'Edit product' %></span></nav>
   <h1 class="pe-title" id="peTitle"><%= heading %></h1>
   <p class="pe-meta" id="peMeta"><%= meta.join(' · ') %></p>
-  <nav class="pe-nav" id="peNav" aria-label="Jump to section">
-    <a href="#sec-basic">Product information</a><a href="#sec-photos">Photos, documents &amp; AI</a><a href="#sec-supply">Supplier &amp; terms</a><a href="#sec-pack">Dimensions &amp; packaging</a><a href="#sec-customs">Customs</a>
-  </nav>
   <% if (error) { %><div class="alert err" role="alert"><%= error %></div><% } %>
 
   <form method="post" id="pform" action="<%= p.id ? '/admin/products/' + p.id : '/admin/products' %>" enctype="multipart/form-data" novalidate>
 
+  <div class="pe-cols">
+    <div class="pe-col pe-left">
   <%# ---------------- 1. Product information (with the specifications) ---------------- %>
   <section class="pe-card" id="sec-basic">
     <h2>Product information</h2>
@@ -69,6 +68,61 @@
     </div>
   </section>
 
+  <%# ---------------- Supplier & pricing ---------------- %>
+  <section class="pe-card" id="sec-supply">
+    <h2>Supplier &amp; pricing <%- tip('Supplier terms are kept apart from the product itself. Quotations and supplier purchase orders keep the price they were created with — editing the cost here only affects new ones. Price basis, lead time and quote validity are saved with the product\'s specification data.') %></h2>
+    <div class="pe-row">
+      <label class="field--wide">Supplier
+        <select data-picker name="supplier_id"><option value="">—</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= p.supplier_id === s.id ? 'selected' : '' %>><%= s.name %></option><% }) %><option value="__new">+ Add new supplier…</option></select></label>
+      <label class="field--medium">Supplier SKU
+        <input name="supplier_sku" maxlength="100" value="<%= v('supplier_sku') %>"><% if (E.supplier_sku) { %><small class="pe-err" role="alert"><%= E.supplier_sku %></small><% } %></label>
+    </div>
+    <div class="newsup" id="newSup" hidden>
+      <strong>New supplier</strong> <span class="muted small">— just the basics; complete the rest later on the supplier page</span>
+      <div class="pe-grid">
+        <label class="s2">Company name <input id="ns_name" maxlength="200"></label>
+        <label>Contact person <input id="ns_contact"></label>
+        <label>City <input id="ns_city"></label>
+        <label>Email <input type="email" id="ns_email"></label>
+        <label>Phone <input id="ns_phone"></label>
+        <label>WeChat <input id="ns_wechat"></label>
+      </div>
+      <div class="aiscan-msg err" id="ns_err" hidden></div>
+      <div class="actions"><button type="button" class="btn small primary" id="ns_save">Add supplier</button><button type="button" class="btn small" id="ns_cancel">Cancel</button></div>
+    </div>
+    <div class="pe-row pe-gap">
+      <label class="field--compact">Unit cost
+        <input type="number" min="0" step="0.0001" inputmode="decimal" name="unit_cost" value="<%= v('unit_cost') %>"><% if (E.unit_cost) { %><small class="pe-err" role="alert"><%= E.unit_cost %></small><% } %></label>
+      <label class="field--compact">Currency
+        <select name="cost_currency"><% curOpts.forEach(c => { %><option <%= (p.cost_currency || 'CNY') === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+      <label class="field--compact">MOQ <span class="pe-unit">pcs</span>
+        <input type="number" min="0" step="1" inputmode="numeric" name="moq" value="<%= v('moq') %>"><% if (E.moq) { %><small class="pe-err" role="alert"><%= E.moq %></small><% } %></label>
+    </div>
+    <details class="pe-more" id="moreTerms" <%= E.src_incoterm || E.src_lead || E.src_valid ? 'open' : '' %>>
+      <summary><span>More purchasing terms</span><span class="pe-sum" id="moreSum"><%= [F.incoterm ? String(F.incoterm).toUpperCase() : '', F.lead ? F.lead + ' days' : '', F.valid ? 'valid until ' + F.valid : ''].filter(Boolean).join(' · ') || 'none set' %></span></summary>
+      <div class="pe-row">
+        <label class="field--medium">Price basis
+          <select name="src_incoterm"><option value="">—</option><% incOpts.forEach(c => { %><option <%= String(F.incoterm).toUpperCase() === c.toUpperCase() ? 'selected' : '' %>><%= c %></option><% }) %></select>
+          <% if (E.src_incoterm) { %><small class="pe-err" role="alert"><%= E.src_incoterm %></small><% } %></label>
+        <label class="field--compact">Lead time <span class="pe-unit">days</span>
+          <input name="src_lead" inputmode="numeric" maxlength="12" value="<%= F.lead %>" placeholder="30"><% if (E.src_lead) { %><small class="pe-err" role="alert"><%= E.src_lead %></small><% } %></label>
+        <label class="field--medium">Quotation valid until
+          <input name="src_valid" <%= isoDate || !F.valid ? 'type=date' : 'type=text' %> value="<%= F.valid %>"><% if (E.src_valid) { %><small class="pe-err" role="alert"><%= E.src_valid %></small><% } %></label>
+      </div>
+    </details>
+  </section>
+
+  <%# ---------------- 5. Customs & classification ---------------- %>
+  <section class="pe-card" id="sec-customs">
+    <h2>Customs &amp; classification</h2>
+    <div class="pe-row pe-hsrow">
+      <label class="field--medium">HS code <%- tip('Saved exactly as entered, including a code given by the supplier. LumiTrade does not check it against an import tariff, so confirm the classification for the destination country before relying on it.') %>
+        <input name="hs_code" maxlength="20" value="<%= v('hs_code') %>" placeholder="9617.00" inputmode="decimal"><% if (E.hs_code) { %><small class="pe-err" role="alert"><%= E.hs_code %></small><% } %></label>
+      <p class="pe-help pe-hsnote">Not verified — confirm for the destination country.</p>
+    </div>
+  </section>
+    </div>
+    <div class="pe-col pe-right">
   <%# ---------------- 2. Photos, documents & AI ---------------- %>
   <section class="pe-card" id="sec-photos">
     <h2>Photos, documents &amp; AI</h2>
@@ -129,63 +183,11 @@
     <% } %>
   </section>
 
-  <%# ---------------- 3. Supplier & commercial terms ---------------- %>
-  <section class="pe-card" id="sec-supply">
-    <h2>Supplier &amp; commercial terms <%- tip('Supplier terms are kept apart from the product itself. Quotations and supplier purchase orders keep the price they were created with — editing the cost here only affects new ones. Price basis, lead time and quote validity are saved with the product\'s specification data.') %></h2>
-    <div class="pe-group first">
-      <h3>Supplier information</h3>
-      <div class="pe-row">
-        <label class="field--wide">Supplier
-          <select data-picker name="supplier_id"><option value="">—</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= p.supplier_id === s.id ? 'selected' : '' %>><%= s.name %></option><% }) %><option value="__new">+ Add new supplier…</option></select></label>
-        <label class="field--medium">Supplier SKU
-          <input name="supplier_sku" maxlength="100" value="<%= v('supplier_sku') %>"><% if (E.supplier_sku) { %><small class="pe-err" role="alert"><%= E.supplier_sku %></small><% } %></label>
-      </div>
-    <div class="newsup" id="newSup" hidden>
-      <strong>New supplier</strong> <span class="muted small">— just the basics; complete the rest later on the supplier page</span>
-      <div class="pe-grid">
-        <label class="s2">Company name <input id="ns_name" maxlength="200"></label>
-        <label>Contact person <input id="ns_contact"></label>
-        <label>City <input id="ns_city"></label>
-        <label>Email <input type="email" id="ns_email"></label>
-        <label>Phone <input id="ns_phone"></label>
-        <label>WeChat <input id="ns_wechat"></label>
-      </div>
-      <div class="aiscan-msg err" id="ns_err" hidden></div>
-      <div class="actions"><button type="button" class="btn small primary" id="ns_save">Add supplier</button><button type="button" class="btn small" id="ns_cancel">Cancel</button></div>
-    </div>
-    </div>
-
-    <div class="pe-group">
-      <h3>Purchase price</h3>
-      <div class="pe-row">
-        <label class="field--compact">Unit cost
-          <input type="number" min="0" step="0.0001" inputmode="decimal" name="unit_cost" value="<%= v('unit_cost') %>"><% if (E.unit_cost) { %><small class="pe-err" role="alert"><%= E.unit_cost %></small><% } %></label>
-        <label class="field--compact">Currency
-          <select name="cost_currency"><% curOpts.forEach(c => { %><option <%= (p.cost_currency || 'CNY') === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
-        <label class="field--compact">Price basis
-          <select name="src_incoterm"><option value="">—</option><% incOpts.forEach(c => { %><option <%= String(F.incoterm).toUpperCase() === c.toUpperCase() ? 'selected' : '' %>><%= c %></option><% }) %></select>
-          <% if (E.src_incoterm) { %><small class="pe-err" role="alert"><%= E.src_incoterm %></small><% } %></label>
-      </div>
-    </div>
-
-    <div class="pe-group">
-      <h3>Purchasing conditions</h3>
-      <div class="pe-row">
-        <label class="field--compact">MOQ <span class="pe-unit">pcs</span>
-          <input type="number" min="0" step="1" inputmode="numeric" name="moq" value="<%= v('moq') %>"><% if (E.moq) { %><small class="pe-err" role="alert"><%= E.moq %></small><% } %></label>
-        <label class="field--compact">Lead time <span class="pe-unit">days</span>
-          <input name="src_lead" inputmode="numeric" maxlength="12" value="<%= F.lead %>" placeholder="30"><% if (E.src_lead) { %><small class="pe-err" role="alert"><%= E.src_lead %></small><% } %></label>
-        <label class="field--medium">Quotation valid until
-          <input name="src_valid" <%= isoDate || !F.valid ? 'type=date' : 'type=text' %> value="<%= F.valid %>"><% if (E.src_valid) { %><small class="pe-err" role="alert"><%= E.src_valid %></small><% } %></label>
-      </div>
-    </div>
-  </section>
-
-  <%# ---------------- 4. Dimensions & packaging ---------------- %>
+  <%# ---------------- Dimensions & packaging ---------------- %>
   <section class="pe-card" id="sec-pack">
     <h2>Dimensions &amp; packaging</h2>
     <p class="pe-note" id="packOff" <%= off ? '' : 'hidden' %>>Not used for <%= (F.type || 'non-physical').toLowerCase() %> records — existing values are kept.</p>
-    <div class="pe-two <%= off ? 'is-off' : '' %>" id="packWrap">
+    <div class="pe-dims <%= off ? 'is-off' : '' %>" id="packWrap">
       <div class="pe-sub">
         <h3>Individual product</h3>
         <div class="pe-row">
@@ -198,36 +200,28 @@
       <div class="pe-sub">
         <h3>Export carton</h3>
         <div class="pe-row">
-          <label class="field--compact">Pieces / carton<input type="number" min="1" step="1" inputmode="numeric" name="carton_qty" value="<%= v('carton_qty') %>"><% if (E.carton_qty) { %><small class="pe-err"><%= E.carton_qty %></small><% } %></label>
-          <label class="field--compact">Gross weight <span class="pe-unit">kg</span><input type="number" min="0" step="0.01" inputmode="decimal" name="carton_weight_kg" value="<%= v('carton_weight_kg') %>"><% if (E.carton_weight_kg) { %><small class="pe-err"><%= E.carton_weight_kg %></small><% } %></label>
+          <label class="field--compact">Pcs / carton<input type="number" min="1" step="1" inputmode="numeric" name="carton_qty" value="<%= v('carton_qty') %>"><% if (E.carton_qty) { %><small class="pe-err"><%= E.carton_qty %></small><% } %></label>
+          <label class="field--compact">Gross wt <span class="pe-unit">kg</span><input type="number" min="0" step="0.01" inputmode="decimal" name="carton_weight_kg" value="<%= v('carton_weight_kg') %>"><% if (E.carton_weight_kg) { %><small class="pe-err"><%= E.carton_weight_kg %></small><% } %></label>
           <label class="field--compact">Length <span class="pe-unit">cm</span><input type="number" min="0" step="0.1" inputmode="decimal" name="carton_length_cm" value="<%= v('carton_length_cm') %>"></label>
           <label class="field--compact">Width <span class="pe-unit">cm</span><input type="number" min="0" step="0.1" inputmode="decimal" name="carton_width_cm" value="<%= v('carton_width_cm') %>"></label>
           <label class="field--compact">Height <span class="pe-unit">cm</span><input type="number" min="0" step="0.1" inputmode="decimal" name="carton_height_cm" value="<%= v('carton_height_cm') %>"></label>
         </div>
+        <div class="pe-row pe-cbmrow" id="cbmBox">
+          <label class="field--compact">Carton CBM <span class="pe-unit">m³</span><input type="number" min="0" step="0.0001" inputmode="decimal" name="carton_cbm" id="cbmIn" value="<%= CB.supplier %>"><% if (E.carton_cbm) { %><small class="pe-err"><%= E.carton_cbm %></small><% } %></label>
+          <p class="pe-cbmline"><span id="cbmUse">—</span> <%- tip('Length × width × height ÷ 1,000,000 is worked out when all three carton sides are filled in. The CBM you type is the supplier-provided figure and is never overwritten.') %></p>
+        </div>
+        <fieldset class="pe-pick" id="cbmPick" hidden>
+          <legend id="cbmLegend">The supplier's CBM and the calculated one differ — use which?</legend>
+          <label><input type="radio" name="cbm_use" value="entered" <%= CB.use !== 'calc' ? 'checked' : '' %>> <span id="cbmPickEnt">Supplier-provided</span></label>
+          <label><input type="radio" name="cbm_use" value="calc" <%= CB.use === 'calc' ? 'checked' : '' %>> <span id="cbmPickCalc">Calculated from size</span></label>
+        </fieldset>
+        <p class="pe-help" id="cbmNote"></p>
       </div>
     </div>
-    <div class="pe-cbm" id="cbmBox">
-      <label class="field--compact">Carton CBM <span class="pe-unit">m³</span><input type="number" min="0" step="0.0001" inputmode="decimal" name="carton_cbm" id="cbmIn" value="<%= CB.supplier %>" aria-describedby="cbmHelp"><% if (E.carton_cbm) { %><small class="pe-err"><%= E.carton_cbm %></small><% } %></label>
-      <div class="pe-cbm-c"><span class="lbl">Calculated <%- tip('Length × width × height ÷ 1,000,000, worked out when all three carton sides are filled in. The CBM you type is the supplier-provided figure and is never overwritten.') %></span><strong id="cbmCalc">—</strong></div>
-      <div class="pe-cbm-c"><span class="lbl">Used for freight</span><strong id="cbmUse">—</strong></div>
-    </div>
-    <fieldset class="pe-pick" id="cbmPick" hidden>
-      <legend>The two volumes differ — which should be used?</legend>
-      <label><input type="radio" name="cbm_use" value="entered" <%= CB.use !== 'calc' ? 'checked' : '' %>> <span id="cbmPickEnt">Supplier-provided</span></label>
-      <label><input type="radio" name="cbm_use" value="calc" <%= CB.use === 'calc' ? 'checked' : '' %>> <span id="cbmPickCalc">Calculated from size</span></label>
-    </fieldset>
-    <p class="pe-help" id="cbmNote"></p>
   </section>
+    </div>
+  </div>
 
-  <%# ---------------- 5. Customs & classification ---------------- %>
-  <section class="pe-card" id="sec-customs">
-    <h2>Customs &amp; classification</h2>
-    <div class="pe-row pe-hsrow">
-      <label class="field--medium">HS code <%- tip('Saved exactly as entered, including a code given by the supplier. LumiTrade does not check it against an import tariff, so confirm the classification for the destination country before relying on it.') %>
-        <input name="hs_code" maxlength="20" value="<%= v('hs_code') %>" placeholder="9617.00" inputmode="decimal"><% if (E.hs_code) { %><small class="pe-err" role="alert"><%= E.hs_code %></small><% } %></label>
-      <p class="pe-help pe-hsnote">Not verified — confirm for the destination country.</p>
-    </div>
-  </section>
 
   <div class="pe-foot" role="region" aria-label="Save">
     <span class="pe-stat" id="peStat" aria-live="polite"><%= nErr ? nErr + ' field' + (nErr === 1 ? '' : 's') + ' need attention' : 'No changes' %></span>
@@ -373,17 +367,17 @@
     if (nonPhysical()) return;
     var c = calc(), e = cbm.value.trim() === '' ? null : Number(cbm.value); if (!(e > 0)) e = null;
     var diff = c != null && e != null && differs(e, c);
-    $('cbmCalc').textContent = c != null ? c + ' m³' : 'Needs L × W × H';
     pick.hidden = !diff; radios.forEach(function (r) { r.disabled = !diff; });
     var use = form.querySelector('input[name=cbm_use]:checked'), eff = null, src = '';
-    if (c == null) { eff = e; src = e != null ? 'as entered by the supplier' : ''; }
-    else if (!diff) { eff = c; src = 'calculated from the size'; }
+    if (c == null) { eff = e; src = e != null ? 'supplier-provided (no carton size yet)' : ''; }
+    else if (!diff) { eff = c; src = 'calculated from the carton size'; }
     else if (use && use.value === 'calc') { eff = c; src = 'calculated — your choice'; }
     else { eff = e; src = 'supplier-provided — your choice'; }
-    $('cbmUse').textContent = eff != null ? eff + ' m³ · ' + src : '—';
+    $('cbmUse').textContent = eff != null ? 'Used for freight: ' + eff + ' m³ · ' + src : 'No CBM yet — fill in the carton size';
     $('cbmPickEnt').textContent = 'Supplier-provided: ' + e + ' m³'; $('cbmPickCalc').textContent = 'Calculated from size: ' + c + ' m³';
-    var n = $('cbmNote'); n.classList.toggle('warn', diff);
-    n.textContent = diff ? '⚠ The supplier-provided CBM differs from the calculated one by ' + Math.round(Math.abs(e - c) / c * 100) + '%. Check the carton size or the supplier figure.' : (c == null && e != null ? 'No carton size yet, so the supplier-provided CBM is used as entered.' : '');
+    var n = $('cbmNote'); n.classList.remove('warn');
+    if (diff) $('cbmLegend').textContent = '⚠ The two volumes differ by ' + Math.round(Math.abs(e - c) / c * 100) + '% — which should be used?';
+    n.textContent = !diff && c == null && e != null ? 'No carton size yet, so the supplier-provided CBM is used as entered.' : '';
   }
   SIDES.forEach(function (i) { i.addEventListener('input', cbmState); });
   cbm.addEventListener('input', cbmState); radios.forEach(function (r) { r.addEventListener('change', function () { cbmState(); dirty(); }); });
@@ -526,28 +520,15 @@
   });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') document.querySelectorAll('.pe-info.open').forEach(function (i) { i.classList.remove('open'); }); });
 
-  // ---------- section shortcuts: scroll there, highlight the section in view ----------
-  (function () {
-    var nav = $('peNav'), links = [].slice.call(nav.querySelectorAll('a')), secs = links.map(function (a) { return document.getElementById(a.getAttribute('href').slice(1)); });
-    var pin = null, pinAt = 0, calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    function offset() { var t = document.querySelector('.topbar'); return (t ? t.offsetHeight : 0) + nav.offsetHeight + 12; }
-    links.forEach(function (a, i) {
-      a.addEventListener('click', function (e) {
-        e.preventDefault(); var sec = secs[i]; if (!sec) return;
-        window.scrollTo({ top: sec.getBoundingClientRect().top + window.pageYOffset - offset() + 2, behavior: calm ? 'auto' : 'smooth' });
-        sec.setAttribute('tabindex', '-1'); sec.focus({ preventScroll: true }); pin = i; pinAt = Date.now(); mark(i);
-      });
-    });
-    function mark(k) { links.forEach(function (a, i) { a.classList.toggle('on', i === k); if (i === k) { a.setAttribute('aria-current', 'true'); if (nav.scrollWidth > nav.clientWidth) { nav.scrollLeft = Math.max(0, a.offsetLeft - 24); } } else a.removeAttribute('aria-current'); }); }
-    var tick = false;
-    function spy() { tick = false; var y = offset() + 8, k = 0; secs.forEach(function (s, i) { if (s && s.getBoundingClientRect().top <= y) k = i; }); if (window.innerHeight + window.pageYOffset >= document.documentElement.scrollHeight - 4) k = secs.length - 1; if (pin != null && Date.now() - pinAt < 1500) k = pin; mark(k); }
-    window.addEventListener('scroll', function () { if (!tick) { tick = true; requestAnimationFrame(spy); } }, { passive: true }); window.addEventListener('resize', spy); spy();
-  })();
+  // collapsed "More purchasing terms" keeps a one-line summary of what is filled in
+  function termsSum() { var inc = form.elements.src_incoterm.value, lead = form.elements.src_lead.value.trim(), val = form.elements.src_valid.value.trim(); $('moreSum').textContent = [inc, lead ? lead + ' days' : '', val ? 'valid until ' + val : ''].filter(Boolean).join(' · ') || 'none set'; }
+  ['src_incoterm', 'src_lead', 'src_valid'].forEach(function (n) { form.elements[n].addEventListener('input', termsSum); form.elements[n].addEventListener('change', termsSum); });
   heading();
 
   // opened from a "missing data" link: #f=carton_qty jumps to that field
   var m = /^#f=([a-z_]+)$/.exec(location.hash);
-  if (m) { var el = form.elements[m[1]]; if (el && el.focus) { el.scrollIntoView({ block: 'center' }); el.focus(); var l = el.closest('label'); if (l) l.classList.add('pd-flash'); } }
+  if (m) { var el = form.elements[m[1]]; if (el && el.closest && el.closest('details')) el.closest('details').open = true;
+    if (el && el.focus) { el.scrollIntoView({ block: 'center' }); el.focus(); var l = el.closest('label'); if (l) l.classList.add('pd-flash'); } }
   else if (<%- nErr ? 'true' : 'false' %>) { var first = form.querySelector('.pe-err'); if (first) { var t = first.closest('label, section'); (t && t.scrollIntoView) && t.scrollIntoView({ block: 'center' }); } }
 })();
 </script>

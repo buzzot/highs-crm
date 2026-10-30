@@ -74,7 +74,7 @@ test('form view: six sections, sticky footer, structured rows, supplier terms', 
   assert.match(h, /class="pe-foot"/); assert.match(h, /Save changes/); assert.match(h, /Cancel/);
   assert.match(h, /name="spec_k"/); assert.doesNotMatch(h, /<textarea[^>]*name="spec"/);
   for (const n of ['src_incoterm', 'src_lead', 'src_valid', 'supplier_sku', 'moq', 'unit_cost', 'hs_code']) assert.match(h, new RegExp(`name="${n}"`));
-  assert.match(h, /keep the price they were created with/); assert.match(h, /id="peTitle"/); assert.match(h, /Jump to section/);
+  assert.match(h, /keep the price they were created with/); assert.match(h, /id="peTitle"/);
 });
 test('form view: primary radios only when supported; no photos → empty state', () => {
   assert.match(html('admin/products/form#edit'), /name="primary_photo_id"/);
@@ -83,7 +83,7 @@ test('form view: primary radios only when supported; no photos → empty state',
 test('form view: service records lock packing; mismatch offers the keep control', () => {
   assert.match(html('admin/products/form#service'), /is-off/);
   assert.doesNotMatch(html('admin/products/form#edit'), /packWrap" class="[^"]*is-off|pe-two is-off/);
-  assert.match(html('admin/products/form#cbm'), /name="cbm_use"/); assert.match(html('admin/products/form#cbm'), /Carton CBM/); assert.match(html('admin/products/form#cbm'), /Calculated/); assert.match(html('admin/products/form#cbm'), /Used for freight/);
+  assert.match(html('admin/products/form#cbm'), /name="cbm_use"/); assert.match(html('admin/products/form#cbm'), /Carton CBM/); assert.match(html('admin/products/form#cbm'), /id="cbmUse"/); assert.match(html('admin/products/form#cbm'), /Used for freight/);
 });
 test('form view: failed save keeps typed values and shows field errors', () => {
   const h = html('admin/products/form#errors');
@@ -123,27 +123,39 @@ test('header: a new product is called "New Product"; CJK and Cyrillic names are 
   const c = html('admin/products/form#cjk'); assert.match(c, /LED 台灯 10W/); assert.match(c, /Настольная лампа складная/);
 });
 
-test('five sections; specifications live inside Product information', () => {
+test('two-column workspace: product info, supplier and customs on the left; photos/documents/AI and packaging on the right', () => {
   const h = html('admin/products/form#edit');
-  const nav = h.slice(h.indexOf('id="peNav"'), h.indexOf('</nav>', h.indexOf('id="peNav"')));
-  assert.equal((nav.match(/<a /g) || []).length, 5);
-  for (const t of ['Product information', 'Photos, documents', 'Supplier', 'Dimensions', 'Customs']) assert.match(nav, new RegExp(t));
-  const basic = h.slice(h.indexOf('id="sec-basic"'), h.indexOf('id="sec-photos"'));
-  assert.match(basic, /id="sec-spec"/); assert.match(basic, /name="spec_k"/);
+  const L = h.slice(h.indexOf('pe-col pe-left'), h.indexOf('pe-col pe-right')), R = h.slice(h.indexOf('pe-col pe-right'), h.indexOf('class="pe-foot"'));
+  for (const id of ['sec-basic', 'sec-supply', 'sec-customs']) { assert.match(L, new RegExp(`id="${id}"`)); assert.doesNotMatch(R, new RegExp(`id="${id}"`)); }
+  for (const id of ['sec-photos', 'sec-pack']) { assert.match(R, new RegExp(`id="${id}"`)); assert.doesNotMatch(L, new RegExp(`id="${id}"`)); }
+  assert.match(L.slice(L.indexOf('id="sec-basic"'), L.indexOf('id="sec-supply"')), /id="sec-spec"/, 'specifications sit inside Product information');
+  assert.doesNotMatch(h, /id="peNav"/, 'the five-link section bar is gone — two columns fit on one screen');
+  assert.ok(h.indexOf('class="pe-foot"') > h.indexOf('id="sec-customs"') && h.indexOf('class="pe-foot"') > h.indexOf('id="sec-pack"'));
 });
-test('supplier terms are three groups with content-sized fields', () => {
-  const h = html('admin/products/form#edit'), sup = h.slice(h.indexOf('id="sec-supply"'), h.indexOf('id="sec-pack"'));
-  for (const g of ['<h3>Supplier information</h3>', '<h3>Purchase price</h3>', '<h3>Purchasing conditions</h3>']) assert.ok(sup.includes(g), g);
+test('supplier & pricing: essentials always visible, the rest under "More purchasing terms" with a summary', () => {
+  const h = html('admin/products/form#edit'), sup = h.slice(h.indexOf('id="sec-supply"'), h.indexOf('id="sec-customs"'));
+  const more = sup.slice(sup.indexOf('<details'), sup.indexOf('</details>')), top = sup.slice(0, sup.indexOf('<details'));
+  for (const n of ['supplier_id', 'supplier_sku', 'unit_cost', 'cost_currency', 'moq']) assert.match(top, new RegExp(`name="${n}"`), n + ' stays visible');
+  for (const n of ['src_incoterm', 'src_lead', 'src_valid']) { assert.match(more, new RegExp(`name="${n}"`), n); assert.doesNotMatch(top, new RegExp(`name="${n}"`)); }
+  assert.match(more, /More purchasing terms/); assert.match(more, /id="moreSum">FOB · 30 days · valid until 2026-12-31</);
+  assert.doesNotMatch(more.slice(0, 20), /open/); assert.match(sup, /pe-more" id="moreTerms" >/);
+  assert.match(html('admin/products/form#errors').replace(/\s+/g, ' '), /id="moreTerms" open/, 'a problem in a hidden term opens it');
   const cls = n => (sup.match(new RegExp(`<label class="([^"]+)">[^<]*(?:<span[^>]*>[^<]*</span>)?\\s*<(?:input|select)[^>]*name="${n}"`)) || [])[1];
-  assert.equal(cls('unit_cost'), 'field--compact'); assert.equal(cls('moq'), 'field--compact'); assert.equal(cls('src_lead'), 'field--compact'); assert.equal(cls('cost_currency'), 'field--compact');
-  assert.equal(cls('supplier_sku'), 'field--medium'); assert.equal(cls('supplier_id'), 'field--wide');
-  assert.doesNotMatch(sup, /pe-grid g6/);
+  assert.equal(cls('unit_cost'), 'field--compact'); assert.equal(cls('moq'), 'field--compact'); assert.equal(cls('cost_currency'), 'field--compact'); assert.equal(cls('src_lead'), 'field--compact');
+  assert.equal(cls('supplier_sku'), 'field--medium'); assert.equal(cls('supplier_id'), 'field--wide'); assert.equal(cls('src_incoterm'), 'field--medium');
+  assert.doesNotMatch(sup, /pe-group|pe-grid g6/, 'no stacked sub-cards');
 });
-test('measurements are compact rows; CBM sits below them in a compact summary', () => {
-  const h = html('admin/products/form#edit'), pack = h.slice(h.indexOf('id="sec-pack"'), h.indexOf('id="sec-customs"'));
+test('measurements: two labelled groups of compact inputs; CBM is one field and one line, the choice only on a conflict', () => {
+  const h = html('admin/products/form#edit'), pack = h.slice(h.indexOf('id="sec-pack"'), h.indexOf('class="pe-foot"'));
+  assert.match(pack, /<h3>Individual product<\/h3>/); assert.match(pack, /<h3>Export carton<\/h3>/);
   assert.equal((pack.match(/field--compact/g) || []).length, 4 + 5 + 1);
   assert.ok(pack.indexOf('name="carton_height_cm"') < pack.indexOf('id="cbmBox"'));
-  assert.match(pack, /Pieces \/ carton/); assert.match(pack, /Gross weight/);
+  assert.match(pack, /id="cbmUse"/); assert.doesNotMatch(pack, /id="cbmCalc"|Calculated<|Used for freight &amp; costing/);
+  assert.match(pack, /id="cbmPick" hidden/, 'the comparison starts hidden');
+});
+test('customs is a small card in the left column', () => {
+  const h = html('admin/products/form#edit'), c = h.slice(h.indexOf('id="sec-customs"'), h.indexOf('pe-col pe-right'));
+  assert.match(c, /name="hs_code"/); assert.match(c, /field--medium/); assert.match(c, /Not verified/); assert.match(c, /role="tooltip"/);
 });
 test('field-size classes are shared, not one width per input', () => {
   const css = fs.readFileSync('public/css/app.css', 'utf8');
