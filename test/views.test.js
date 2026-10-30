@@ -64,3 +64,14 @@ test('styled select popup script is loaded and styled', () => {
   assert.match(fs.readFileSync('src/views/partials/foot.ejs', 'utf8'), /\/js\/select-ui\.js/);
   assert.match(fs.readFileSync('public/css/app.css', 'utf8'), /\.sx-pop\s*\{/);
 });
+
+test('quote all products: internal packing, per-line freight and one logistics card', () => {
+  const html = render(path.join(views, 'admin/pricing/quote_lines.ejs'), pages['admin/pricing/quote_lines']);
+  assert.match(html, /name="line\[0\]\[pack_kg\]"/);
+  assert.match(html, /name="line\[1\]\[pack_cbm\]"/);
+  assert.match(html, /name="line\[0\]\[freight\]"/);
+  assert.match(html, /name="freight_total"[^>]*value="38500"/);
+  assert.match(html, /name="freight_basis"/);
+  assert.match(html, /never shown to the client/);
+  assert.match(html, /Prefilled from FQ-2610-0042 · Dragon Freight/);
+});

@@ -228,6 +228,19 @@ async function rfqAnswersFor(rid) {
   return out;
 }
 
+// the forwarder quote (freight_rfqs) for a packing list sent from this request's RFQs: accepted first, then the latest quoted one
+async function forwarderQuoteFor(rid) {
+  const { data: rfqs } = await admin.from('rfqs').select('id').eq('request_id', rid);
+  const ids = (rfqs || []).map(x => x.id);
+  if (!ids.length) return null;
+  const { data, error } = await admin.from('freight_requests').select('ref, freight_rfqs!freight_rfqs_request_id_fkey(status, quote_amount, quote_currency, quoted_at, forwarders(name))').in('rfq_id', ids).order('created_at', { ascending: false });
+  if (error) return null;   // freight tables / rfq_id column not there yet
+  const all = (data || []).flatMap(f => (f.freight_rfqs || []).map(q => ({ ref: f.ref, status: q.status, amount: Number(q.quote_amount), currency: q.quote_currency, forwarder: q.forwarders?.name || '', at: q.quoted_at || '' })))
+    .filter(q => ['quoted', 'accepted'].includes(q.status) && q.amount > 0);
+  all.sort((a, b) => (b.status === 'accepted') - (a.status === 'accepted') || String(b.at).localeCompare(String(a.at)));
+  return all[0] || null;
+}
+
 r.get('/requests/:rid/quote-lines', async (req, res) => {
   const rid = req.params.rid;
   if (!isUuid(rid)) return notFound(res, 'Request');
@@ -237,7 +250,7 @@ r.get('/requests/:rid/quote-lines', async (req, res) => {
   let [{ data: items }, { data: drafts }, { data: products }, { data: suppliers }, answers] = await Promise.all([
     admin.from('request_items').select('id, name, sku, quantity, unit, target_unit_price, position').eq('request_id', rid).order('position'),
     admin.from('quotes').select('*').eq('request_id', rid).eq('status', 'draft').order('created_at', { ascending: false }),
-    admin.from('products').select('id, name, sku, supplier_id').order('name'),
+    admin.from('products').select('id, name, sku, supplier_id, unit_weight_kg, carton_qty, carton_weight_kg, carton_cbm, carton_length_cm, carton_width_cm, carton_height_cm').order('name'),
     admin.from('suppliers').select('id, name, lead_time_days').order('name'),
     rfqAnswersFor(rid),
   ]);
@@ -246,11 +259,22 @@ r.get('/requests/:rid/quote-lines', async (req, res) => {
   const answer = answers.find(a => a.id === req.query.rs) || null;
   const d0 = drafts[0] || {};
   const shared = { sell_currency: d0.sell_currency || request.target_currency || res.locals.defCur || 'CNY', incoterm: d0.incoterm || 'FOB', lead_time_days: d0.lead_time_days ?? '',
-    valid_until: d0.valid_until || new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10), freight_mode: modeOf(d0.freight_mode) };
+    valid_until: d0.valid_until || new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10), freight_mode: modeOf(d0.freight_mode),
+    freight_basis: d0.freight_basis === 'air' ? 'air' : 'sea', freight_total: d0.freight_total ?? '', freight_note: d0.freight_note || '', freight_from: null };
+  // the forwarder's quote for this request's packing list, when there is one
+  if (shared.freight_total === '') {
+    const fq = await forwarderQuoteFor(rid);
+    if (fq) {
+      const amt = Number(fq.amount) * fxRate(settings, fq.currency || shared.sell_currency, shared.sell_currency);
+      shared.freight_total = Math.round(amt * 100) / 100; shared.freight_from = fq;
+      shared.freight_note = `From ${fq.ref}${fq.forwarder ? ' · ' + fq.forwarder : ''} — quoted ${fq.currency || ''} ${fq.amount}`.trim();
+    }
+  }
   const lines = items.map(it => {
     const dq = drafts.find(q => q.request_item_id === it.id);
     const l = { item: it, quote_id: dq?.id || '', product_id: dq?.product_id || '', supplier_id: dq?.supplier_id || '', quantity: dq?.quantity ?? it.quantity ?? '', unit_cost: dq?.unit_cost ?? '',
-      cost_currency: dq?.cost_currency || 'CNY', margin_pct: dq?.margin_pct ?? settings.pricing.default_margin_pct, freight: dq?.freight_estimate ?? 0, note: '' };
+      cost_currency: dq?.cost_currency || 'CNY', margin_pct: dq?.margin_pct ?? settings.pricing.default_margin_pct, freight: dq?.freight_estimate ?? 0, note: '',
+      pack_kg: dq?.pack_kg ?? '', pack_cbm: dq?.pack_cbm ?? '', freight_saved: dq != null && dq.freight_estimate != null && dq.freight_total != null };
     const a = answer?.byItem[it.id];
     if (a) {
       l.unit_cost = a.unit_price; l.cost_currency = CURRENCIES.includes(a.currency) ? a.currency : l.cost_currency; l.supplier_id = answer.supplier_id;
@@ -260,19 +284,23 @@ r.get('/requests/:rid/quote-lines', async (req, res) => {
     } else if (answer) l.note = 'This product has no price in that RFQ answer.';
     return l;
   });
-  res.render('admin/pricing/quote_lines', { title: `Quote all products · ${request.ref}`, request, lines, shared, answers, answer, products: products || [], suppliers: suppliers || [],
+  res.render('admin/pricing/quote_lines', { title: `Quote all products · ${request.ref}`, request, lines, shared, answers, answer, products: products || [], suppliers: suppliers || [], airKgPerCbm: AIR_KG_PER_CBM,
     settings, incoterms: INCOTERMS, currencies: CURRENCIES, error: req.query.err || null,
     rates: Object.fromEntries(CURRENCIES.map(a => [a, Object.fromEntries(CURRENCIES.map(c => [c, fxRate(settings, a, c)]))])) });
 });
 
 // form values → quote rows (shared by "save" and "preview PDF" so both always agree)
+const numOrNull = v => { const n = Number(String(v ?? '').replace(/[,\s]/g, '')); return v === '' || v == null || !Number.isFinite(n) || n < 0 ? null : n; };
+const PACK_COLS = /pack_kg|pack_cbm|freight_basis|freight_total|freight_note/;   // columns from migration 0040
+const without = (o, re) => Object.fromEntries(Object.entries(o).filter(([k]) => !re.test(k)));
 function buildLines(rows, prods, shared, settings, rid) {
   return rows.map(l => {
     const cur = CURRENCIES.includes(l.cost_currency) ? l.cost_currency : 'CNY';
     const pr = (prods || []).find(p => p.id === l.product_id);
     const row = { request_id: rid, request_item_id: l.item_id, product_id: pr?.id || null, supplier_id: pr?.supplier_id || (isUuid(l.supplier_id) ? l.supplier_id : null),
       quantity: Math.max(1, Math.round(Number(l.quantity) || 0)), unit_cost: Number(String(l.unit_cost).replace(',', '.')), cost_currency: cur, fx_rate: fxRate(settings, cur, shared.sell_currency),
-      margin_pct: Number(l.margin_pct) || settings.pricing.default_margin_pct, freight_estimate: Math.max(0, Number(l.freight) || 0), duties_estimate: 0, other_costs: 0, ...shared };
+      margin_pct: Number(l.margin_pct) || settings.pricing.default_margin_pct, freight_estimate: Math.max(0, Number(l.freight) || 0), duties_estimate: 0, other_costs: 0,
+      pack_kg: numOrNull(l.pack_kg), pack_cbm: numOrNull(l.pack_cbm), ...shared };
     const calc = compute(row, settings);
     return { l, full: { ...row, quantity: calc.quantity, margin_pct: calc.marginPct, unit_price: calc.unitPrice, landed_unit_price: calc.landedUnitPrice } };
   });
@@ -280,6 +308,7 @@ function buildLines(rows, prods, shared, settings, rid) {
 function formShared(b, res) {
   const sell = CURRENCIES.includes(b.sell_currency) ? b.sell_currency : (res.locals.defCur || 'CNY');
   return { sell_currency: sell, incoterm: INCOTERMS.includes(b.incoterm) ? b.incoterm : 'FOB', freight_mode: modeOf(b.freight_mode),
+    freight_basis: b.freight_basis === 'air' ? 'air' : 'sea', freight_total: numOrNull(b.freight_total), freight_note: String(b.freight_note || '').trim().slice(0, 300) || null,
     lead_time_days: Number(b.lead_time_days) > 0 ? Math.round(Number(b.lead_time_days)) : null, valid_until: /^\d{4}-\d{2}-\d{2}$/.test(b.valid_until || '') ? b.valid_until : null };
 }
 const pricedRows = (b, itemIds) => (Array.isArray(b.line) ? b.line : Object.values(b.line || {})).filter(l => l && itemIds.has(l.item_id) && Number(String(l.unit_cost ?? '').replace(',', '.')) > 0);
@@ -321,11 +350,13 @@ r.post('/requests/:rid/quote-lines', async (req, res) => {
   const prodIds = rows.map(l => l.product_id).filter(isUuid);
   const { data: prods } = prodIds.length ? await admin.from('products').select('id, supplier_id').in('id', prodIds) : { data: [] };
   let saved = 0;
-  for (const { l, full } of buildLines(rows, prods, shared, settings, rid)) {
+  let packSkipped = false;
+  for (let { l, full } of buildLines(rows, prods, shared, settings, rid)) {
     const write = async f => (isUuid(l.quote_id) && draftIds.has(l.quote_id)
       ? admin.from('quotes').update({ ...f, ai_check: null, status: 'draft' }).eq('id', l.quote_id)
       : admin.from('quotes').insert({ ...f, created_by: req.user.id, status: 'draft' }));
     let { error } = await write(full);
+    if (error && PACK_COLS.test(error.message)) { full = without(full, PACK_COLS); packSkipped = true; ({ error } = await write(full)); }   // before migration 0040
     if (error && /freight_mode/.test(error.message)) { const { freight_mode, ...rest } = full; ({ error } = await write(rest)); }   // before the freight-mode migration
     if (error) return back(res, to, { err: `${saved ? saved + ' saved, then: ' : ''}${error.message}` });
     saved++;
@@ -333,7 +364,9 @@ r.post('/requests/:rid/quote-lines', async (req, res) => {
   await admin.from('requests').update({ status: 'reviewing' }).eq('id', rid).eq('status', 'new');
   // the lines of one quotation share the freight switch
   await admin.from('quotes').update({ freight_mode: shared.freight_mode }).eq('request_id', rid).eq('status', 'draft').then(() => {}, () => {});
-  res.redirect(`/admin/pricing/requests/${rid}/quote?msg=` + encodeURIComponent(`${saved} quote line${saved > 1 ? 's' : ''} saved as drafts. Check the total, then send the quote to the client.`));
+  await admin.from('quotes').update({ freight_basis: shared.freight_basis, freight_total: shared.freight_total, freight_note: shared.freight_note }).eq('request_id', rid).eq('status', 'draft').then(() => {}, () => {});
+  const warn = packSkipped ? ' Packing weight, volume and the logistics split were not stored — run supabase/migrations/0040_quote_packing.sql in Supabase first.' : '';
+  res.redirect(`/admin/pricing/requests/${rid}/quote?msg=` + encodeURIComponent(`${saved} quote line${saved > 1 ? 's' : ''} saved as drafts. Check the total, then send the quote to the client.${warn}`));
 });
 
 r.get('/requests/:rid/quote', async (req, res) => {

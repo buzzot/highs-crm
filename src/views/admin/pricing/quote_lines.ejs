@@ -44,43 +44,143 @@
         <label>Supplier <select name="<%= n %>[supplier_id]"><option value="">—</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= l.supplier_id === s.id ? 'selected' : '' %>><%= s.name %></option><% }) %></select></label>
         <label>Catalog product <span class="muted small">optional</span><select name="<%= n %>[product_id]"><option value="">— none —</option><% products.forEach(p => { %><option value="<%= p.id %>" <%= l.product_id === p.id ? 'selected' : '' %>><%= p.name %><%= p.sku ? ' · ' + p.sku : '' %></option><% }) %></select></label>
         <label>Quantity <input type="number" min="1" name="<%= n %>[quantity]" class="ql-qty" value="<%= l.quantity %>"></label>
-        <label>Freight for this line <span class="muted small" id="ql_fcur<%= i %>"><%= shared.sell_currency %></span><input type="number" step="0.01" min="0" name="<%= n %>[freight]" class="ql-fr" value="<%= l.freight %>"></label>
+        <div class="ql-res"><span class="lbl muted small">Line total</span><strong class="ql-total">—</strong><span class="ql-warn small"></span></div>
       </div>
       <div class="pq-grid g4" style="margin-top:12px">
         <label>Factory price <input type="number" step="0.0001" min="0" name="<%= n %>[unit_cost]" class="ql-cost" value="<%= l.unit_cost %>"></label>
         <label>Currency <select name="<%= n %>[cost_currency]" class="ql-ccur"><% currencies.forEach(c => { %><option <%= c === l.cost_currency ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
         <label>Margin % on cost <span class="muted small">min <%= min %>%</span><input type="number" step="0.1" min="0" name="<%= n %>[margin_pct]" class="ql-mar" value="<%= l.margin_pct %>"></label>
-        <div class="ql-res"><span class="lbl muted small">Line total</span><strong class="ql-total">—</strong><span class="ql-warn small"></span></div>
+        <div></div>
+      </div>
+      <div class="ql-int">
+        <div class="small ql-int-h"><span class="ql-tag">Internal</span><span class="muted">Packing and freight for this line — never shown to the client</span></div>
+        <div class="pq-grid g4">
+          <label>Total gross weight, kg <input type="number" step="0.1" min="0" name="<%= n %>[pack_kg]" class="ql-pkg" value="<%= l.pack_kg %>"></label>
+          <label>Total volume, CBM <input type="number" step="0.001" min="0" name="<%= n %>[pack_cbm]" class="ql-pcbm" value="<%= l.pack_cbm %>"></label>
+          <label>Freight for this line <span class="muted small"><span id="ql_fcur<%= i %>"><%= shared.sell_currency %></span> · <span class="ql-fbasis">by volume</span></span><input type="number" step="0.01" min="0" name="<%= n %>[freight]" class="ql-fr" value="<%= l.freight %>" data-saved="<%= l.freight_saved ? 1 : 0 %>"></label>
+          <p class="muted small ql-pnote"></p>
+        </div>
       </div>
       <% if (l.note) { %><p class="small ql-note <%= /check the price|no price/.test(l.note) ? 'bad' : 'muted' %>"><%= l.note %></p><% } %>
     </div>
   </section>
   <% }) %>
 
-  <div class="card ql-sum"><div class="row" style="align-items:center"><strong>Goods total</strong><strong id="ql_goods" style="margin-left:auto">—</strong></div>
-    <p class="muted small" style="margin:6px 0 0">Margin is on the product cost only; freight is passed through. Products without a factory price are skipped — you can add them later. “Preview quotation PDF” shows what the client would receive (no costs or margins), without saving.</p></div>
+  <div class="card ql-log">
+    <h2>Logistics <span class="muted small">one amount for the whole shipment · the client sees a single freight line (or it is included in the unit prices)</span></h2>
+    <div class="pq-grid g4">
+      <label class="ql-span2">Logistics note <span class="muted small">internal</span><input name="freight_note" maxlength="300" value="<%= shared.freight_note %>" placeholder="e.g. Sea freight FOB Shanghai → destination, 40HQ × 2"></label>
+      <label>Total logistics <span class="muted small" id="ql_ltcur"><%= shared.sell_currency %></span><input type="number" step="0.01" min="0" name="freight_total" id="ql_ltot" value="<%= shared.freight_total %>"></label>
+      <label>Split between products by <select name="freight_basis" id="ql_lbasis"><option value="sea" <%= shared.freight_basis !== 'air' ? 'selected' : '' %>>Volume · sea / container</option><option value="air" <%= shared.freight_basis === 'air' ? 'selected' : '' %>>Weight · air (chargeable)</option></select></label>
+    </div>
+    <p class="muted small ql-lsrc" style="margin:8px 0 0"><% if (shared.freight_from) { %>Prefilled from <%= shared.freight_from.ref %><%= shared.freight_from.forwarder ? ' · ' + shared.freight_from.forwarder : '' %> — quoted <%= shared.freight_from.currency || '' %> <%= shared.freight_from.amount %>. Editable.<% } else { %>No forwarder quote yet — type the amount, or <a href="/admin/sourcing/<%= request.id %>">request one from the packing list</a>.<% } %></p>
+    <p class="small ql-lnote" id="ql_lnote" style="margin:4px 0 0"></p>
+    <button type="button" class="btn small" id="ql_respread" hidden style="margin-top:8px">Spread again</button>
+  </div>
+
+  <div class="card ql-sum"><div class="ql-sumrow">
+      <div><span class="muted small">Goods total</span><strong id="ql_goods">—</strong></div>
+      <div><span class="muted small">Logistics</span><strong id="ql_log">—</strong></div>
+      <div><span class="muted small">Quotation total</span><strong id="ql_grand">—</strong></div>
+      <div class="ql-int-sum muted small" id="ql_isum"></div></div>
+    <p class="muted small" style="margin:6px 0 0">Margin is on the product cost only; freight is passed through. Weight, volume and each line's freight share are for internal use and never appear on the client's quotation. Products without a factory price are skipped — you can add them later. “Preview quotation PDF” shows what the client would receive (no costs or margins), without saving.</p></div>
   <div class="actions"><button class="btn primary">Save quote lines</button><button class="btn" formaction="/admin/pricing/requests/<%= request.id %>/quote-lines/preview.pdf" formtarget="_blank">Preview quotation PDF</button><a class="btn" href="/admin/sourcing/<%= request.id %>">Cancel</a></div>
 </form>
 <script type="application/json" id="qlRates"><%- JSON.stringify(rates) %></script>
+<script type="application/json" id="qlProds"><%- JSON.stringify(Object.fromEntries(products.map(p => [p.id, { w: p.unit_weight_kg, q: p.carton_qty, cw: p.carton_weight_kg, cc: p.carton_cbm, l: p.carton_length_cm, wd: p.carton_width_cm, h: p.carton_height_cm }]))) %></script>
 <script>
 (function () {
-  const rates = JSON.parse(document.getElementById('qlRates').textContent), form = document.getElementById('qlForm'), min = Number(form.dataset.min);
-  const sell = document.getElementById('ql_sell'), fmt = (v, c) => new Intl.NumberFormat('en-US', { style: 'currency', currency: c, maximumFractionDigits: 2 }).format(v);
+  const rates = JSON.parse(document.getElementById('qlRates').textContent), prods = JSON.parse(document.getElementById('qlProds').textContent);
+  const form = document.getElementById('qlForm'), min = Number(form.dataset.min), AIR = <%= airKgPerCbm %>, $ = id => document.getElementById(id);
+  const sell = $('ql_sell'), fmt = (v, c) => new Intl.NumberFormat('en-US', { style: 'currency', currency: c, maximumFractionDigits: 2 }).format(v);
+  const n = v => { const x = parseFloat(String(v).replace(/,/g, '')); return Number.isFinite(x) ? x : 0; }, r2 = x => Math.round(x * 100) / 100;
+  const secs = [...form.querySelectorAll('.ql')], locked = {}, touched = new Set();
+  const q = (sec, c) => sec.querySelector(c);
+  const hasSaved = secs.some(sec => q(sec, '.ql-fr').dataset.saved === '1');
+
+  // packing from the catalog product (same arithmetic as the quote-several page): cartons are rounded up
+  function fromCatalog(sec) {
+    const p = prods[q(sec, 'select[name$="[product_id]"]').value]; if (!p) return null;
+    const qty = Math.max(0, Math.floor(n(q(sec, '.ql-qty').value))), per = n(p.q), ck = n(p.cw), uk = n(p.w);
+    const cc = n(p.cc) > 0 ? n(p.cc) : (n(p.l) > 0 && n(p.wd) > 0 && n(p.h) > 0 ? n(p.l) * n(p.wd) * n(p.h) / 1e6 : 0);
+    const cartons = per > 0 ? Math.ceil(qty / per) : null;
+    const kg = cartons != null && ck > 0 ? cartons * ck : (uk > 0 ? qty * uk : null), cbm = cartons != null && cc > 0 ? cartons * cc : null;
+    return { cartons, kg, cbm, qty, per, ck, cc };
+  }
+  function packing(sec) {
+    const k = q(sec, '.ql-pkg'), v = q(sec, '.ql-pcbm'), note = q(sec, '.ql-pnote'), c = fromCatalog(sec);
+    if (!touched.has(k)) k.value = c && c.kg != null ? Math.round(c.kg * 10) / 10 : '';
+    if (!touched.has(v)) v.value = c && c.cbm != null ? Math.round(c.cbm * 1000) / 1000 : '';
+    note.textContent = !c ? 'No catalog product — enter weight and volume yourself.' : (c.cartons == null || c.cc <= 0 || c.kg == null) ? 'The catalog product has incomplete packing data — fill what is missing.'
+      : `From catalog: ${c.cartons.toLocaleString('en-US')} cartons × ${c.ck || '—'} kg · ${Math.round(c.cc * 10000) / 10000} CBM each. Edit if the supplier's packing differs.`;
+  }
+  function priced(sec) { return n(q(sec, '.ql-cost').value) > 0; }
+  function spread() {
+    const T = n($('ql_ltot').value), air = $('ql_lbasis').value === 'air';
+    const ls = secs.map(sec => ({ sec, on: priced(sec), kg: n(q(sec, '.ql-pkg').value), cbm: n(q(sec, '.ql-pcbm').value), val: n(q(sec, '.ql-cost').value) * n(q(sec, '.ql-qty').value) }));
+    const free = ls.map((l, i) => i).filter(i => ls[i].on && locked[i] == null);
+    const lockedSum = Object.keys(locked).filter(i => ls[i] && ls[i].on).reduce((t, i) => t + locked[i], 0);
+    const left = Math.max(0, T - lockedSum), w = l => air ? Math.max(l.kg, l.cbm * AIR) : l.cbm;
+    let ws = free.map(i => w(ls[i])), basis = air ? 'chargeable weight' : 'volume';
+    if (ws.some(x => !(x > 0))) { basis = 'goods value — some products have no packing data'; ws = free.map(i => Math.max(0, ls[i].val)); }
+    if (!(ws.reduce((a, b) => a + b, 0) > 0)) ws = free.map(() => 1);
+    const sw = ws.reduce((a, b) => a + b, 0); let given = 0;
+    ls.forEach((l, i) => { if (!l.on) q(l.sec, '.ql-fr').value = 0; else if (locked[i] != null) q(l.sec, '.ql-fr').value = locked[i]; });
+    free.forEach((i, k) => { const v = k === free.length - 1 ? r2(left - given) : r2(left * ws[k] / sw); given += v; q(ls[i].sec, '.ql-fr').value = v; });
+    ls.forEach(l => { q(l.sec, '.ql-fbasis').textContent = air ? 'by weight' : 'by volume'; });
+    const note = $('ql_lnote'); note.className = 'small';
+    const lockN = Object.keys(locked).length;
+    if (!(T > 0)) note.textContent = '';
+    else if (!free.length) note.textContent = 'Every line is set by hand.';
+    else { note.textContent = 'Split by ' + basis + (lockN ? ` · ${lockN} line${lockN > 1 ? 's' : ''} set by hand` : '') + '.'; if (basis.startsWith('goods')) note.classList.add('bad'); else note.classList.add('muted'); }
+    $('ql_respread').hidden = !lockN;
+  }
+  function totals() {
+    const c = sell.value; let kg = 0, cbm = 0, fr = 0;
+    secs.forEach(sec => { if (!priced(sec)) return; kg += n(q(sec, '.ql-pkg').value); cbm += n(q(sec, '.ql-pcbm').value); fr += n(q(sec, '.ql-fr').value); });
+    const T = n($('ql_ltot').value), goods = window.__qlGoods || 0, any = window.__qlAny;
+    $('ql_log').textContent = fmt(fr, c); $('ql_grand').textContent = any ? fmt(goods + fr, c) : '—';
+    $('ql_isum').textContent = (kg || cbm) ? `Internal: ${kg.toLocaleString('en-US', { maximumFractionDigits: 1 })} kg · ${(Math.round(cbm * 1000) / 1000).toLocaleString('en-US')} CBM` : '';
+    const note = $('ql_lnote'), gap = r2(T - fr);
+    if (T > 0 && Math.abs(gap) > 0.01 && !note.classList.contains('bad')) { note.textContent += (note.textContent ? ' ' : '') + (gap > 0 ? `Not yet allocated to a product: ${fmt(gap, c)}.` : `Lines add up to ${fmt(-gap, c)} more than the total.`); note.classList.add('bad'); note.classList.remove('muted'); }
+    $('ql_ltcur').textContent = c;
+  }
   function calc() {
     let goods = 0, any = false;
-    form.querySelectorAll('.ql').forEach(sec => {
-      const cost = parseFloat(sec.querySelector('.ql-cost').value), q = parseInt(sec.querySelector('.ql-qty').value, 10) || 0;
-      const mar = parseFloat(sec.querySelector('.ql-mar').value) || 0, cc = sec.querySelector('.ql-ccur').value;
-      const out = sec.querySelector('.ql-price'), tot = sec.querySelector('.ql-total'), warn = sec.querySelector('.ql-warn');
-      sec.querySelector('[id^=ql_fcur]').textContent = sell.value;
+    secs.forEach(sec => {
+      const cost = parseFloat(q(sec, '.ql-cost').value), qty = parseInt(q(sec, '.ql-qty').value, 10) || 0;
+      const mar = parseFloat(q(sec, '.ql-mar').value) || 0, cc = q(sec, '.ql-ccur').value;
+      const out = q(sec, '.ql-price'), tot = q(sec, '.ql-total'), warn = q(sec, '.ql-warn');
+      q(sec, '[id^=ql_fcur]').textContent = sell.value;
       if (!(cost > 0)) { out.textContent = '—'; tot.textContent = '—'; warn.textContent = ''; return; }
       const price = cost * ((rates[cc] || {})[sell.value] || 1) * (1 + mar / 100);
-      out.textContent = fmt(price, sell.value); tot.textContent = fmt(price * q, sell.value); goods += price * q; any = true;
+      out.textContent = fmt(price, sell.value); tot.textContent = fmt(price * qty, sell.value); goods += price * qty; any = true;
       warn.textContent = mar < min ? ' · margin below ' + min + '%' : ''; warn.style.color = '#b42318';
     });
-    document.getElementById('ql_goods').textContent = any ? fmt(goods, sell.value) : '—';
+    window.__qlGoods = goods; window.__qlAny = any;
+    $('ql_goods').textContent = any ? fmt(goods, sell.value) : '—';
+    totals();
   }
-  form.addEventListener('input', calc); form.addEventListener('change', calc); calc();
+  function all() { secs.forEach(packing); spread(); calc(); }
+
+  // lines whose packing was typed by hand or saved are never overwritten by the catalog figures
+  secs.forEach((sec, i) => {
+    ['.ql-pkg', '.ql-pcbm'].forEach(c => { const el = q(sec, c); if (el.value !== '') touched.add(el); el.addEventListener('input', () => { touched.add(el); }); });
+    q(sec, '.ql-fr').addEventListener('input', e => { locked[i] = n(e.target.value); spread(); calc(); });
+  });
+  form.addEventListener('input', e => {
+    if (e.target.classList.contains('ql-fr')) return;
+    if (e.target.matches('.ql-qty, .ql-cost, .ql-pkg, .ql-pcbm, #ql_ltot, [name$="[product_id]"]')) { if (e.target.matches('.ql-qty, [name$="[product_id]"]')) secs.forEach(packing); spread(); }
+    calc();
+  });
+  form.addEventListener('change', e => {
+    if (e.target.matches('[name$="[product_id]"]')) secs.forEach(packing);
+    if (e.target === $('ql_lbasis') || e.target.matches('.ql-qty, .ql-cost, [name$="[product_id]"], #ql_sell')) spread();
+    calc();
+  });
+  $('ql_respread').addEventListener('click', () => { Object.keys(locked).forEach(k => delete locked[k]); spread(); calc(); });
+  if (hasSaved) { secs.forEach(packing); calc(); const note = $('ql_lnote'); note.textContent = 'Saved split — change the total, the basis or a quantity to spread it again.'; note.className = 'small muted'; }
+  else all();
 })();
 </script>
 <%- include('../../partials/foot') %>
