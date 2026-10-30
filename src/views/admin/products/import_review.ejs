@@ -26,60 +26,61 @@
 <!-- ============ 1. supplier ============ -->
 <div class="card">
   <h2><span class="stepno">1</span> Supplier</h2>
-  <div class="supgrid">
-    <div>
-      <p class="muted small">From the file — correct anything that was read wrongly.</p>
-      <div class="row">
-        <label class="grow2">Company name <input name="supplier[name]" value="<%= v(sup.name) %>" required></label>
-      </div>
-      <label>Address <input name="supplier[address]" value="<%= v(sup.address) %>"></label>
-      <div class="row">
-        <label>Contact person <input name="supplier[contact_name]" value="<%= v(sup.contact_name) %>"></label>
-        <label>Email <input name="supplier[email]" value="<%= v(sup.email) %>"></label>
-      </div>
-      <div class="row">
-        <label>Phone <input name="supplier[phone]" value="<%= v(sup.phone) %>"></label>
-        <label>WeChat <input name="supplier[wechat]" value="<%= v(sup.wechat) %>"></label>
-        <label>Website <input name="supplier[website]" value="<%= v(sup.website) %>"></label>
-      </div>
+  <%
+    const isNew = decision === 'new', isEx = !!decision && decision !== 'new';
+    const exSup = isEx ? (suppliers.find(x => x.id === decision) || {}) : {};
+  %>
+  <div class="supgrid" id="supGrid">
+    <div class="leftwrap <%= isEx && !sup._update_contacts ? 'inactive' : '' %>" id="supLeft">
+      <p class="muted small supfrom">From the file — correct anything that was read wrongly.</p>
+      <div class="supnote" id="supNote"><span id="supNoteText"></span></div>
+      <fieldset class="supfields" id="supFields" <%= isEx && !sup._update_contacts ? 'disabled' : '' %>>
+        <div class="row">
+          <label class="grow2">Company name <input name="supplier[name]" value="<%= v(sup.name) %>" required></label>
+        </div>
+        <label>Address <input name="supplier[address]" value="<%= v(sup.address) %>"></label>
+        <div class="row">
+          <label>Contact person <input name="supplier[contact_name]" value="<%= v(sup.contact_name) %>"></label>
+          <label>Email <input name="supplier[email]" value="<%= v(sup.email) %>"></label>
+        </div>
+        <div class="row">
+          <label>Phone <input name="supplier[phone]" value="<%= v(sup.phone) %>"></label>
+          <label>WeChat <input name="supplier[wechat]" value="<%= v(sup.wechat) %>"></label>
+          <label>Website <input name="supplier[website]" value="<%= v(sup.website) %>"></label>
+        </div>
+      </fieldset>
     </div>
 
-    <div class="matchbox <%= ms %>">
-      <% if (ms === 'match') { %>
-        <div class="mhead ok">✓ Already in your suppliers</div>
-        <p class="small">This file is from a supplier you already have — products will be added to it.</p>
-      <% } else if (ms === 'suspect') { %>
-        <div class="mhead warn">⚠ Possible duplicate supplier</div>
-        <p class="small">The name is very close to an existing supplier — maybe a typo or a different spelling. <strong>Is it the same company?</strong></p>
-      <% } else { %>
-        <div class="mhead">＋ New supplier</div>
-        <p class="small">No similar supplier found (checked names, email, phone, WeChat). A new supplier will be created.</p>
-      <% } %>
-
-      <div class="choices">
-        <% candidates.forEach(c => { %>
-          <label class="choice">
-            <input type="radio" name="supplier_decision" value="<%= c.id %>" <%= decision === c.id ? 'checked' : '' %> required>
-            <span><strong>Same company: <a href="/admin/suppliers/<%= c.id %>" target="_blank"><%= c.name %></a></strong><% if (c.city) { %> <span class="muted">· <%= c.city %></span><% } %>
-              <span class="reasons"><% c.reasons.forEach(rs => { %><span class="badge <%= c.strong ? 'ok' : 'warn' %>"><%= rs %></span> <% }) %></span></span>
-          </label>
-        <% }) %>
-        <label class="choice">
-          <input type="radio" name="supplier_decision" value="new" <%= decision === 'new' ? 'checked' : '' %> required>
-          <span><strong><%= candidates.length ? 'No — it is a different company, create a new supplier' : 'Create new supplier' %></strong></span>
-        </label>
-        <% if (candidates.length) { %>
-          <label class="check small confirmnew"><input type="checkbox" name="confirm_new" <%= sup._confirm_new ? 'checked' : '' %>> I checked — this is really a different company</label>
-        <% } %>
-        <details class="small">
-          <summary class="link small">It's another existing supplier…</summary>
-          <select name="supplier_decision_other" onchange="if(this.value){const r=document.querySelector('input[name=supplier_decision][value=new]');r.value=this.value;r.checked=true;r.nextElementSibling.querySelector('strong').textContent='Existing: '+this.selectedOptions[0].text;}">
-            <option value="">Choose supplier…</option>
-            <% suppliers.forEach(x => { %><option value="<%= x.id %>"><%= x.name %></option><% }) %>
-          </select>
-        </details>
+    <div class="modes">
+      <div class="mode <%= isNew ? 'on' : '' %>" id="modeNew">
+        <label class="mh"><input type="radio" name="supplier_mode" value="new" <%= isNew ? 'checked' : '' %> required><span>＋ New supplier</span></label>
+        <div class="mb">
+          <% if (candidates.length && ms !== 'match') { %>
+            <p class="small warnline">⚠ <strong>Possible duplicate:</strong> the details look like <%= candidates.map(c => c.name).join(', ') %>. Pick it under “Assign to an existing supplier” — or confirm it is a different company.</p>
+            <label class="check small confirmnew"><input type="checkbox" name="confirm_new" <%= sup._confirm_new ? 'checked' : '' %>> I checked — this is really a different company</label>
+          <% } else if (ms === 'match') { %>
+            <p class="small">This file looks like a supplier you already have — see the option below. Choose “New supplier” only if it is a different company.</p>
+          <% } else { %>
+            <p class="small">No similar supplier found (checked names, email, phone, WeChat). A new supplier will be created from the details on the left.</p>
+          <% } %>
+        </div>
       </div>
-      <label class="check small"><input type="checkbox" name="update_contacts" <%= sup._update_contacts ? 'checked' : '' %>> When using an existing supplier, overwrite its contact details with the ones above — otherwise only its empty fields are filled</label>
+
+      <div class="mode <%= isEx ? 'on' : '' %>" id="modeEx">
+        <label class="mh"><input type="radio" name="supplier_mode" value="existing" <%= isEx ? 'checked' : '' %> required><span>Assign to an existing supplier</span></label>
+        <div class="mb">
+          <select name="supplier_existing" id="supExisting" data-picker="Supplier">
+            <option value="">Choose supplier…</option>
+            <% suppliers.forEach(x => { %><option value="<%= x.id %>" <%= decision === x.id ? 'selected' : '' %>><%= x.name %></option><% }) %>
+          </select>
+          <% if (candidates.length) { %>
+            <div class="sugg"><span class="muted small">Suggested:</span>
+              <% candidates.forEach(c => { %><button type="button" class="chip <%= c.strong ? 'ok' : 'warn' %>" data-pick="<%= c.id %>" title="<%= c.reasons.join(', ') %>"><%= c.name %><% if (c.reasons.length) { %> <i>· <%= c.reasons[0] %></i><% } %></button><% }) %>
+            </div>
+          <% } %>
+          <label class="check small updlabel"><input type="checkbox" name="update_contacts" id="supUpdate" <%= sup._update_contacts ? 'checked' : '' %>> <span>Update this supplier's contact details with the ones from the file <span class="muted">(otherwise only its empty fields are filled)</span></span></label>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -248,6 +249,27 @@
       const z = hover || (document.activeElement && document.activeElement.closest && document.activeElement.closest('[data-ph]')) || target;
       if (!z) return; e.preventDefault(); send(z, files);
     });
+  })();
+  // supplier: new vs existing — the details from the file are locked while an existing supplier is used (unless you update it from the file)
+  (function () {
+    const rEx = document.querySelector('input[name=supplier_mode][value=existing]'), rNew = document.querySelector('input[name=supplier_mode][value=new]');
+    if (!rEx || !rNew) return;
+    const sel = document.getElementById('supExisting'), upd = document.getElementById('supUpdate'), fs = document.getElementById('supFields'), left = document.getElementById('supLeft'), note = document.getElementById('supNoteText');
+    const sync = () => {
+      const ex = rEx.checked, lock = ex && !upd.checked;
+      document.getElementById('modeEx').classList.toggle('on', ex); document.getElementById('modeNew').classList.toggle('on', rNew.checked);
+      fs.disabled = lock; left.classList.toggle('inactive', lock);
+      const name = sel.selectedOptions[0] && sel.value ? sel.selectedOptions[0].text : '';
+      note.innerHTML = '';
+      if (ex) { const t = document.createElement('span'); t.append(name ? 'Products go to the existing supplier ' : 'Choose the existing supplier on the right.'); if (name) { const b = document.createElement('strong'); b.textContent = name; t.append(b, ' — the details below only fill its empty fields.'); } note.appendChild(t); }
+      sel.required = ex;
+    };
+    rEx.addEventListener('change', sync); rNew.addEventListener('change', sync); upd.addEventListener('change', sync);
+    sel.addEventListener('change', () => { if (sel.value) rEx.checked = true; sync(); });
+    document.getElementById('modeEx').addEventListener('click', e => { if (!rEx.checked && !e.target.closest('a')) { rEx.checked = true; sync(); } });
+    document.getElementById('modeNew').addEventListener('click', e => { if (!rNew.checked && !e.target.closest('a,input,label')) { rNew.checked = true; sync(); } });
+    document.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', () => { sel.value = b.dataset.pick; rEx.checked = true; sel.dispatchEvent(new Event('change', { bubbles: true })); }));
+    sync();
   })();
   (function () {
     const f = document.getElementById('reviewForm'); if (!f) return;

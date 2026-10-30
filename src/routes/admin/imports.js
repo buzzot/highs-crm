@@ -241,7 +241,10 @@ r.post('/:iid/photo/:n/remove', async (req, res) => {
 function applyForm(imp, body) {
   const sup = { ...imp.supplier };
   for (const k of SUPPLIER_FIELDS) if (body.supplier && k in body.supplier) sup[k] = s(body.supplier[k]) || null;
-  sup._decision = s(body.supplier_decision) || sup._decision || '';
+  // the two options on the page: "New supplier", or "Assign to an existing supplier" + the one chosen in the list
+  if (body.supplier_mode === 'new') sup._decision = 'new';
+  else if (body.supplier_mode === 'existing') sup._decision = s(body.supplier_existing) || '';
+  else sup._decision = s(body.supplier_decision) || sup._decision || '';
   sup._update_contacts = body.update_contacts === 'on';
   sup._confirm_new = body.confirm_new === 'on';
   const posted = body.rows || {};
@@ -276,7 +279,7 @@ r.post('/:iid', async (req, res) => {
 
   const suppliers = await allSuppliers();
   let supplierId = sup._decision;
-  if (!supplierId) return back(res, url, { err: 'Choose whether this is an existing supplier or a new one.' });
+  if (!supplierId) return back(res, url, { err: 'Choose “New supplier”, or pick the existing supplier these products belong to.' });
   if (supplierId === 'new') {
     if (!sup.name) return back(res, url, { err: 'Enter the supplier company name.' });
     const again = matchSupplier(sup, suppliers);          // re-check with the edited name/contacts
