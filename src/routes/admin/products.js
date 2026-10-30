@@ -6,7 +6,7 @@ import { log } from '../../lib/activity.js';
 import { canAssign } from '../../lib/access.js';
 import { clean as cleanSub, missing as subMissing, toProduct, containerFit, changes, fromProduct } from '../../lib/supplier-product.js';
 import { productMetrics, fxToUsdStrict } from '../../lib/product-metrics.js';
-import { specParts, recordTypeOf, buildSpec, postedRows, validateProduct, cartonCbmToStore, isNonPhysical, cbmFormState, RECORD_TYPES, INCOTERMS, CURRENCIES } from '../../lib/product-form.js';
+import { specParts, recordTypeOf, buildSpec, postedRows, validateProduct, cartonCbmToStore, isNonPhysical, cbmFormState, RECORD_TYPES, INCOTERMS, CURRENCIES, UNITS, PACKAGE_TYPES } from '../../lib/product-form.js';
 import { productPhotos as photosOf, splitSpec, physicalFacts, quoteRows, poRows, orderRows, requestRows } from '../../lib/product-detail.js';
 import { SORT_DEFS, PAGE_SIZE, filterProducts, paginate } from '../../lib/product-list.js';
 import { compareProducts, extractProductCard, aiEnabled } from '../../lib/ai.js';
@@ -73,10 +73,10 @@ const body = (b, existingSpec = {}) => {
 /** Everything the edit form needs. After a failed save `b` (what was posted) wins over the stored product, so nothing typed is lost. */
 function formLocals(p, { b = null, errors = {}, error = null } = {}) {
   const was = specParts(p.spec);
-  const from = b ? { type: b.record_type ?? '', incoterm: b.src_incoterm ?? '', lead: b.src_lead ?? '', valid: b.src_valid ?? '', rows: postedRows(b) }
-    : { type: recordTypeOf(p.spec), incoterm: was.incoterm.value, lead: was.lead.value, valid: was.valid.value, rows: was.rows };
+  const from = b ? { type: b.record_type ?? '', incoterm: b.src_incoterm ?? '', lead: b.src_lead ?? '', valid: b.src_valid ?? '', unit: b.sold_per ?? '', pkg: b.package_type ?? '', rows: postedRows(b) }
+    : { type: recordTypeOf(p.spec), incoterm: was.incoterm.value, lead: was.lead.value, valid: was.valid.value, unit: was.unit.value, pkg: was.pkg.value, rows: was.rows };
   return { p, errors, error, f: { ...from, cbm: cbmFormState(p, b) }, hasPrimary: Object.prototype.hasOwnProperty.call(p, 'primary_photo_id'), aiOn: aiEnabled(),
-    recordTypes: RECORD_TYPES, incoterms: INCOTERMS, currencies: CURRENCIES };
+    recordTypes: RECORD_TYPES, incoterms: INCOTERMS, currencies: CURRENCIES, units: UNITS, packageTypes: PACKAGE_TYPES };
 }
 
 async function formData() {

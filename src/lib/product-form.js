@@ -6,6 +6,10 @@ export const RECORD_TYPES = [['', 'Physical product'], ['Sample', 'Sample'], ['P
 export const NON_PHYSICAL = /^(service|services|freight|freight item|shipping)$/i;
 export const INCOTERMS = ['EXW', 'FCA', 'FOB', 'CIF', 'CFR', 'DAP', 'DDP'];
 export const CURRENCIES = ['CNY', 'USD', 'EUR'];
+// the same lists the RFQ answer form offers ("Price is per" / "Package type"), so a product and a supplier's answer speak the same words
+export const UNITS = ['pcs', 'sets', 'pairs', 'm', 'm²', 'kg', 'tons', 'litres', 'rolls', 'boxes', 'cartons', 'bags', 'drums'];
+export const PACKAGE_TYPES = ['Carton', 'Pallet', 'Bag', 'Roll', 'Drum / reel', 'Wooden case', 'Box', 'Bundle', 'Bucket', 'Loose / bulk', 'Other'];
+const UNIT_KEY = /^(sold per|unit of measure|uom)$/i, PKG_KEY = /^(package|packaging) type$/i;
 const find = k => SOURCING.find(x => x[0] === k)[1];
 const RES = { incoterm: find('incoterm'), lead: find('lead'), valid: find('valid') };
 const CANON = { incoterm: 'Incoterm', lead: 'Production lead time (days)', valid: 'Quote valid until' };
@@ -13,9 +17,11 @@ const CANON = { incoterm: 'Incoterm', lead: 'Production lead time (days)', valid
 /** The stored specification split for the form: record type, three supplier terms (kept under their own key) and the other rows. Nothing is dropped. */
 export function specParts(spec) {
   const src = spec && typeof spec === 'object' && !Array.isArray(spec) ? spec : {};
-  const out = { type: '', typeKey: 'Type', incoterm: { key: CANON.incoterm, value: '' }, lead: { key: CANON.lead, value: '' }, valid: { key: CANON.valid, value: '' }, rows: [], cbm: { supplier: '', use: '' } };
+  const out = { type: '', typeKey: 'Type', incoterm: { key: CANON.incoterm, value: '' }, lead: { key: CANON.lead, value: '' }, valid: { key: CANON.valid, value: '' }, rows: [], cbm: { supplier: '', use: '' }, unit: { key: 'Sold per', value: '' }, pkg: { key: 'Package type', value: '' } };
   for (const [k, raw] of Object.entries(src)) {
     const key = String(k).trim(), v = String(raw ?? '');
+    if (UNIT_KEY.test(key) && !out.unit.value) { out.unit = { key, value: v.trim() }; continue; }
+    if (PKG_KEY.test(key) && !out.pkg.value) { out.pkg = { key, value: v.trim() }; continue; }
     if (/^supplier cbm$/i.test(key)) { out.cbm.supplier = v.trim(); continue; }
     if (/^cbm used$/i.test(key)) { out.cbm.use = /^calc/i.test(v.trim()) ? 'calc' : 'entered'; continue; }
     const sk = Object.keys(RES).find(n => RES[n].test(key) && !out[n].value && out[n].key === CANON[n]);
@@ -49,7 +55,10 @@ export function buildSpec(b, existing = {}) {
   const type = String(b.record_type ?? '').trim();
   if (type) spec[was.typeKey || 'Type'] = type;
   for (const n of ['incoterm', 'lead', 'valid']) { const v = String(b['src_' + n] ?? '').trim(); if (v) spec[was[n].key] = v; }
-  for (const [k, v] of postedRows(b)) if (k) spec[k] = v;
+  const unit = String(b.sold_per ?? '').trim().slice(0, 30), pkg = String(b.package_type ?? '').trim().slice(0, 40);
+  if (unit) spec[was.unit.key] = unit;
+  if (pkg && !isNonPhysical(type)) spec[was.pkg.key] = pkg;
+  for (const [k, v] of postedRows(b)) if (k && !UNIT_KEY.test(k) && !PKG_KEY.test(k)) spec[k] = v;
   const c = cbmPlan(b, !isNonPhysical(type));
   if (!isNonPhysical(type) && c.supplier > 0 && c.calc != null) { spec['Supplier CBM'] = String(c.supplier); spec['CBM used'] = c.source === 'calc' ? 'Calculated from carton size' : 'Supplier-provided'; }
   return spec;

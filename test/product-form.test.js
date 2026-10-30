@@ -210,3 +210,26 @@ test('empty attachments: one short line, no empty blocks', () => {
 test('specifications: one Add attribute button, plain empty state', () => {
   const h = html('admin/products/form#edit'); assert.equal((h.match(/Add attribute/g) || []).length, 1); assert.doesNotMatch(h, /specAdd2/);
 });
+
+test('Sold per and Package type are stored in the spec, read back, and stay optional', async () => {
+  const { buildSpec, specParts, UNITS, PACKAGE_TYPES } = await import('../src/lib/product-form.js');
+  assert.ok(UNITS.includes('m') && PACKAGE_TYPES.includes('Drum / reel'));
+  const spec = buildSpec({ record_type: '', sold_per: 'm', package_type: 'Drum / reel', spec_k: ['Diameter'], spec_v: ['12 mm'] }, {});
+  assert.equal(spec['Sold per'], 'm'); assert.equal(spec['Package type'], 'Drum / reel'); assert.equal(spec.Diameter, '12 mm');
+  const back = specParts(spec);
+  assert.equal(back.unit.value, 'm'); assert.equal(back.pkg.value, 'Drum / reel'); assert.deepEqual(back.rows, [['Diameter', '12 mm']]);
+  assert.deepEqual(buildSpec({ record_type: '' }, {}), {});                                         // empty = nothing stored
+  assert.equal(buildSpec({ record_type: 'Service', package_type: 'Pallet', sold_per: 'sets' }, {})['Package type'], undefined);   // no package for a service
+  assert.equal(buildSpec({ sold_per: 'kg', spec_k: ['Sold per'], spec_v: ['pcs'] }, {})['Sold per'], 'kg');           // an old row cannot override the selector
+  assert.equal(buildSpec({ record_type: '' }, { 'uom': 'kg' })['uom'], undefined);                                      // posted form is the source of truth
+});
+
+test('edit form: Sold per and Package type selectors, with labels that follow them', () => {
+  const base = pages['admin/products/form#edit'] || pages['admin/products/form'];
+  const loc = Array.isArray(base) ? base[1] : base;
+  const html = render('src/views/admin/products/form.ejs', { ...loc, units: ['pcs', 'm', 'kg'], packageTypes: ['Carton', 'Roll', 'Pallet'], f: { ...(loc.f || {}), unit: 'm', pkg: 'Roll', rows: (loc.f || {}).rows || [] } });
+  assert.match(html, /name="sold_per"[\s\S]*?<option selected>m<\/option>/);
+  assert.match(html, /name="package_type"[\s\S]*?<option selected>Roll<\/option>/);
+  assert.match(html, /<span id="qtyPerLbl">m<\/span> \/ <span id="pkgLbl">roll<\/span>/);
+  assert.match(html, /MOQ <span class="pe-unit" data-unit>m<\/span>/);
+});

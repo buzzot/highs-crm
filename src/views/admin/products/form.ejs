@@ -1,7 +1,7 @@
 <%- include('../../partials/head') %>
 <%
   const E = typeof errors !== 'undefined' && errors ? errors : {};
-  const F = typeof f !== 'undefined' && f ? f : { type: '', incoterm: '', lead: '', valid: '', rows: [] };
+  const F = typeof f !== 'undefined' && f ? f : { type: '', incoterm: '', lead: '', valid: '', unit: '', pkg: '', rows: [] };
   const RT = typeof recordTypes !== 'undefined' ? recordTypes : [['', 'Physical product'], ['Sample', 'Sample'], ['Packaging', 'Packaging'], ['Service', 'Service'], ['Freight', 'Freight item']];
   const INC = typeof incoterms !== 'undefined' ? incoterms : ['EXW', 'FCA', 'FOB', 'CIF', 'CFR', 'DAP', 'DDP'];
   const CUR = typeof currencies !== 'undefined' ? currencies : ['CNY', 'USD', 'EUR'];
@@ -24,6 +24,9 @@
   const supName = ((typeof suppliers !== 'undefined' ? suppliers : []).find(x => x.id === p.supplier_id) || {}).name || '';
   const heading = String(p.name || '').trim() || (isNew ? 'New Product' : 'Untitled product');
   const meta = [p.sku ? 'SKU ' + p.sku : '', p.category || '', supName].filter(Boolean);
+  const UN = typeof units !== 'undefined' ? units : ['pcs', 'm', 'kg'], PT = typeof packageTypes !== 'undefined' ? packageTypes : ['Carton'];
+  const unitOpts = !F.unit || UN.includes(F.unit) ? UN : [...UN, F.unit], pkgOpts = !F.pkg || PT.includes(F.pkg) ? PT : [...PT, F.pkg];
+  const U = F.unit || 'pcs';
   const incOpts = !F.incoterm || INC.includes(String(F.incoterm).toUpperCase()) ? INC : [...INC, F.incoterm];
   const curOpts = CUR.includes(p.cost_currency || 'CNY') ? CUR : [...CUR, p.cost_currency];
   const isoDate = /^\d{4}-\d{2}-\d{2}$/.test(F.valid || '');
@@ -95,7 +98,9 @@
         <input type="number" min="0" step="0.0001" inputmode="decimal" name="unit_cost" value="<%= v('unit_cost') %>"><% if (E.unit_cost) { %><small class="pe-err" role="alert"><%= E.unit_cost %></small><% } %></label>
       <label class="field--compact">Currency
         <select name="cost_currency"><% curOpts.forEach(c => { %><option <%= (p.cost_currency || 'CNY') === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
-      <label class="field--compact">MOQ <span class="pe-unit">pcs</span>
+      <label class="field--compact">Sold per <%- tip('The unit the price and MOQ are quoted in — pcs, m, kg, sets… Optional; pcs when empty.') %>
+        <select name="sold_per" id="soldPer"><option value="">pcs (default)</option><% unitOpts.filter(u => u !== 'pcs').forEach(u => { %><option <%= F.unit === u ? 'selected' : '' %>><%= u %></option><% }) %></select></label>
+      <label class="field--compact">MOQ <span class="pe-unit" data-unit><%= U %></span>
         <input type="number" min="0" step="1" inputmode="numeric" name="moq" value="<%= v('moq') %>"><% if (E.moq) { %><small class="pe-err" role="alert"><%= E.moq %></small><% } %></label>
     </div>
     <details class="pe-more" id="moreTerms" <%= E.src_incoterm || E.src_lead || E.src_valid ? 'open' : '' %>>
@@ -201,7 +206,9 @@
       <div class="pe-sub">
         <h3>Export carton</h3>
         <div class="pe-row">
-          <label class="field--compact">Pcs / carton<input type="number" min="1" step="1" inputmode="numeric" name="carton_qty" value="<%= v('carton_qty') %>"><% if (E.carton_qty) { %><small class="pe-err"><%= E.carton_qty %></small><% } %></label>
+          <label class="field--medium">Package type <%- tip('How the goods are packed for export — carton, pallet, drum / reel, roll… Optional; the figures below are then read per package.') %>
+            <select name="package_type" id="pkgType"><option value="">Carton (default)</option><% pkgOpts.filter(u => u !== 'Carton').forEach(u => { %><option <%= F.pkg === u ? 'selected' : '' %>><%= u %></option><% }) %></select></label>
+          <label class="field--compact"><span id="qtyPerLbl"><%= U %></span> / <span id="pkgLbl"><%= (F.pkg || 'carton').toLowerCase() %></span><input type="number" min="1" step="1" inputmode="numeric" name="carton_qty" value="<%= v('carton_qty') %>"><% if (E.carton_qty) { %><small class="pe-err"><%= E.carton_qty %></small><% } %></label>
           <label class="field--compact">Gross wt <span class="pe-unit">kg</span><input type="number" min="0" step="0.01" inputmode="decimal" name="carton_weight_kg" value="<%= v('carton_weight_kg') %>"><% if (E.carton_weight_kg) { %><small class="pe-err"><%= E.carton_weight_kg %></small><% } %></label>
           <label class="field--compact">Length <span class="pe-unit">cm</span><input type="number" min="0" step="0.1" inputmode="decimal" name="carton_length_cm" value="<%= v('carton_length_cm') %>"></label>
           <label class="field--compact">Width <span class="pe-unit">cm</span><input type="number" min="0" step="0.1" inputmode="decimal" name="carton_width_cm" value="<%= v('carton_width_cm') %>"></label>
@@ -526,6 +533,8 @@
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') document.querySelectorAll('.pe-info.open').forEach(function (i) { i.classList.remove('open'); }); });
 
   // collapsed "More purchasing terms" keeps a one-line summary of what is filled in
+  function unitLabels() { var u = form.elements.sold_per.value || 'pcs', k = (form.elements.package_type.value || 'Carton').toLowerCase(); document.querySelectorAll('[data-unit],#qtyPerLbl').forEach(function (e) { e.textContent = u; }); $('pkgLbl').textContent = k; }
+  ['sold_per', 'package_type'].forEach(function (n) { form.elements[n].addEventListener('change', unitLabels); });
   function termsSum() { var inc = form.elements.src_incoterm.value, lead = form.elements.src_lead.value.trim(), val = form.elements.src_valid.value.trim(); $('moreSum').textContent = [inc, lead ? lead + ' days' : '', val ? 'valid until ' + val : ''].filter(Boolean).join(' · ') || 'none set'; }
   ['src_incoterm', 'src_lead', 'src_valid'].forEach(function (n) { form.elements[n].addEventListener('input', termsSum); form.elements[n].addEventListener('change', termsSum); });
   heading();

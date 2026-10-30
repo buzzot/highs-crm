@@ -10,7 +10,7 @@ import { cargoLine, cargoTotals } from '../src/lib/cargo.js';
 import { fmt } from '../src/lib/format.js';
 import { buildSuppliers } from '../src/lib/suppliers.js';
 import { purchasingRows } from '../src/lib/supplier-detail.js';
-import { specParts, cbmFormState, recordTypeOf, postedRows, validateProduct, cbmDiffers, cbmFromSize, RECORD_TYPES, INCOTERMS as PF_INCOTERMS, CURRENCIES as PF_CURRENCIES } from '../src/lib/product-form.js';
+import { specParts, cbmFormState, recordTypeOf, postedRows, validateProduct, cbmDiffers, cbmFromSize, RECORD_TYPES, INCOTERMS as PF_INCOTERMS, CURRENCIES as PF_CURRENCIES, UNITS as PF_UNITS, PACKAGE_TYPES as PF_PKG } from '../src/lib/product-form.js';
 import { productPhotos as photosOf, splitSpec, physicalFacts, quoteRows, poRows, orderRows, requestRows } from '../src/lib/product-detail.js';
 import { fxToUsdStrict } from '../src/lib/product-metrics.js';
 import { filterProducts, paginate, SORT_DEFS } from '../src/lib/product-list.js';
@@ -252,12 +252,12 @@ export function prodDet(pr = {}, over = {}) {
 export function prodForm(pr = {}, over = {}) {
   const p = { ...prod, id: 'p1', spec: { Power: '10 W', Material: 'Aluminium', Incoterm: 'FOB', 'Production lead time (days)': '30', 'Quote valid until': '2026-12-31' }, ...pr };
   const was = specParts(p.spec), b = over.body || null;
-  const f0 = b ? { type: b.record_type ?? '', incoterm: b.src_incoterm ?? '', lead: b.src_lead ?? '', valid: b.src_valid ?? '', rows: postedRows(b) } : { type: recordTypeOf(p.spec), incoterm: was.incoterm.value, lead: was.lead.value, valid: was.valid.value, rows: was.rows };
+  const f0 = b ? { type: b.record_type ?? '', incoterm: b.src_incoterm ?? '', lead: b.src_lead ?? '', valid: b.src_valid ?? '', unit: b.sold_per ?? '', pkg: b.package_type ?? '', rows: postedRows(b) } : { type: recordTypeOf(p.spec), unit: was.unit.value, pkg: was.pkg.value, incoterm: was.incoterm.value, lead: was.lead.value, valid: was.valid.value, rows: was.rows };
   const f = { ...f0, cbm: cbmFormState(p, b) };
   const errors = over.errors ?? (b ? validateProduct(b, p.spec) : {});
   return base(staffUser, '/admin/products/' + p.id + '/edit', { title: over.title || 'Edit product', p: b ? { ...p, ...b } : p, f, errors, error: Object.keys(errors).length ? 'Some fields need attention — they are marked below. Nothing was saved.' : null, suppliers: lists.suppliers,
     photos: over.photos ?? [{ id: 'ph-land', title: 'front.jpg' }, { id: 'ph-port', title: 'box.jpg' }, { id: 'ph-bad', title: 'gone.jpg' }], docs: over.docs ?? [{ id: 'd1', title: 'LED-lamp-datasheet.pdf', kind: 'other', mime_type: 'application/pdf', size_bytes: 482113, storage_path: 'product/p1/a.pdf', created_at: '2026-10-02T08:00:00Z', client_visible: false }, { id: 'd2', title: 'CE-certificate.pdf', kind: 'certificate', mime_type: 'application/pdf', size_bytes: 90210, storage_path: 'product/p1/b.pdf', created_at: '2026-10-03T08:00:00Z', client_visible: false }, { id: 'd3', title: 'specs.xlsx', kind: 'other', mime_type: 'application/vnd.ms-excel', size_bytes: 12000, storage_path: 'product/p1/c.xlsx', created_at: '2026-10-04T08:00:00Z', client_visible: true }], aiOn: over.aiOn ?? true, hasPrimary: over.hasPrimary ?? true,
-    recordTypes: RECORD_TYPES, incoterms: PF_INCOTERMS, currencies: PF_CURRENCIES });
+    recordTypes: RECORD_TYPES, incoterms: PF_INCOTERMS, currencies: PF_CURRENCIES, units: PF_UNITS, packageTypes: PF_PKG });
 }
 
 export const pages = {

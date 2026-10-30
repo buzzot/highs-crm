@@ -9,9 +9,10 @@ export const SOURCING = [
   ['lead', /^production lead time( \(days\))?$/i, 'Production lead time'],
   ['sample', /^sample lead time( \(days\))?$/i, 'Sample lead time'],
   ['valid', /^quote valid until$/i, 'Quote valid until'],
+  ['unit', /^(sold per|unit of measure|uom)$/i, 'Sold per'],
 ];
 export const TYPE_KEY = /^(product )?(type|kind)$/i;
-const PACK_KEYS = [/^supplier cbm$/i, /^cbm used$/i, /^inner pack/i, /^carton net weight/i, /^units per (20|40)/i];
+const PACK_KEYS = [/^(package|packaging) type$/i, /^supplier cbm$/i, /^cbm used$/i, /^inner pack/i, /^carton net weight/i, /^units per (20|40)/i];
 
 /** Splits the free-form specification into sourcing facts, packing extras and the technical rows. */
 export function splitSpec(spec) {
