@@ -206,3 +206,7 @@ test('empty attachments: one short line, no empty blocks', () => {
   assert.match(h, /id="phBlock" hidden/); assert.match(h, /id="docPanel" hidden/);
   const full = html('admin/products/form#edit'); assert.match(full, /id="attEmpty" hidden/); assert.doesNotMatch(full, /id="phBlock" hidden/);
 });
+
+test('specifications: one Add attribute button, plain empty state', () => {
+  const h = html('admin/products/form#edit'); assert.equal((h.match(/Add attribute/g) || []).length, 1); assert.doesNotMatch(h, /specAdd2/);
+});

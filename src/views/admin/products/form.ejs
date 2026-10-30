@@ -63,7 +63,7 @@
           <div class="pe-sr"><input name="spec_k" value="<%= k %>" placeholder="Attribute" maxlength="80" aria-label="Attribute name"><input name="spec_v" value="<%= val %>" placeholder="Value, with unit" aria-label="Attribute value"><button type="button" class="iconbtn" data-rm title="Remove this attribute" aria-label="Remove this attribute">×</button></div>
         <% }) %>
       </div>
-      <p class="pe-empty-s muted small" id="specEmpty" <%= F.rows.length ? 'hidden' : '' %>>No specifications yet — <button type="button" class="linkbtn" id="specAdd2">add an attribute</button>.</p>
+      <p class="pe-empty-s muted small" id="specEmpty" <%= F.rows.length ? 'hidden' : '' %>>No specifications yet.</p>
       <% if (E.spec) { %><small class="pe-err" role="alert"><%= E.spec %></small><% } %>
     </div>
   </section>
@@ -340,7 +340,7 @@
     d.innerHTML = '<input name="spec_k" placeholder="Attribute" maxlength="80" aria-label="Attribute name"><input name="spec_v" placeholder="Value" aria-label="Attribute value"><button type="button" class="iconbtn" data-rm title="Remove this attribute" aria-label="Remove this attribute">×</button>';
     d.children[0].value = k || ''; d.children[1].value = v || ''; rows.appendChild(d); specCount(); if (focus) d.children[0].focus(); return d;
   }
-  $('specAdd').addEventListener('click', function () { addRow('', '', true); dirty(); }); $('specAdd2').addEventListener('click', function () { addRow('', '', true); dirty(); });
+  $('specAdd').addEventListener('click', function () { addRow('', '', true); dirty(); });
   rows.addEventListener('click', function (e) { if (e.target.closest('[data-rm]')) { e.target.closest('.pe-sr').remove(); specCount(); dirty(); } });
   rows.addEventListener('keydown', function (e) { if (e.key === 'Enter' && e.target.name === 'spec_v') { e.preventDefault(); addRow('', '', true); } });
   // pasting several "Key: value" lines into a name field becomes one row per line
