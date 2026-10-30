@@ -2730,3 +2730,21 @@ dialog.fqdlg::backdrop { background: rgba(15,30,50,.45); }
 .pe-chip{background:var(--line-2);border-radius:999px;padding:2px 9px;font-size:12px;color:var(--ink-2);font-weight:400}
 .pe-more>.pk-r{margin-top:12px}
 @media (max-width:640px){.pk-r3e,.pk-rp{grid-template-columns:1fr 1fr}.pk-r3e>label:first-child,.pk-rp>label:first-child,.pk-r2s{grid-template-columns:1fr}.pk-r3e>label:last-child{grid-column:1/-1}}
+
+/* Upload drop zone (Photos, documents & AI) */
+.pe-dz{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-align:center;padding:20px 16px;margin:4px 0 14px;border:1.5px dashed #c9d2dc;border-radius:12px;background:#fafbfc;color:var(--ink-2);cursor:pointer;transition:border-color .12s,background .12s}
+.pe-dz:hover{border-color:var(--accent);background:var(--accent-soft)}
+.pe-dz:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pe-dz-ic{color:var(--accent);margin-bottom:2px}
+.pe-dz-t{font-size:14px;color:var(--ink)}
+.pe-dz-t strong{font-weight:600}
+.pe-dz-or{color:var(--ink-2)}
+.pe-dz-link{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+.pe-dz-t kbd{font:inherit;font-size:11.5px;padding:1px 6px;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;background:#fff;color:var(--ink-2)}
+.pe-dz-s{font-size:12px;color:var(--muted)}
+.pe-dz.is-compact{flex-direction:row;flex-wrap:wrap;gap:6px 10px;padding:10px 14px;justify-content:center}
+.pe-dz.is-compact .pe-dz-ic{width:18px;height:18px;margin:0}
+.pe-dz.is-compact .pe-dz-s{display:none}
+.pe-card.over{outline:0;background:#fff}
+.pe-card.over .pe-dz{border-color:var(--accent);border-style:solid;background:var(--accent-soft);box-shadow:0 0 0 3px var(--accent-soft)}
+@media (max-width:560px){.pe-dz-t kbd,.pe-dz-t .pe-dz-or:last-child{display:none}}

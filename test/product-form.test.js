@@ -196,18 +196,20 @@ test('routes: documents are saved internal, removal is limited to this product, 
   assert.match(r, /name: 'docs', maxCount/);
 });
 
-test('one upload entry point: a single "+ Add files" button; photos and documents are sorted by type', () => {
+test('one upload entry point: a single drop zone (drop, browse or paste); photos and documents are sorted by type', () => {
   const h = html('admin/products/form#edit');
-  assert.equal((h.match(/<button[^>]*>\+ Add (files|photos|documents)</g) || []).length, 1); assert.match(h, /id="fileAdd">\+ Add files</);
-  for (const gone of ['id="phAdd"', 'id="docAdd"', 'id="phAdd2"', 'id="docAdd2"', 'Save as:']) assert.ok(!h.includes(gone), gone);
+  assert.equal((h.match(/class="pe-dz[ "]/g) || []).length, 1); assert.match(h, /id="fileAdd" role="button" tabindex="0"/);
+  assert.match(h, /Drop files here/); assert.match(h, /paste an image/);
+  assert.doesNotMatch(h, /\+ Add (files|photos|documents)</, 'no separate buttons next to the zone');
+  for (const gone of ['id="phAdd"', 'id="docAdd"', 'id="phAdd2"', 'id="docAdd2"', 'Save as:', 'id="attEmpty"']) assert.ok(!h.includes(gone), gone);
   assert.match(h, /id="fileInput"[^>]*accept="[^"]*\.pdf[^"]*\.jpg|id="fileInput"[^>]*accept="\.jpg[^"]*\.pdf/);
   assert.match(h, /name="photos"/); assert.match(h, /name="docs"/, 'the two form fields still carry the files to the same server fields');
 });
-test('empty attachments: one short line, no empty blocks', () => {
+test('empty attachments: a full-size drop zone, no empty blocks; with files it shrinks to one line', () => {
   const h = html('admin/products/form#nofiles');
-  assert.match(h, /id="attEmpty" >|id="attEmpty">/); assert.doesNotMatch(h, /id="attEmpty" hidden/);
+  assert.match(h, /class="pe-dz" id="fileAdd"/); assert.doesNotMatch(h, /pe-dz is-compact/);
   assert.match(h, /id="phBlock" hidden/); assert.match(h, /id="docPanel" hidden/);
-  const full = html('admin/products/form#edit'); assert.match(full, /id="attEmpty" hidden/); assert.doesNotMatch(full, /id="phBlock" hidden/);
+  const full = html('admin/products/form#edit'); assert.match(full, /class="pe-dz is-compact" id="fileAdd"/); assert.doesNotMatch(full, /id="phBlock" hidden/);
 });
 
 test('specifications: one Add attribute button, plain empty state', () => {

@@ -142,10 +142,13 @@
     <div class="pe-col pe-right">
   <%# ---------------- 2. Photos, documents & AI ---------------- %>
   <section class="pe-card" id="sec-photos">
-    <div class="pe-h"><h2>Photos, documents &amp; AI</h2>
-      <div class="pe-tools"><button type="button" class="btn small" id="fileAdd">+ Add files</button></div></div>
+    <h2>Photos, documents &amp; AI</h2>
     <input type="file" id="fileInput" multiple hidden accept=".jpg,.jpeg,.png,.webp,.gif,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.dwg,.dxf">
-    <p class="pe-empty" id="attEmpty" <%= PH.length || DOCS.length ? 'hidden' : '' %>>No files yet. Use <strong>+ Add files</strong> — or drop files here, or paste an image — for product photos, specification sheets and datasheets.</p>
+    <div class="pe-dz<%= PH.length || DOCS.length ? ' is-compact' : '' %>" id="fileAdd" role="button" tabindex="0" aria-label="Add files: drop them here, press Enter to browse, or paste an image">
+      <svg class="pe-dz-ic" viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V5"/><path d="m7.5 9.5 4.5-4.5 4.5 4.5"/><path d="M5 15v3.2A1.8 1.8 0 0 0 6.8 20h10.4a1.8 1.8 0 0 0 1.8-1.8V15"/></svg>
+      <span class="pe-dz-t"><strong>Drop files here</strong> <span class="pe-dz-or">or <span class="pe-dz-link">browse</span></span> <span class="pe-dz-or">· or paste an image <kbd>Ctrl/⌘ V</kbd></span></span>
+      <span class="pe-dz-s">Photos (JPG, PNG, WebP, GIF) · datasheets &amp; specifications (PDF, Word, Excel, CSV, DWG)</span>
+    </div>
     <div class="pe-attach">
       <div class="pe-attcol" id="phBlock" <%= PH.length ? '' : 'hidden' %>>
         <div class="pe-h"><h3>Product photos <span class="cnt" id="phCount"><%= PH.length %></span> <%- tip('JPG, PNG, WebP or GIF, up to 12 at a time, 10 MB each. Drop images on the gallery or paste one from the clipboard.' + (HASP ? '' : ' The first photo uploaded is the main one.') + ' Removing a stored photo only takes effect when you press Save changes.') %></h3>
@@ -282,7 +285,7 @@
   }
   window.__photoFiles = function () { return files; };
   function add(list) { var skipped = 0; [].forEach.call(list, function (f) { if (OK.indexOf(f.type) >= 0 && files.length < 12) files.push(f); else skipped++; }); if (skipped) stat(skipped + ' file' + (skipped === 1 ? ' was' : 's were') + ' skipped (wrong type, or more than 12).'); sync(); }
-  document.addEventListener('paste', function (e) { var imgs = [].filter.call((e.clipboardData && e.clipboardData.files) || [], function (f) { return OK.indexOf(f.type) >= 0; }); if (imgs.length) { e.preventDefault(); add(imgs); } });
+  document.addEventListener('paste', function (e) { var fl = [].slice.call((e.clipboardData && e.clipboardData.files) || []); if (fl.length) { e.preventDefault(); addAny(fl); } });
   // a stored photo that cannot be loaded shows a neutral tile instead of a broken image
   document.querySelectorAll('img[data-pimg]').forEach(function (img) { img.addEventListener('error', function () { var b = img.parentNode; b.classList.add('broken'); b.title = 'This photo could not be loaded'; img.remove(); }, { once: true }); });
   // removing a stored photo is only marked here — the file is deleted when the whole form is saved (Undo until then)
@@ -314,7 +317,7 @@
   var DT = { pdf: 'PDF', doc: 'Word', docx: 'Word', xls: 'Excel', xlsx: 'Excel', csv: 'CSV', txt: 'Text', dwg: 'Drawing', dxf: 'Drawing' };
   function dcount() { var n = dList.querySelectorAll('.pe-doc:not(.rm)').length + docFiles.length; $('docCount').textContent = n; attState(); }
   // photos and documents are two blocks of one card: a block shows only when it has something (a removed item stays until saved, so Undo remains)
-  function attState() { if (!dList) return; var np = drop.querySelectorAll('.pe-ph').length, nd = dList.querySelectorAll('.pe-doc').length + docFiles.length; $('phBlock').hidden = !np; dPanel.hidden = !nd; $('attEmpty').hidden = !!(np || nd); }
+  function attState() { if (!dList) return; var np = drop.querySelectorAll('.pe-ph').length, nd = dList.querySelectorAll('.pe-doc').length + docFiles.length; $('phBlock').hidden = !np; dPanel.hidden = !nd; $('fileAdd').classList.toggle('is-compact', !!(np || nd)); }
   function dsync() {
     var dt = new DataTransfer(); docFiles.forEach(function (f) { dt.items.add(f); }); dIn.files = dt.files; dNew.innerHTML = '';
     docFiles.forEach(function (f, i) {
@@ -336,6 +339,7 @@
     if (bad) stat(bad + ' file' + (bad === 1 ? ' was' : 's were') + ' skipped (not a photo or a supported document).');
   }
   $('fileAdd').addEventListener('click', function () { fileIn.click(); });
+  $('fileAdd').addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileIn.click(); } });
   fileIn.addEventListener('change', function () { var picked = [].slice.call(fileIn.files); fileIn.value = ''; addAny(picked); });
   ['dragenter', 'dragover'].forEach(function (ev) { card.addEventListener(ev, function (e) { if (e.dataTransfer && [].indexOf.call(e.dataTransfer.types || [], 'Files') >= 0) { e.preventDefault(); card.classList.add('over'); } }); });
   card.addEventListener('dragleave', function (e) { if (!card.contains(e.relatedTarget)) card.classList.remove('over'); });
