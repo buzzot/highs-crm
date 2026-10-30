@@ -73,5 +73,9 @@ test('quote all products: internal packing, per-line freight and one logistics c
   assert.match(html, /name="freight_total"[^>]*value="38500"/);
   assert.match(html, /name="freight_basis"/);
   assert.match(html, /never shown to the client/);
-  assert.match(html, /Prefilled from FQ-2610-0042 · Dragon Freight/);
+  assert.match(html, /Prefilled from <button[^>]*data-fq-open>FQ-2610-0042 · Dragon Freight/);
+  assert.match(html, /<dialog class="fqdlg"/);
+  assert.match(html, /Dragon Freight[\s\S]*Sino Logistics/);
+  assert.match(html, /data-fq-use data-amount="39000"/);
+  assert.match(html, /\/admin\/logistics\/quotes\/fr1/);
 });

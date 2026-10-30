@@ -228,17 +228,18 @@ async function rfqAnswersFor(rid) {
   return out;
 }
 
-// the forwarder quote (freight_rfqs) for a packing list sent from this request's RFQs: accepted first, then the latest quoted one
-async function forwarderQuoteFor(rid) {
+// every forwarder quote (freight_rfqs) for packing lists sent from this request's RFQs; accepted first, then the latest quoted ones
+async function forwarderQuotesFor(rid) {
   const { data: rfqs } = await admin.from('rfqs').select('id').eq('request_id', rid);
   const ids = (rfqs || []).map(x => x.id);
-  if (!ids.length) return null;
-  const { data, error } = await admin.from('freight_requests').select('ref, freight_rfqs!freight_rfqs_request_id_fkey(status, quote_amount, quote_currency, quoted_at, forwarders(name))').in('rfq_id', ids).order('created_at', { ascending: false });
-  if (error) return null;   // freight tables / rfq_id column not there yet
-  const all = (data || []).flatMap(f => (f.freight_rfqs || []).map(q => ({ ref: f.ref, status: q.status, amount: Number(q.quote_amount), currency: q.quote_currency, forwarder: q.forwarders?.name || '', at: q.quoted_at || '' })))
+  if (!ids.length) return [];
+  const { data, error } = await admin.from('freight_requests').select('id, ref, created_at, freight_rfqs!freight_rfqs_request_id_fkey(id, status, quote_amount, quote_currency, quote_notes, quoted_at, transit_days, valid_until, sent_to, forwarders(name))').in('rfq_id', ids).order('created_at', { ascending: false });
+  if (error) return [];   // freight tables / rfq_id column not there yet
+  const all = (data || []).flatMap(f => (f.freight_rfqs || []).map(q => ({ id: q.id, request_id: f.id, ref: f.ref, status: q.status, amount: Number(q.quote_amount), currency: q.quote_currency || '', forwarder: q.forwarders?.name || q.sent_to || '',
+    notes: q.quote_notes || '', transit_days: q.transit_days ?? null, valid_until: q.valid_until || null, at: q.quoted_at || '' })))
     .filter(q => ['quoted', 'accepted'].includes(q.status) && q.amount > 0);
   all.sort((a, b) => (b.status === 'accepted') - (a.status === 'accepted') || String(b.at).localeCompare(String(a.at)));
-  return all[0] || null;
+  return all;
 }
 
 r.get('/requests/:rid/quote-lines', async (req, res) => {
@@ -261,14 +262,14 @@ r.get('/requests/:rid/quote-lines', async (req, res) => {
   const shared = { sell_currency: d0.sell_currency || request.target_currency || res.locals.defCur || 'CNY', incoterm: d0.incoterm || 'FOB', lead_time_days: d0.lead_time_days ?? '',
     valid_until: d0.valid_until || new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10), freight_mode: modeOf(d0.freight_mode),
     freight_basis: d0.freight_basis === 'air' ? 'air' : 'sea', freight_total: d0.freight_total ?? '', freight_note: d0.freight_note || '', freight_from: null };
-  // the forwarder's quote for this request's packing list, when there is one
-  if (shared.freight_total === '') {
-    const fq = await forwarderQuoteFor(rid);
-    if (fq) {
-      const amt = Number(fq.amount) * fxRate(settings, fq.currency || shared.sell_currency, shared.sell_currency);
-      shared.freight_total = Math.round(amt * 100) / 100; shared.freight_from = fq;
-      shared.freight_note = `From ${fq.ref}${fq.forwarder ? ' · ' + fq.forwarder : ''} — quoted ${fq.currency || ''} ${fq.amount}`.trim();
-    }
+  // the forwarder quotes for this request's packing lists; the accepted (else latest) one fills the total
+  const fquotes = await forwarderQuotesFor(rid);
+  const rateTo = q => fxRate(settings, q.currency || shared.sell_currency, shared.sell_currency);
+  fquotes.forEach(q => { q.converted = Math.round(q.amount * rateTo(q) * 100) / 100; q.same = (q.currency || shared.sell_currency) === shared.sell_currency; });
+  if (shared.freight_total === '' && fquotes[0]) {
+    const fq = fquotes[0];
+    shared.freight_total = fq.converted; shared.freight_from = fq;
+    shared.freight_note = `From ${fq.ref}${fq.forwarder ? ' · ' + fq.forwarder : ''} — quoted ${fq.currency || ''} ${fq.amount}`.trim();
   }
   const lines = items.map(it => {
     const dq = drafts.find(q => q.request_item_id === it.id);
@@ -284,7 +285,7 @@ r.get('/requests/:rid/quote-lines', async (req, res) => {
     } else if (answer) l.note = 'This product has no price in that RFQ answer.';
     return l;
   });
-  res.render('admin/pricing/quote_lines', { title: `Quote all products · ${request.ref}`, request, lines, shared, answers, answer, products: products || [], suppliers: suppliers || [], airKgPerCbm: AIR_KG_PER_CBM,
+  res.render('admin/pricing/quote_lines', { title: `Quote all products · ${request.ref}`, request, lines, shared, answers, answer, products: products || [], suppliers: suppliers || [], airKgPerCbm: AIR_KG_PER_CBM, fquotes,
     settings, incoterms: INCOTERMS, currencies: CURRENCIES, error: req.query.err || null,
     rates: Object.fromEntries(CURRENCIES.map(a => [a, Object.fromEntries(CURRENCIES.map(c => [c, fxRate(settings, a, c)]))])) });
 });

@@ -73,7 +73,7 @@
       <label>Total logistics <span class="muted small" id="ql_ltcur"><%= shared.sell_currency %></span><input type="number" step="0.01" min="0" name="freight_total" id="ql_ltot" value="<%= shared.freight_total %>"></label>
       <label>Split between products by <select name="freight_basis" id="ql_lbasis"><option value="sea" <%= shared.freight_basis !== 'air' ? 'selected' : '' %>>Volume · sea / container</option><option value="air" <%= shared.freight_basis === 'air' ? 'selected' : '' %>>Weight · air (chargeable)</option></select></label>
     </div>
-    <p class="muted small ql-lsrc" style="margin:8px 0 0"><% if (shared.freight_from) { %>Prefilled from <%= shared.freight_from.ref %><%= shared.freight_from.forwarder ? ' · ' + shared.freight_from.forwarder : '' %> — quoted <%= shared.freight_from.currency || '' %> <%= shared.freight_from.amount %>. Editable.<% } else { %>No forwarder quote yet — type the amount, or <a href="/admin/sourcing/<%= request.id %>">request one from the packing list</a>.<% } %></p>
+    <p class="muted small ql-lsrc" style="margin:8px 0 0"><% if (fquotes.length) { %><% if (shared.freight_from) { %>Prefilled from <button type="button" class="linkbtn" data-fq-open><%= shared.freight_from.ref %><%= shared.freight_from.forwarder ? ' · ' + shared.freight_from.forwarder : '' %> — quoted <%= shared.freight_from.currency || '' %> <%= shared.freight_from.amount %></button>. Editable.<% } else { %>Forwarder quotes received: <button type="button" class="linkbtn" data-fq-open>see <%= fquotes.length %> quote<%= fquotes.length > 1 ? 's' : '' %></button>.<% } %><% if (fquotes.length > 1) { %> <button type="button" class="linkbtn" data-fq-open>All <%= fquotes.length %> quotes</button><% } %><% } else { %>No forwarder quote yet — type the amount, or <a href="/admin/sourcing/<%= request.id %>">request one from the packing list</a>.<% } %></p>
     <p class="small ql-lnote" id="ql_lnote" style="margin:4px 0 0"></p>
     <button type="button" class="btn small" id="ql_respread" hidden style="margin-top:8px">Spread again</button>
   </div>
@@ -86,6 +86,23 @@
     <p class="muted small" style="margin:6px 0 0">Margin is on the product cost only; freight is passed through. Weight, volume and each line's freight share are for internal use and never appear on the client's quotation. Products without a factory price are skipped — you can add them later. “Preview quotation PDF” shows what the client would receive (no costs or margins), without saving.</p></div>
   <div class="actions"><button class="btn primary">Save quote lines</button><button class="btn" formaction="/admin/pricing/requests/<%= request.id %>/quote-lines/preview.pdf" formtarget="_blank">Preview quotation PDF</button><a class="btn" href="/admin/sourcing/<%= request.id %>">Cancel</a></div>
 </form>
+
+<% if (fquotes.length) { const cur = shared.sell_currency; %>
+<dialog class="fqdlg" id="fqdlg" aria-labelledby="fqtitle">
+  <div class="fq-h"><h2 id="fqtitle">Forwarder quotes <span class="muted small"><%= fquotes.length %> received for this request</span></h2><button type="button" class="btn small" data-fq-close>Close</button></div>
+  <div class="fq-list">
+  <% fquotes.forEach(q => { %>
+    <div class="fq-card <%= shared.freight_from && shared.freight_from.id === q.id ? 'is-used' : '' %>">
+      <div class="fq-top"><strong><%= q.forwarder || 'Forwarder' %></strong><span class="pill <%= q.status === 'accepted' ? 'accepted' : 'quoted' %>"><%= q.status === 'accepted' ? 'Accepted' : 'Quoted' %></span><span class="muted small"><%= q.ref %><%= q.at ? ' · ' + fmt.date(q.at) : '' %></span></div>
+      <div class="fq-amt"><strong><%= money(q.amount, q.currency || cur) %></strong><% if (!q.same) { %><span class="muted small"> ≈ <%= money(q.converted, cur) %> at today's rate</span><% } %></div>
+      <dl class="fq-dl"><% if (q.transit_days) { %><div><dt>Transit</dt><dd><%= q.transit_days %> days</dd></div><% } %><% if (q.valid_until) { %><div><dt>Valid until</dt><dd><%= fmt.date(q.valid_until) %></dd></div><% } %></dl>
+      <% if (q.notes) { %><p class="fq-notes"><%= q.notes %></p><% } %>
+      <div class="fq-act"><button type="button" class="btn small primary" data-fq-use data-amount="<%= q.converted %>" data-note="<%= `From ${q.ref}${q.forwarder ? ' · ' + q.forwarder : ''} — quoted ${q.currency || ''} ${q.amount}`.trim() %>">Use this amount</button><a class="btn small" href="/admin/logistics/quotes/<%= q.request_id %>" target="_blank" rel="noopener">Open full request</a></div>
+    </div>
+  <% }) %>
+  </div>
+</dialog>
+<% } %>
 <script type="application/json" id="qlRates"><%- JSON.stringify(rates) %></script>
 <script type="application/json" id="qlProds"><%- JSON.stringify(Object.fromEntries(products.map(p => [p.id, { w: p.unit_weight_kg, q: p.carton_qty, cw: p.carton_weight_kg, cc: p.carton_cbm, l: p.carton_length_cm, wd: p.carton_width_cm, h: p.carton_height_cm }]))) %></script>
 <script>
@@ -178,6 +195,16 @@
     if (e.target === $('ql_lbasis') || e.target.matches('.ql-qty, .ql-cost, [name$="[product_id]"], #ql_sell')) spread();
     calc();
   });
+  const dlg = $('fqdlg');
+  if (dlg) {
+    document.querySelectorAll('[data-fq-open]').forEach(b => b.addEventListener('click', () => dlg.showModal()));
+    dlg.querySelector('[data-fq-close]').addEventListener('click', () => dlg.close());
+    dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+    dlg.querySelectorAll('[data-fq-use]').forEach(b => b.addEventListener('click', () => {
+      $('ql_ltot').value = b.dataset.amount; form.querySelector('[name=freight_note]').value = b.dataset.note;
+      dlg.close(); Object.keys(locked).forEach(k => delete locked[k]); spread(); calc();
+    }));
+  }
   $('ql_respread').addEventListener('click', () => { Object.keys(locked).forEach(k => delete locked[k]); spread(); calc(); });
   if (hasSaved) { secs.forEach(packing); calc(); const note = $('ql_lnote'); note.textContent = 'Saved split — change the total, the basis or a quantity to spread it again.'; note.className = 'small muted'; }
   else all();
