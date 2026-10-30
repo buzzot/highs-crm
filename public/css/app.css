@@ -2378,7 +2378,7 @@ details.grp ul{list-style:none;margin:6px 0 0;padding:6px 10px;background:#f7f9f
 @media (max-width:640px){.pdd-hero{grid-template-columns:minmax(0,1fr)}.pdd-main{width:100%;max-width:340px;height:auto;aspect-ratio:1/1;margin:0 auto}.pdd-ph.primary{grid-column:span 2;grid-row:auto}.pdd-gal{grid-template-columns:repeat(2,minmax(0,1fr))}.pdd-lb{width:100vw;height:100vh;border-radius:0}}
 
 /* ---- Edit product ---- */
-.pe{max-width:1000px;margin:0 auto}
+.pe{margin:0}   /* width + side padding come from the shared main.page container, like every other admin page */
 .pe-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:2px 0 8px}
 .pe-head h1{margin:0}.pe-sub{font-size:14px;max-width:60ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pe-nav{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 14px}
@@ -2442,3 +2442,23 @@ details.grp ul{list-style:none;margin:6px 0 0;padding:6px 10px;background:#f7f9f
 input[hidden]{display:none!important}
 .pe-card h3{text-transform:none;letter-spacing:0;font-size:13.5px}
 .pe-card h3 .muted{font-weight:400}
+
+/* Edit product: use the shared wide container */
+.pe-top{display:block}
+.pe-top>.pe-card{min-width:0}
+.pe-hs input{max-width:180px}
+.pe-grid input[name=moq],.pe-grid input[name=sku]{max-width:none}
+@media (min-width:1280px){
+  .pe-top{display:grid;grid-template-columns:minmax(0,62fr) minmax(0,38fr);gap:0 16px;align-items:start}
+  .pe-top .pe-grid{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .pe-top .pe-grid>label{grid-column:span 2}
+  .pe-top .pe-grid>label.s2{grid-column:span 4}
+  .pe-top .pe-grid>.pe-help.s3{grid-column:1/-1;margin:0 0 10px}
+  .pe-top .pe-grid>label.s4{grid-column:1/-1}
+  .pe-top .pe-gal{grid-template-columns:repeat(auto-fill,minmax(104px,1fr))}
+  .pe-two .g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .pe-spec{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 18px}
+}
+@media (min-width:1100px) and (max-width:1279px){
+  .pe-spec{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px}
+}

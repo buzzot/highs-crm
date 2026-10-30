@@ -32,6 +32,7 @@
 
   <form method="post" id="pform" action="<%= p.id ? '/admin/products/' + p.id : '/admin/products' %>" enctype="multipart/form-data" novalidate>
 
+  <div class="pe-top">
   <%# ---------------- 1. Basic information ---------------- %>
   <section class="pe-card" id="sec-basic">
     <h2>Basic information</h2>
@@ -87,6 +88,8 @@
     </div>
     <% } %>
   </section>
+
+  </div>
 
   <%# ---------------- 3. Technical specifications ---------------- %>
   <section class="pe-card" id="sec-spec">
