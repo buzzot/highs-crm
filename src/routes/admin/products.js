@@ -6,6 +6,7 @@ import { log } from '../../lib/activity.js';
 import { canAssign } from '../../lib/access.js';
 import { clean as cleanSub, missing as subMissing, toProduct, containerFit, changes, fromProduct } from '../../lib/supplier-product.js';
 import { productMetrics, fxToUsdStrict } from '../../lib/product-metrics.js';
+import { productPhotos as photosOf, splitSpec, physicalFacts, quoteRows, poRows, orderRows, requestRows } from '../../lib/product-detail.js';
 import { SORT_DEFS, PAGE_SIZE, filterProducts, paginate } from '../../lib/product-list.js';
 import { compareProducts, extractProductCard, aiEnabled } from '../../lib/ai.js';
 import { uploadDocument, deleteDocument } from '../../lib/storage.js';
@@ -318,14 +319,23 @@ r.post('/submissions/:id/apply', async (req, res) => {
 
 r.get('/:id', async (req, res) => {
   const id = req.params.id;
-  const [{ data: p }, { data: docs }, { data: quotes }] = await Promise.all([
+  const [{ data: p }, { data: docs }, { data: quotes }, { data: items }, { data: pos }, settings] = await Promise.all([
     admin.from('products').select('*, suppliers(*)').eq('id', id).single(),
     admin.from('documents').select('*').eq('entity_type', 'product').eq('entity_id', id).order('created_at', { ascending: false }),
-    admin.from('quotes').select('id, quantity, unit_cost, cost_currency, unit_price, sell_currency, margin_pct, status, created_at, requests(id, ref, organizations(name))')
-      .eq('product_id', id).order('created_at', { ascending: false }).limit(20),
+    admin.from('quotes').select('id, quantity, unit_cost, cost_currency, unit_price, sell_currency, margin_pct, incoterm, status, created_at, requests(id, ref, organizations(name))')
+      .eq('product_id', id).order('created_at', { ascending: false }).limit(50),
+    admin.from('order_items').select('order_id, quantity, unit_cost, unit_price, orders(id, order_no, status, currency, created_at, organizations(name))').eq('product_id', id).limit(50),
+    admin.from('supplier_pos').select('id, ref, status, currency, lines, created_at, supplier_id, suppliers(name), orders(order_no)').contains('lines', [{ product_id: id }]).order('created_at', { ascending: false }).limit(50),
+    getSettings(admin),
   ]);
   if (!p) return notFound(res, 'Product');
-  res.render('admin/products/detail', { title: p.name, p, docs: docs || [], quotes: quotes || [], specText: specText(p.spec) });
+  const m = productMetrics(p, fxToUsdStrict(settings), settings.container);
+  const photos = photosOf(docs || []), photoIds = new Set(photos.map(d => d.id));
+  res.render('admin/products/detail', {
+    title: p.name, p, docs: docs || [], m, container: settings.container, fxList: ['CNY', 'EUR', 'GBP'].map(c => [c, fxToUsdStrict(settings)(c)]), photos, mainPhoto: photos[0] || null, otherDocs: (docs || []).filter(d => !photoIds.has(d.id)),
+    spec: splitSpec(p.spec), phys: physicalFacts(p), quotes: quoteRows(quotes || []), requests: requestRows(quotes || []), orders: orderRows(items || []), pos: poRows(pos || [], id),
+    canDelete: canAssign(req.user),
+  });
 });
 
 r.get('/:id/edit', async (req, res) => {

@@ -1,39 +1,310 @@
 <%- include('../../partials/head') %>
-<div class="pagehead">
-  <div><a class="back" href="/admin/products">← Products</a><h1><%= p.name %></h1>
-    <p class="muted"><%= [p.sku, p.supplier_sku && ('supplier SKU ' + p.supplier_sku), p.category, p.hs_code && ('HS ' + p.hs_code)].filter(Boolean).join(' · ') %></p></div>
-  <div class="actions"><a class="btn" href="/admin/products/<%= p.id %>/edit">Edit</a><a class="btn primary" href="/admin/pricing/quotes/new?product_id=<%= p.id %>">Quote this</a></div>
-</div>
-<div class="grid2">
-  <div>
-    <div class="card">
-      <h2>Supply</h2>
-      <dl class="dl">
-        <dt>Supplier</dt><dd><% if (p.suppliers) { %><a href="/admin/suppliers/<%= p.suppliers.id %>"><%= p.suppliers.name %></a><% } else { %>—<% } %></dd>
-        <dt>Unit cost</dt><dd><%= fmt.money(p.unit_cost, p.cost_currency, 4) %></dd>
-        <dt>MOQ</dt><dd><%= p.moq ?? '—' %></dd>
-        <dt>Lead time</dt><dd><%= p.suppliers?.lead_time_days ? p.suppliers.lead_time_days + ' days' : '—' %></dd>
-        <dt>Supplier SKU</dt><dd><%= p.supplier_sku || '—' %></dd>
-        <dt>Unit</dt><dd><%= [p.unit_weight_kg && fmt.num(p.unit_weight_kg, 3) + ' kg', p.unit_length_cm && `${fmt.num(p.unit_length_cm, 1)} × ${fmt.num(p.unit_width_cm, 1)} × ${fmt.num(p.unit_height_cm, 1)} cm`].filter(Boolean).join(' · ') || '—' %></dd>
-        <dt>Carton</dt><dd><%= p.carton_qty ? [`${p.carton_qty} pcs`, p.carton_weight_kg && fmt.num(p.carton_weight_kg, 2) + ' kg', p.carton_length_cm && `${fmt.num(p.carton_length_cm, 1)} × ${fmt.num(p.carton_width_cm, 1)} × ${fmt.num(p.carton_height_cm, 1)} cm`, p.carton_cbm && fmt.num(p.carton_cbm, 4) + ' cbm'].filter(Boolean).join(' · ') : '—' %></dd>
-      </dl>
-      <% if (p.description) { %><p class="pre"><%= p.description %></p><% } %>
-      <% if (specText) { %><h3>Specifications</h3><p class="pre"><%= specText %></p><% } %>
+<%
+  const C = typeof container !== 'undefined' && container ? container : { freight_40hq_usd: 4500, container_cbm: 68, container_max_kg: 26500, wholesale_markup_pct: 45 };
+  const FX = typeof fxList !== 'undefined' ? fxList : [];
+  const SP = typeof spec !== 'undefined' ? spec : { sourcing: {}, packing: [], tech: [] };
+  const PH = typeof phys !== 'undefined' ? phys : { unit: [], carton: [] };
+  const QS = typeof quotes !== 'undefined' ? quotes : [], RQ = typeof requests !== 'undefined' ? requests : [], OR = typeof orders !== 'undefined' ? orders : [], PO = typeof pos !== 'undefined' ? pos : [];
+  const photo = typeof mainPhoto !== 'undefined' ? mainPhoto : null;
+  const PH_ALL = typeof photos !== 'undefined' ? photos : (photo ? [photo] : []);
+  const OTHER = typeof otherDocs !== 'undefined' ? otherDocs : docs;
+  const SRC = d => '/admin/documents/' + d.id + '/download';
+  const FACTS = [['Supplier SKU', p.supplier_sku], ['HS code', p.hs_code]];
+  const EDIT = f => '/admin/products/' + p.id + '/edit' + (f ? '#f=' + f : '');
+  const sup = p.suppliers;
+  const physical = m.physical;
+  const mkToMargin = x => x == null ? null : x / (100 + x) * 100;
+  const nDocs = docs.length;
+  const crit = m.critical.length, opt = m.optional.length;
+  const hasPack = PH.carton.length || SP.packing.length;
+  const POL = { draft: 'Draft', sent: 'Sent', replied: 'Replied', confirmed: 'Confirmed', declined: 'Declined', cancelled: 'Cancelled' };
+  const subline = [p.sku && ('SKU ' + p.sku), p.category, m.kind && !physical ? m.kind : null].filter(Boolean);
+  const latestQuote = QS[0] || null;
+%>
+<header class="cd-head pdd-head">
+  <div class="pdd-id">
+    <div class="cd-id">
+      <a class="back" href="/admin/products">← Products</a>
+      <h1 title="<%= p.name %>"><span class="pdd-name"><%= p.name %></span>
+        <% if (crit) { %><a class="pill pdd-st warn" href="#overview" title="<%= m.critical.map(g => g.label).join(', ') %>"><%= crit %> critical missing</a><% } else if (opt) { %><a class="pill pdd-st" href="#overview" title="<%= m.optional.map(g => g.label).join(', ') %>"><%= opt %> optional missing</a><% } else { %><span class="pill pdd-st ok">Complete</span><% } %></h1>
+      <div class="cd-meta">
+        <% if (subline.length) { %><span><%= subline.join(' · ') %></span><% } else { %><span class="muted">No SKU or category</span><% } %>
+        <span class="sep">·</span>
+        <% if (sup) { %><a href="/admin/suppliers/<%= sup.id %>" title="Supplier"><%= sup.name %></a><% } else { %><a class="muted" href="<%= EDIT('supplier_id') %>">No supplier — add</a><% } %>
+      </div>
     </div>
-    <div class="card">
-      <h2>Quote history</h2>
-      <% if (!quotes.length) { %><p class="muted">Not quoted yet.</p><% } %>
-      <table class="tbl"><thead><tr><th>Request</th><th>Qty</th><th class="right">Cost</th><th class="right">Price</th><th>Margin</th><th>Status</th></tr></thead><tbody>
-      <% quotes.forEach(q => { %>
-        <tr><td><a href="/admin/pricing/quotes/<%= q.id %>"><%= q.requests?.ref %></a><div class="muted small"><%= q.requests?.organizations?.name %></div></td>
-          <td><%= q.quantity %></td><td class="right"><%= fmt.money(q.unit_cost, q.cost_currency, 4) %></td><td class="right"><%= fmt.money(q.unit_price, q.sell_currency, 4) %></td>
-          <td><%= fmt.pct(q.margin_pct) %></td><td><span class="pill <%= q.status %>"><%= fmt.status(q.status) %></span></td></tr>
+  </div>
+  <div class="cd-actions">
+    <a class="btn" href="<%= EDIT() %>">Edit product</a>
+    <a class="btn primary" href="/admin/pricing/quotes/new?product_id=<%= p.id %>">Quote this</a>
+  </div>
+</header>
+
+<div class="cd-stats" aria-label="Product summary">
+  <a href="#sourcing" title="What the factory charges, in its own currency"><span class="muted">Factory price</span> <b><%= p.unit_cost != null ? fmt.money(p.unit_cost, p.cost_currency, 3) : '—' %></b><% if (m.priceUsd != null && p.cost_currency !== 'USD') { %><span class="muted">≈ <%= fmt.money(m.priceUsd, 'USD', 3) %></span><% } %></a>
+  <a href="#sourcing" title="<%= m.landedUsd != null ? 'Estimate: factory price + 40HQ freight share' : 'Needs carton data' %>"><span class="muted">Est. landed</span> <b><%= m.landedUsd != null ? (m.landedBasis === 'volume' ? '≈ ' : '') + fmt.money(m.landedUsd, 'USD', 3) : '—' %></b></a>
+  <a href="#sourcing"><span class="muted">MOQ</span> <b><%= p.moq ? fmt.num(p.moq, 0) : '—' %></b></a>
+  <a href="#quotes"><span class="muted">Quoted</span> <b><%= QS.length %></b> time<%= QS.length === 1 ? '' : 's' %></a>
+</div>
+
+<div class="cd-tabs" role="tablist" aria-label="Product sections">
+  <button type="button" role="tab" id="t-overview" aria-controls="tab-overview" data-tab="overview">Overview</button>
+  <button type="button" role="tab" id="t-sourcing" aria-controls="tab-sourcing" data-tab="sourcing">Sourcing &amp; Costing</button>
+  <button type="button" role="tab" id="t-quotes" aria-controls="tab-quotes" data-tab="quotes">Quotes &amp; Orders<% if (QS.length + OR.length + PO.length) { %> <span class="cnt"><%= QS.length + OR.length + PO.length %></span><% } %></button>
+  <button type="button" role="tab" id="t-docs" aria-controls="tab-docs" data-tab="docs">Photos &amp; Documents<% if (nDocs) { %> <span class="cnt"><%= nDocs %></span><% } %></button>
+</div>
+
+<%# ---------------- Overview ---------------- %>
+<section class="cd-panel" id="tab-overview" role="tabpanel" aria-labelledby="t-overview" hidden>
+  <div class="cd-grid cd-grid-ov">
+    <div>
+      <div class="cd-card pdd-show">
+        <div class="pdd-hero">
+          <% if (photo) { %>
+            <button type="button" class="pdd-main" data-lb="0" aria-label="Open the product photo full size" title="Click to enlarge"><img src="<%= SRC(photo) %>" alt="<%= p.name %>" data-pimg><span class="pdd-zoom" aria-hidden="true">⤢</span></button>
+          <% } else { %>
+            <a class="pdd-main none" href="#docs" aria-label="No photo yet — add one"><span>No photo yet</span></a>
+          <% } %>
+          <div class="pdd-info">
+            <h2 class="pdd-title" title="<%= p.name %>"><%= p.name %> <a class="more" href="<%= EDIT() %>">Edit</a></h2>
+            <div class="pdd-chips">
+              <% if (p.sku) { %><span class="pdd-chip" title="Internal SKU">SKU <b><%= p.sku %></b></span><% } %>
+              <% if (p.category) { %><span class="pdd-chip" title="Category"><%= p.category %></span><% } %>
+              <% if (!physical) { %><span class="pdd-chip"><%= m.kind %> · no carton costing</span><% } %>
+              <% if (!p.sku && !p.category) { %><a class="pdd-chip add" href="<%= EDIT('sku') %>">+ Add SKU and category</a><% } %>
+            </div>
+            <% if (p.description) { %><p class="pre pdd-desc"><%= p.description %></p><% } else { %><p class="muted small">No description yet. <a href="<%= EDIT('description') %>">Add one</a></p><% } %>
+            <dl class="cd-dl pdd-facts">
+              <% FACTS.forEach(([k, v]) => { if (v || k === 'HS code') { %><div><dt><%= k %></dt><dd class="<%= v ? '' : 'na' %>"><%= v || '—' %></dd></div><% } }) %>
+            </dl>
+            <% if (PH_ALL.length > 1) { %><a class="small" href="#docs"><%= PH_ALL.length %> photos — see all</a><% } %>
+          </div>
+        </div>
+      </div>
+      <% if (SP.tech.length) { %>
+      <div class="cd-card">
+        <h2>Technical specifications <span class="cnt"><%= SP.tech.length %></span></h2>
+        <dl class="cd-dl pdd-spec">
+          <% SP.tech.forEach(([k, v]) => { %><div><dt title="<%= k %>"><%= k %></dt><dd><%= v %></dd></div><% }) %>
+        </dl>
+      </div>
+      <% } %>
+      <% if (physical && (PH.unit.length)) { %>
+      <div class="cd-card">
+        <h2>Physical dimensions</h2>
+        <dl class="cd-dl">
+          <% PH.unit.forEach(([k, v]) => { %><div><dt><%= k %></dt><dd><%= v %></dd></div><% }) %>
+        </dl>
+        <p class="cd-sub small muted">Weight in kg, size in cm — length × width × height. Carton details are on the Sourcing &amp; Costing tab.</p>
+      </div>
+      <% } %>
+    </div>
+    <aside>
+      <div class="cd-card">
+        <h2>Data completeness</h2>
+        <% if (!crit && !opt) { %>
+          <p class="pdd-ok">✓ Everything needed for costing and quotes is filled in.</p>
+        <% } else { %>
+          <% if (crit) { %><h3 class="first">Needed for costing and quotes</h3>
+            <ul class="pdd-gaps"><% m.critical.forEach(g => { %><li><a href="<%= EDIT(g.field) %>"><b><%= g.label.replace(/^no /, 'Add ').replace(/^price is 0/, 'Check price') %></b><small><%= g.hint %></small><i>Edit ›</i></a></li><% }) %></ul><% } %>
+          <% if (opt) { %><h3 class="<%= crit ? '' : 'first' %>">Optional</h3>
+            <ul class="pdd-gaps"><% m.optional.forEach(g => { %><li><a href="<%= EDIT(g.field) %>"><b><%= g.label.replace(/^no /, 'Add ') %></b><small><%= g.hint %></small><i>Edit ›</i></a></li><% }) %></ul><% } %>
+        <% } %>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<%# ---------------- Sourcing & Costing ---------------- %>
+<section class="cd-panel" id="tab-sourcing" role="tabpanel" aria-labelledby="t-sourcing" hidden>
+  <div class="cd-grid cd-grid-ov">
+    <div>
+      <div class="cd-card">
+        <h2>Supplier and price <a class="more" href="<%= EDIT('unit_cost') %>">Edit</a></h2>
+        <dl class="cd-dl">
+          <div><dt>Supplier</dt><dd class="<%= sup ? '' : 'na' %>"><% if (sup) { %><a href="/admin/suppliers/<%= sup.id %>"><%= sup.name %></a><% } else { %>—<% } %></dd></div>
+          <div><dt>Supplier SKU</dt><dd class="<%= p.supplier_sku ? '' : 'na' %>"><%= p.supplier_sku || '—' %></dd></div>
+          <div><dt>Factory price</dt><dd><% if (p.unit_cost != null) { %><b><%= fmt.money(p.unit_cost, p.cost_currency, 4) %></b> <span class="muted"><%= p.cost_currency %> per unit</span><% } else { %><span class="na">—</span><% } %></dd></div>
+          <% if (p.unit_cost != null && p.cost_currency !== 'USD') { %><div><dt>In USD</dt><dd><% if (m.priceUsd != null) { %>≈ <%= fmt.money(m.priceUsd, 'USD', 4) %> <span class="muted">at 1 <%= p.cost_currency %> = <%= m.fxRate %> USD</span><% } else { %><span class="pdd-warn">No exchange rate for <%= p.cost_currency %></span> <a href="/admin/pricing">set it</a><% } %></dd></div><% } %>
+          <div><dt>Price basis</dt><dd class="<%= SP.sourcing.incoterm ? '' : 'na' %>" title="<%= SP.sourcing.incoterm ? '' : 'Not recorded for this product' %>"><%= SP.sourcing.incoterm || 'Not recorded' %><%= SP.sourcing.port ? ' · ' + SP.sourcing.port : '' %></dd></div>
+          <div><dt>MOQ</dt><dd class="<%= p.moq ? '' : 'na' %>"><%= p.moq ? fmt.num(p.moq, 0) + ' pcs' : '—' %><% if (m.moqValueUsd != null) { %> <span class="muted">· ≈ <%= fmt.money(m.moqValueUsd, 'USD', 0) %> minimum order</span><% } %></dd></div>
+          <div><dt>Production lead time</dt><dd class="<%= (SP.sourcing.lead || sup?.lead_time_days) ? '' : 'na' %>"><% if (SP.sourcing.lead) { %><%= SP.sourcing.lead %><%= /^\d+$/.test(SP.sourcing.lead) ? ' days' : '' %><% } else if (sup?.lead_time_days) { %><%= sup.lead_time_days %> days <span class="muted">· supplier's usual</span><% } else { %>—<% } %></dd></div>
+          <% if (SP.sourcing.sample) { %><div><dt>Sample lead time</dt><dd><%= SP.sourcing.sample %><%= /^\d+$/.test(SP.sourcing.sample) ? ' days' : '' %></dd></div><% } %>
+          <div><dt>Supplier quotation</dt><dd class="<%= SP.sourcing.valid ? '' : 'na' %>"><%= SP.sourcing.valid ? 'Valid until ' + SP.sourcing.valid : 'Date not recorded' %></dd></div>
+          <% if (SP.sourcing.payment) { %><div><dt>Payment terms</dt><dd><%= SP.sourcing.payment %></dd></div><% } %>
+        </dl>
+        <p class="cd-sub small muted">A product has one supplier link; the price, MOQ and lead time above belong to that supplier. Edits here change the product record.</p>
+      </div>
+      <div class="cd-card">
+        <h2>Packing and cartons <% if (physical) { %><a class="more" href="<%= EDIT('carton_qty') %>">Edit</a><% } %></h2>
+        <% if (!physical) { %><p class="muted small">Not applicable — this is a <%= (m.kind || 'non-physical').toLowerCase() %> item, so cartons and containers are not used.</p>
+        <% } else if (!hasPack) { %><p class="muted small">No carton details yet. <a href="<%= EDIT('carton_qty') %>">Add pieces per carton and carton size</a> to estimate freight.</p>
+        <% } else { %>
+          <dl class="cd-dl">
+            <% PH.carton.forEach(([k, v]) => { %><div><dt><%= k %></dt><dd><%= v %></dd></div><% }) %>
+            <% SP.packing.forEach(([k, v]) => { %><div><dt title="<%= k %>"><%= /^units per/i.test(k) ? k + ' (supplier)' : k %></dt><dd><%= v %></dd></div><% }) %>
+            <% if (m.unitsPer40hq) { %><div><dt>Fits in a 40HQ</dt><dd><b><%= fmt.num(m.unitsPer40hq, 0) %></b> pcs <span class="muted">· by volume<%= p.carton_weight_kg > 0 ? ' and weight' : ' only' %></span></dd></div><% } %>
+          </dl>
+        <% } %>
+      </div>
+    </div>
+    <aside>
+      <div class="cd-card">
+        <h2>Cost estimate <span class="pill pdd-est" title="Calculated from the assumptions below — not a quotation from a forwarder">Estimate</span></h2>
+        <% if (!physical) { %>
+          <p class="muted small">Landed cost does not apply to a <%= (m.kind || 'non-physical').toLowerCase() %> item.</p>
+        <% } else if (m.landedUsd == null) { %>
+          <p class="pdd-warn small"><b>No landed cost shown.</b> It needs <%= m.critical.length ? m.critical.map(g => g.label.replace(/^no /, '')).join(', ') : 'complete price and carton data' %>.</p>
+          <% if (m.critical.length) { %><p class="small"><a href="#overview">See what is missing</a></p><% } %>
+        <% } else { %>
+          <table class="cd-tbl pdd-cost"><tbody>
+            <tr><td>Factory price</td><td class="r"><%= fmt.money(m.priceUsd, 'USD', 3) %></td></tr>
+            <tr><td>Freight per unit <span class="muted small">(<%= fmt.money(C.freight_40hq_usd, 'USD', 0) %> ÷ <%= fmt.num(m.unitsPer40hq, 0) %>)</span></td><td class="r"><%= fmt.money(m.freightPerUnit, 'USD', 3) %></td></tr>
+            <tr class="tot"><td>Estimated landed</td><td class="r"><b><%= m.landedBasis === 'volume' ? '≈ ' : '' %><%= fmt.money(m.landedUsd, 'USD', 3) %></b></td></tr>
+            <tr><td>Suggested wholesale <span class="muted small">(+<%= m.markupPct %>% markup)</span></td><td class="r"><%= fmt.money(m.wholesaleUsd, 'USD', 2) %></td></tr>
+          </tbody></table>
+          <% if (m.landedBasis === 'volume') { %><p class="pdd-warn small">≈ Carton weight is missing, so the container load is counted by volume only and may be optimistic. <a href="<%= EDIT('carton_weight_kg') %>">Add it</a></p><% } %>
+          <p class="small muted">A <%= m.markupPct %>% markup on cost is a <%= fmt.num(m.impliedMarginPct, 1) %>% gross margin on the wholesale price.</p>
+        <% } %>
+        <h3>Assumptions</h3>
+        <ul class="pdd-assume">
+          <li><span>Freight</span><b><%= fmt.money(C.freight_40hq_usd, 'USD', 0) %> per 40HQ</b></li>
+          <li><span>Container</span><b><%= C.container_cbm %> cbm · <%= fmt.num(C.container_max_kg, 0) %> kg</b></li>
+          <li><span>Wholesale markup</span><b>+<%= C.wholesale_markup_pct %>% on cost</b></li>
+          <% FX.filter(([c]) => c === p.cost_currency && c !== 'USD').forEach(([c, r]) => { %><li><span>Exchange rate</span><b><%= r ? '1 ' + c + ' = ' + r + ' USD' : 'not set' %></b></li><% }) %>
+        </ul>
+        <% if (user.role === 'admin') { %><p class="small"><a href="/admin/pricing">Change freight, markup and rates →</a></p><% } %>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<%# ---------------- Quotes & Orders ---------------- %>
+<section class="cd-panel" id="tab-quotes" role="tabpanel" aria-labelledby="t-quotes" hidden>
+  <% if (!QS.length && !OR.length && !PO.length) { %>
+    <div class="cd-card cl-empty"><h2>Not quoted or ordered yet</h2><p class="muted">When this product is quoted to a client, ordered or put on a supplier purchase order, it appears here.</p>
+      <p><a class="btn primary" href="/admin/pricing/quotes/new?product_id=<%= p.id %>">Quote this</a></p></div>
+  <% } %>
+  <% if (QS.length) { %>
+  <div class="cd-card">
+    <h2>Quotation history <span class="cnt"><%= QS.length %></span><% if (RQ.length) { %><span class="muted small">in <%= RQ.length %> customer request<%= RQ.length === 1 ? '' : 's' %></span><% } %></h2>
+    <div class="tblwrap"><table class="cd-tbl pdd-q">
+      <thead><tr><th>Request</th><th>Date</th><th class="r">Qty</th><th class="r">Cost</th><th class="r">Quoted price</th><th class="r" title="Markup on cost: price = cost × (1 + markup). The gross margin on the price is markup ÷ (1 + markup).">Markup on cost</th><th>Status</th></tr></thead>
+      <tbody>
+      <% QS.forEach(q => { %>
+        <tr><td class="c-main"><a href="/admin/pricing/quotes/<%= q.id %>"><strong title="<%= q.ref %>"><%= q.ref || 'Quote' %></strong></a><div class="muted small clipd"><%= q.client %></div></td>
+          <td><%= q.at ? fmt.date(q.at) : '—' %></td><td class="r"><%= fmt.num(q.qty, 0) %></td>
+          <td class="r"><%= q.cost != null ? fmt.money(q.cost, q.costCur, 4) : '—' %></td><td class="r"><b><%= q.price != null ? fmt.money(q.price, q.priceCur, 4) : '—' %></b></td>
+          <td class="r"><%= q.markupPct != null ? fmt.num(q.markupPct, 1) + '%' : '—' %><% if (q.markupPct != null) { %><div class="muted small"><%= fmt.num(mkToMargin(q.markupPct), 1) %>% margin</div><% } %></td>
+          <td><span class="pill <%= q.status %>"><%= fmt.status(q.status) %></span></td></tr>
       <% }) %>
-      </tbody></table>
+      </tbody></table></div>
+    <p class="cd-sub small muted">Prices are as quoted at the time, in the quote's currency; cost is the factory price then.</p>
+  </div>
+  <% } %>
+  <% if (OR.length) { %>
+  <div class="cd-card">
+    <h2>Client orders <span class="cnt"><%= OR.length %></span></h2>
+    <div class="tblwrap"><table class="cd-tbl">
+      <thead><tr><th>Order</th><th>Date</th><th class="r">Qty</th><th class="r">Sold at</th><th>Status</th></tr></thead>
+      <tbody><% OR.forEach(o => { %>
+        <tr><td class="c-main"><a href="/admin/orders/<%= o.id %>"><strong><%= o.orderNo || 'Order' %></strong></a><div class="muted small clipd"><%= o.client %></div></td>
+          <td><%= o.at ? fmt.date(o.at) : '—' %></td><td class="r"><%= fmt.num(o.qty, 0) %></td><td class="r"><%= o.price != null ? fmt.money(o.price, o.currency, 4) : '—' %></td>
+          <td><span class="pill <%= o.status %>"><%= fmt.status(o.status) %></span></td></tr>
+      <% }) %></tbody></table></div>
+  </div>
+  <% } %>
+  <% if (PO.length) { %>
+  <div class="cd-card">
+    <h2>Supplier purchase orders <span class="cnt"><%= PO.length %></span></h2>
+    <div class="tblwrap"><table class="cd-tbl">
+      <thead><tr><th>Purchase order</th><th>Date</th><th class="r">Qty</th><th class="r">Unit price</th><th>Status</th></tr></thead>
+      <tbody><% PO.forEach(o => { %>
+        <tr><td class="c-main"><a href="/admin/purchasing/<%= o.id %>"><strong><%= o.ref %></strong></a><div class="muted small clipd"><%= [o.supplier, o.orderNo].filter(Boolean).join(' · ') %></div></td>
+          <td><%= o.at ? fmt.date(o.at) : '—' %></td><td class="r"><%= fmt.num(o.qty, 0) %></td><td class="r"><%= o.unitPrice != null ? fmt.money(o.unitPrice, o.currency, 4) : '—' %></td>
+          <td><span class="pill <%= o.status %>"><%= POL[o.status] || fmt.status(o.status) %></span></td></tr>
+      <% }) %></tbody></table></div>
+  </div>
+  <% } %>
+</section>
+
+<%# ---------------- Photos & Documents ---------------- %>
+<section class="cd-panel" id="tab-docs" role="tabpanel" aria-labelledby="t-docs" hidden>
+  <% if (PH_ALL.length) { %>
+  <div class="cd-card">
+    <h2>Product photos <span class="cnt"><%= PH_ALL.length %></span></h2>
+    <div class="pdd-gal">
+      <% PH_ALL.forEach((d, i) => { %>
+        <figure class="pdd-ph <%= i === 0 ? 'primary' : '' %>">
+          <button type="button" class="pdd-pbtn" data-lb="<%= i %>" aria-label="Open <%= d.title || 'photo' %> full size" title="<%= d.title || '' %>"><img loading="lazy" src="<%= SRC(d) %>" alt="<%= d.title || p.name %>" data-pimg></button>
+          <figcaption>
+            <% if (i === 0) { %><span class="tag pdd-prim" title="The first photo is the main image">Primary</span><% } %>
+            <% if (!d.client_visible) { %><span class="tag internal">internal</span><% } %>
+            <a class="small" href="<%= SRC(d) %>" target="_blank" rel="noopener" title="Open the original file">Original</a>
+            <form method="post" action="/admin/documents/<%= d.id %>/delete" class="inline" onsubmit="return confirm('Delete this photo?')"><input type="hidden" name="redirect" value="/admin/products/<%= p.id %>#docs"><button class="iconbtn danger" title="Delete photo" aria-label="Delete photo">×</button></form>
+          </figcaption>
+        </figure>
+      <% }) %>
     </div>
+    <p class="cd-sub small muted">The first photo is the main image, shown on the Overview tab and in the product list. Photos keep their original proportions.</p>
   </div>
-  <div>
-    <%- include('../../partials/docs', { docs, entityType: 'product', entityId: p.id, redirect: '/admin/products/' + p.id, kinds: ['product_photo','certificate','qc_report','other'], heading: 'Product photos & files', defaultKind: 'product_photo', defaultVisible: true }) %>
-  </div>
-</div>
+  <% } %>
+  <%- include('../../partials/docs', { docs: OTHER, entityType: 'product', entityId: p.id, redirect: '/admin/products/' + p.id + '#docs', kinds: ['product_photo', 'certificate', 'qc_report', 'proforma_invoice', 'other'], heading: PH_ALL.length ? 'Documents & upload' : 'Photos & documents', defaultKind: 'product_photo', defaultVisible: true }) %>
+  <p class="small muted">Use <b>Other</b> for specifications and drawings. Files marked visible are shown to the client.</p>
+</section>
+
+<dialog class="pdd-lb" id="pddLb" aria-label="Product photo viewer">
+  <div class="lbbar"><span class="lbcap" id="lbCap"></span><span class="lbn" id="lbN"></span><a class="btn small" id="lbOrig" target="_blank" rel="noopener">Open original</a><button type="button" class="btn small" id="lbX" aria-label="Close">Close ✕</button></div>
+  <div class="lbstage"><button type="button" class="lbnav prev" id="lbP" aria-label="Previous photo">‹</button><img id="lbImg" alt=""><div class="lbfail" id="lbFail" hidden>This photo could not be loaded.</div><button type="button" class="lbnav next" id="lbNx" aria-label="Next photo">›</button></div>
+</dialog>
+<script type="application/json" id="pddPhotos"><%- JSON.stringify(PH_ALL.map(d => ({ src: SRC(d), title: d.title || '' }))).replace(/</g, '\u003c') %></script>
+
+<script>
+(function () {
+  var tabs = [].slice.call(document.querySelectorAll('[data-tab]')), names = tabs.map(function (b) { return b.dataset.tab; });
+  function show(name) {
+    if (names.indexOf(name) < 0) name = 'overview';
+    tabs.forEach(function (b) { var on = b.dataset.tab === name; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1; });
+    names.forEach(function (n) { document.getElementById('tab-' + n).hidden = n !== name; });
+  }
+  tabs.forEach(function (b) { b.addEventListener('click', function () { history.replaceState(null, '', '#' + b.dataset.tab); show(b.dataset.tab); }); });
+  document.querySelector('.cd-tabs').addEventListener('keydown', function (e) {
+    var i = names.indexOf(document.activeElement.dataset && document.activeElement.dataset.tab); if (i < 0 || ['ArrowRight', 'ArrowLeft', 'Home', 'End'].indexOf(e.key) < 0) return;
+    var j = e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : (i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length;
+    e.preventDefault(); tabs[j].focus(); tabs[j].click();
+  });
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+  show(location.hash.slice(1));
+  // in-page links such as "#docs" / "#sourcing" switch the tab (hashchange does not fire for a link to the same hash)
+  document.querySelectorAll('a[href^="#"]').forEach(function (a) { a.addEventListener('click', function () { show(a.getAttribute('href').slice(1)); }); });
+})();
+</script>
+
+<script>
+(function () {
+  var PH = []; try { PH = JSON.parse(document.getElementById('pddPhotos').textContent); } catch (e) {}
+  // a picture that cannot be loaded (file missing, no access) becomes a clear placeholder — never a broken-image icon with alt text
+  document.querySelectorAll('img[data-pimg]').forEach(function (img) {
+    function fail() { var box = img.parentNode; box.classList.add('broken'); box.setAttribute('title', 'This photo could not be loaded'); img.remove(); }
+    if (img.complete && img.naturalWidth === 0 && img.getAttribute('src')) { if (img.complete) fail(); }
+    img.addEventListener('error', fail, { once: true });
+  });
+  var dlg = document.getElementById('pddLb'), im = document.getElementById('lbImg'), fl = document.getElementById('lbFail'), at = 0;
+  if (!dlg || !PH.length) return;
+  function go(i) {
+    at = (i + PH.length) % PH.length; var ph = PH[at];
+    fl.hidden = true; im.hidden = false; im.src = ph.src; im.alt = ph.title;
+    document.getElementById('lbCap').textContent = ph.title; document.getElementById('lbN').textContent = PH.length > 1 ? (at + 1) + ' / ' + PH.length : '';
+    document.getElementById('lbOrig').href = ph.src;
+    document.getElementById('lbP').hidden = document.getElementById('lbNx').hidden = PH.length < 2;
+  }
+  im.addEventListener('error', function () { im.hidden = true; fl.hidden = false; });
+  document.querySelectorAll('[data-lb]').forEach(function (b) { b.addEventListener('click', function () { go(+b.dataset.lb); if (!dlg.open) dlg.showModal(); }); });
+  document.getElementById('lbX').addEventListener('click', function () { dlg.close(); });
+  document.getElementById('lbP').addEventListener('click', function () { go(at - 1); });
+  document.getElementById('lbNx').addEventListener('click', function () { go(at + 1); });
+  dlg.addEventListener('click', function (e) { if (e.target === dlg || e.target.classList.contains('lbstage')) dlg.close(); });
+  dlg.addEventListener('keydown', function (e) { if (e.key === 'ArrowLeft') go(at - 1); else if (e.key === 'ArrowRight') go(at + 1); });
+})();
+</script>
 <%- include('../../partials/foot') %>

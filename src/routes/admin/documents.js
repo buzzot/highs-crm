@@ -101,7 +101,8 @@ r.get('/:id/download', async (req, res) => {
   if (!url) {
     const { data: doc } = await admin.from('documents').select('storage_path').eq('id', req.params.id).single();
     if (!doc) return res.status(404).send('Not found');
-    url = await signedUrl(doc.storage_path);
+    try { url = await signedUrl(doc.storage_path); }
+    catch (e) { res.set('Cache-Control', 'no-store'); return res.status(404).send('File not found in storage'); }   // the record exists but the stored file is gone
     if (linkCache.size > 2000) linkCache.clear();
     linkCache.set(req.params.id, { url, until: Date.now() + 300e3 });
   }

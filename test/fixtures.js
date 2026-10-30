@@ -10,6 +10,7 @@ import { cargoLine, cargoTotals } from '../src/lib/cargo.js';
 import { fmt } from '../src/lib/format.js';
 import { buildSuppliers } from '../src/lib/suppliers.js';
 import { purchasingRows } from '../src/lib/supplier-detail.js';
+import { productPhotos as photosOf, splitSpec, physicalFacts, quoteRows, poRows, orderRows, requestRows } from '../src/lib/product-detail.js';
 import { fxToUsdStrict } from '../src/lib/product-metrics.js';
 import { filterProducts, paginate, SORT_DEFS } from '../src/lib/product-list.js';
 import { icon } from '../src/lib/icons.js';
@@ -235,6 +236,17 @@ export function prodIdx(query = {}, over = {}) {
     query, pendingSubs: 0, ...over.locals });
 }
 
+// the Product detail page, built with the real helpers
+export function prodDet(pr = {}, over = {}) {
+  const p = { ...prod, suppliers: sup, ...pr };
+  const toUsd = fxToUsdStrict(settings);
+  const qs = over.quotes ?? [{ ...quote, margin_pct: 18, requests: { id: 'r1', ref: request.ref, organizations: { name: 'Acme Retail LLC' } } }, { ...quote, id: 'q2', quantity: 500, requests: { id: 'r2', ref: 'REQ-2610-0002', organizations: { name: 'Beta Co' } }, status: 'sent', created_at: d(-9) }];
+  return base(staffUser, '/admin/products/' + p.id, { title: p.name, p, docs: over.docs ?? docs, m: productMetrics(p, toUsd, settings.container), container: settings.container, fxList: [['CNY', 0.138], ['EUR', 1.08], ['GBP', null]], photos: photosOf(over.docs ?? docs), mainPhoto: photosOf(over.docs ?? docs)[0] || null, otherDocs: (over.docs ?? docs).filter(x => !photosOf(over.docs ?? docs).includes(x)),
+    spec: splitSpec(p.spec), phys: physicalFacts(p), quotes: quoteRows(qs), requests: requestRows(qs),
+    orders: orderRows(over.items ?? [{ order_id: 'o1', quantity: 2000, unit_price: 0.9, unit_cost: 0.6, orders: { id: 'o1', order_no: 'HB-2610-1001', status: 'confirmed', currency: 'USD', created_at: d(-1), organizations: { name: 'Acme Retail LLC' } } }]),
+    pos: poRows(over.pos ?? [{ id: 'po1', ref: 'SPO-2610-0001', status: 'sent', currency: 'CNY', created_at: d(-1), supplier_id: 's1', suppliers: { name: sup.name }, orders: { order_no: 'HB-2610-1001' }, lines: [{ product_id: 'p1', quantity: 2000, unit_price: 38.5 }, { product_id: 'p9', quantity: 5, unit_price: 1 }] }], 'p1'), canDelete: true, ...over.locals });
+}
+
 export const pages = {
   // ---- admin ----
   'admin/dashboard': base(staffUser, '/admin', dashFx('normal')),
@@ -269,7 +281,18 @@ export const pages = {
     ai: { summary: 'The lamp lands cheaper per unit and ships more efficiently.', recommended_id: prod.id, model: 'claude-haiku-5-5', usage: { model: 'claude-haiku-5-5', input: 3900, output: 284, cacheRead: 0, cacheWrite: 0, total: 4184 }, risks: ['Tumbler supplier has no export rights.'], questions: ['Confirm carton weight for the tumbler.'],
       ranking: [{ id: prod.id, score: 82, verdict: 'Best value', pros: ['Lowest landed cost'], cons: ['Higher MOQ'] }, { id: prod2.id, score: 64, verdict: 'OK', pros: ['Low price'], cons: ['Missing data'] }] } }),
   'admin/products/form': base(staffUser, '/admin/products/new', { aiOn: true, title: 'New product', p: { cost_currency: 'CNY' }, specText: '', suppliers: lists.suppliers, photos: [{ id: 'doc1', title: 'front.jpg' }, { id: 'doc2', title: 'box.jpg' }], error: null }),
-  'admin/products/detail': base(staffUser, '/admin/products/p1', { title: prod.name, p: { ...prod, suppliers: sup }, docs, quotes: [{ ...quote, requests: { id: 'r1', ref: request.ref, organizations: { name: 'Acme Retail LLC' } } }], specText: 'Power: 10 W\nMaterial: Aluminium' }),
+  'admin/products/detail': prodDet(),
+  'admin/products/detail#sparse': ['admin/products/detail', prodDet({ id: 'p8', sku: null, name: 'Bare product', category: null, description: null, spec: {}, supplier_id: null, suppliers: null, unit_cost: null, moq: null, hs_code: null, unit_weight_kg: null, carton_qty: null, carton_cbm: null, carton_weight_kg: null }, { quotes: [], docs: [], items: [], pos: [] })],
+  'admin/products/detail#service': ['admin/products/detail', prodDet({ id: 'p9', name: 'Customer package (only delivery)', spec: { Type: 'Service', Scope: 'Door to door' }, carton_qty: null, carton_cbm: null, carton_weight_kg: null }, { quotes: [], docs: [], items: [], pos: [] })],
+  'admin/products/detail#photos': ['admin/products/detail', prodDet({}, { docs: [
+    { id: 'ph-land', entity_type: 'product', entity_id: 'p1', kind: 'product_photo', title: 'landscape.png', mime_type: 'image/png', client_visible: true, created_at: d(-9) },
+    { id: 'ph-port', entity_type: 'product', entity_id: 'p1', kind: 'product_photo', title: 'portrait.png', mime_type: 'image/png', client_visible: true, created_at: d(-8) },
+    { id: 'ph-sq', entity_type: 'product', entity_id: 'p1', kind: 'product_photo', title: 'square.png', mime_type: 'image/png', client_visible: false, created_at: d(-7) },
+    { id: 'ph-bad', entity_type: 'product', entity_id: 'p1', kind: 'product_photo', title: 'missing-in-storage.jpg', mime_type: 'image/jpeg', client_visible: true, created_at: d(-6) },
+    { id: 'ph-noext', entity_type: 'product', entity_id: 'p1', kind: 'product_photo', title: 'camera.jpeg', storage_path: 'product/p1/x.jpeg', mime_type: null, client_visible: true, created_at: d(-5) },
+    { id: 'doc3', entity_type: 'product', entity_id: 'p1', kind: 'certificate', title: 'CE-certificate.pdf', mime_type: 'application/pdf', client_visible: true, created_at: d(-4) } ] })],
+  'admin/products/detail#onephoto': ['admin/products/detail', prodDet({}, { docs: [{ id: 'ph-land', entity_type: 'product', entity_id: 'p1', kind: 'product_photo', title: 'landscape.png', mime_type: 'image/png', client_visible: true, created_at: d(-9) }] })],
+  'admin/products/detail#long': ['admin/products/detail', prodDet({ name: '12mm Steel wire rope with polymer core, LK-R 6x19 (1+6+6/6) — extra long technical product name that must wrap or truncate cleanly in the header', spec: { Power: '10 W', Incoterm: 'FOB', 'Production lead time (days)': '25', 'Quote valid until': '2026-12-31', 'Payment terms': '30% deposit', 'Units per 40HQ': '100000' }, cost_currency: 'GBP' })],
   'admin/sourcing/index': base(staffUser, '/admin/sourcing', { clientFilter: null, title: 'Sourcing', requests, pendingIds: ['r1'], poIds: [], waiting: 1, waitBy: { new: 1 }, byStatus: { new: 2, reviewing: 3, quoted: 1, accepted: 9 }, statuses: ['new', 'reviewing', 'quoted', 'accepted', 'declined', 'cancelled'], status: 'open' }),
   'admin/sourcing/detail': base(staffUser, '/admin/sourcing/r1', { pos: [{ id: 'po1', po_no: 'PO-2610-0412', status: 'submitted', submitted_at: d(-1), lines: poLines, currency: 'USD', order_id: null }], title: request.ref, request: { ...request, organizations: org, creator: { full_name: 'Tom Baker' } }, quotes: [{ ...quote, products: { id: 'p1', name: prod.name }, suppliers: { id: 's1', name: sup.name } }, { ...quote, id: 'q2', status: 'accepted', margin_pct: 18, ai_check: null, products: null, suppliers: null }], docs: rDocs, items: rItems, pending: pendingRev, pendingDiff: diff(snapshot(request, rItems), pendingRev.data), pendingDocs: [{ id: 'rd9', title: 'organiser.jpg', mime_type: 'image/jpeg' }], events, staff: [staffUser], orders: [], statuses: ['new', 'reviewing', 'quoted', 'accepted', 'declined', 'cancelled'] }),
   'admin/orders/index': base(staffUser, '/admin/orders', { title: 'Orders', orders: ordersList, totals: { goods: 31550, profit: 6280, mixed: true }, byStatus: { in_production: 4, qc: 1, in_transit: 2, delivered: 12 }, statuses: ORDER_STATUSES, status: 'open', clients: [org] }),
