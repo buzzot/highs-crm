@@ -6,9 +6,9 @@ export const RECORD_TYPES = [['', 'Physical product'], ['Sample', 'Sample'], ['P
 export const NON_PHYSICAL = /^(service|services|freight|freight item|shipping)$/i;
 export const INCOTERMS = ['EXW', 'FCA', 'FOB', 'CIF', 'CFR', 'DAP', 'DDP'];
 export const CURRENCIES = ['CNY', 'USD', 'EUR'];
-// the same lists the RFQ answer form offers ("Price is per" / "Package type"), so a product and a supplier's answer speak the same words
-export const UNITS = ['pcs', 'sets', 'pairs', 'm', 'm²', 'kg', 'tons', 'litres', 'rolls', 'boxes', 'cartons', 'bags', 'drums'];
-export const PACKAGE_TYPES = ['Carton', 'Pallet', 'Bag', 'Roll', 'Drum / reel', 'Wooden case', 'Box', 'Bundle', 'Bucket', 'Loose / bulk', 'Other'];
+// like the RFQ answer form's "Price is per" / "Package type" lists, without Box / boxes (a box is a carton here) and with Roll / Drum merged into Reel. A stored value outside the list is still shown and kept.
+export const UNITS = ['pcs', 'sets', 'pairs', 'm', 'm²', 'kg', 'tons', 'litres', 'reels', 'cartons', 'bags'];
+export const PACKAGE_TYPES = ['Carton', 'Pallet', 'Bag', 'Reel', 'Wooden case', 'Other'];
 const UNIT_KEY = /^(sold per|unit of measure|uom)$/i, PKG_KEY = /^(package|packaging) type$/i;
 const find = k => SOURCING.find(x => x[0] === k)[1];
 const RES = { incoterm: find('incoterm'), lead: find('lead'), valid: find('valid') };

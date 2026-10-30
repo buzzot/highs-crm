@@ -213,11 +213,12 @@ test('specifications: one Add attribute button, plain empty state', () => {
 
 test('Sold per and Package type are stored in the spec, read back, and stay optional', async () => {
   const { buildSpec, specParts, UNITS, PACKAGE_TYPES } = await import('../src/lib/product-form.js');
-  assert.ok(UNITS.includes('m') && PACKAGE_TYPES.includes('Drum / reel'));
-  const spec = buildSpec({ record_type: '', sold_per: 'm', package_type: 'Drum / reel', spec_k: ['Diameter'], spec_v: ['12 mm'] }, {});
-  assert.equal(spec['Sold per'], 'm'); assert.equal(spec['Package type'], 'Drum / reel'); assert.equal(spec.Diameter, '12 mm');
+  assert.ok(UNITS.includes('m') && PACKAGE_TYPES.includes('Reel') && !PACKAGE_TYPES.includes('Roll') && !['Bucket', 'Bundle', 'Loose / bulk'].some(x => PACKAGE_TYPES.includes(x)) && !PACKAGE_TYPES.includes('Drum / reel'));
+  assert.ok(!PACKAGE_TYPES.includes('Box') && !UNITS.includes('boxes') && PACKAGE_TYPES.includes('Carton') && UNITS.includes('cartons'));
+  const spec = buildSpec({ record_type: '', sold_per: 'm', package_type: 'Reel', spec_k: ['Diameter'], spec_v: ['12 mm'] }, {});
+  assert.equal(spec['Sold per'], 'm'); assert.equal(spec['Package type'], 'Reel'); assert.equal(spec.Diameter, '12 mm');
   const back = specParts(spec);
-  assert.equal(back.unit.value, 'm'); assert.equal(back.pkg.value, 'Drum / reel'); assert.deepEqual(back.rows, [['Diameter', '12 mm']]);
+  assert.equal(back.unit.value, 'm'); assert.equal(back.pkg.value, 'Reel'); assert.deepEqual(back.rows, [['Diameter', '12 mm']]);
   assert.deepEqual(buildSpec({ record_type: '' }, {}), {});                                         // empty = nothing stored
   assert.equal(buildSpec({ record_type: 'Service', package_type: 'Pallet', sold_per: 'sets' }, {})['Package type'], undefined);   // no package for a service
   assert.equal(buildSpec({ sold_per: 'kg', spec_k: ['Sold per'], spec_v: ['pcs'] }, {})['Sold per'], 'kg');           // an old row cannot override the selector
@@ -227,9 +228,9 @@ test('Sold per and Package type are stored in the spec, read back, and stay opti
 test('edit form: Sold per and Package type selectors, with labels that follow them', () => {
   const base = pages['admin/products/form#edit'] || pages['admin/products/form'];
   const loc = Array.isArray(base) ? base[1] : base;
-  const html = render('src/views/admin/products/form.ejs', { ...loc, units: ['pcs', 'm', 'kg'], packageTypes: ['Carton', 'Roll', 'Pallet'], f: { ...(loc.f || {}), unit: 'm', pkg: 'Roll', rows: (loc.f || {}).rows || [] } });
+  const html = render('src/views/admin/products/form.ejs', { ...loc, units: ['pcs', 'm', 'kg'], packageTypes: ['Carton', 'Reel', 'Pallet'], f: { ...(loc.f || {}), unit: 'm', pkg: 'Reel', rows: (loc.f || {}).rows || [] } });
   assert.match(html, /name="sold_per"[\s\S]*?<option selected>m<\/option>/);
-  assert.match(html, /name="package_type"[\s\S]*?<option selected>Roll<\/option>/);
-  assert.match(html, /<span id="qtyPerLbl">m<\/span> \/ <span id="pkgLbl">roll<\/span>/);
+  assert.match(html, /name="package_type"[\s\S]*?<option selected>Reel<\/option>/);
+  assert.match(html, /<span id="qtyPerLbl">m<\/span> \/ <span id="pkgLbl">reel<\/span>/);
   assert.match(html, /MOQ <span class="pe-unit" data-unit>m<\/span>/);
 });
