@@ -2,7 +2,7 @@
 
 // Specification keys that really belong to sourcing (they are written into `spec` when a supplier submits a product).
 // They are shown on the Sourcing & Costing tab instead of the technical specification table.
-const SOURCING = [
+export const SOURCING = [
   ['incoterm', /^incoterm$/i, 'Price basis'],
   ['port', /^fob port( \/ delivery point)?$/i, 'Port / delivery point'],
   ['payment', /^payment terms$/i, 'Payment terms'],
@@ -10,7 +10,7 @@ const SOURCING = [
   ['sample', /^sample lead time( \(days\))?$/i, 'Sample lead time'],
   ['valid', /^quote valid until$/i, 'Quote valid until'],
 ];
-const TYPE_KEY = /^(product )?(type|kind)$/i;
+export const TYPE_KEY = /^(product )?(type|kind)$/i;
 const PACK_KEYS = [/^inner pack/i, /^carton net weight/i, /^units per (20|40)/i];
 
 /** Splits the free-form specification into sourcing facts, packing extras and the technical rows. */
@@ -92,5 +92,9 @@ export function requestRows(quotes = []) {
 const IMG_EXT = /\.(jpe?g|png|gif|webp|avif|bmp)$/i;
 /** An attachment is an image by its stored type — or, when the type was not saved, by its file name. */
 export const isImageDoc = d => !!d && ((d.mime_type || '').startsWith('image/') || (!d.mime_type && (IMG_EXT.test(d.storage_path || '') || IMG_EXT.test(d.title || ''))));
-/** Product photos, oldest first. The first one is the primary image (the same one the products list shows). */
-export const productPhotos = (docs = []) => docs.filter(d => d.kind === 'product_photo' && isImageDoc(d)).slice().sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+/** Product photos: the chosen primary first (when the product has one), then the rest oldest first. */
+export function productPhotos(docs = [], primaryId = null) {
+  const all = docs.filter(d => d.kind === 'product_photo' && isImageDoc(d)).slice().sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+  const i = primaryId ? all.findIndex(d => d.id === primaryId) : -1;
+  return i > 0 ? [all[i], ...all.slice(0, i), ...all.slice(i + 1)] : all;       // a chosen primary goes first; otherwise the first uploaded is the primary
+}

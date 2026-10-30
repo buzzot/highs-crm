@@ -10,6 +10,7 @@ import { cargoLine, cargoTotals } from '../src/lib/cargo.js';
 import { fmt } from '../src/lib/format.js';
 import { buildSuppliers } from '../src/lib/suppliers.js';
 import { purchasingRows } from '../src/lib/supplier-detail.js';
+import { specParts, recordTypeOf, postedRows, validateProduct, cbmDiffers, cbmFromSize, RECORD_TYPES, INCOTERMS as PF_INCOTERMS, CURRENCIES as PF_CURRENCIES } from '../src/lib/product-form.js';
 import { productPhotos as photosOf, splitSpec, physicalFacts, quoteRows, poRows, orderRows, requestRows } from '../src/lib/product-detail.js';
 import { fxToUsdStrict } from '../src/lib/product-metrics.js';
 import { filterProducts, paginate, SORT_DEFS } from '../src/lib/product-list.js';
@@ -247,6 +248,17 @@ export function prodDet(pr = {}, over = {}) {
     pos: poRows(over.pos ?? [{ id: 'po1', ref: 'SPO-2610-0001', status: 'sent', currency: 'CNY', created_at: d(-1), supplier_id: 's1', suppliers: { name: sup.name }, orders: { order_no: 'HB-2610-1001' }, lines: [{ product_id: 'p1', quantity: 2000, unit_price: 38.5 }, { product_id: 'p9', quantity: 5, unit_price: 1 }] }], 'p1'), canDelete: true, ...over.locals });
 }
 
+// the Edit product form, built like the route builds it
+export function prodForm(pr = {}, over = {}) {
+  const p = { ...prod, id: 'p1', spec: { Power: '10 W', Material: 'Aluminium', Incoterm: 'FOB', 'Production lead time (days)': '30', 'Quote valid until': '2026-12-31' }, ...pr };
+  const was = specParts(p.spec), b = over.body || null;
+  const f = b ? { type: b.record_type ?? '', incoterm: b.src_incoterm ?? '', lead: b.src_lead ?? '', valid: b.src_valid ?? '', rows: postedRows(b) } : { type: recordTypeOf(p.spec), incoterm: was.incoterm.value, lead: was.lead.value, valid: was.valid.value, rows: was.rows };
+  const errors = over.errors ?? (b ? validateProduct(b, p.spec) : {});
+  return base(staffUser, '/admin/products/' + p.id + '/edit', { title: over.title || 'Edit product', p: b ? { ...p, ...b } : p, f, errors, error: Object.keys(errors).length ? 'Some fields need attention — they are marked below. Nothing was saved.' : null, suppliers: lists.suppliers,
+    photos: over.photos ?? [{ id: 'ph-land', title: 'front.jpg' }, { id: 'ph-port', title: 'box.jpg' }, { id: 'ph-bad', title: 'gone.jpg' }], aiOn: over.aiOn ?? true, hasPrimary: over.hasPrimary ?? true,
+    keepCbm: b ? b.keep_cbm === 'on' : cbmDiffers(p.carton_cbm, cbmFromSize(p.carton_length_cm, p.carton_width_cm, p.carton_height_cm)), recordTypes: RECORD_TYPES, incoterms: PF_INCOTERMS, currencies: PF_CURRENCIES });
+}
+
 export const pages = {
   // ---- admin ----
   'admin/dashboard': base(staffUser, '/admin', dashFx('normal')),
@@ -281,6 +293,12 @@ export const pages = {
     ai: { summary: 'The lamp lands cheaper per unit and ships more efficiently.', recommended_id: prod.id, model: 'claude-haiku-5-5', usage: { model: 'claude-haiku-5-5', input: 3900, output: 284, cacheRead: 0, cacheWrite: 0, total: 4184 }, risks: ['Tumbler supplier has no export rights.'], questions: ['Confirm carton weight for the tumbler.'],
       ranking: [{ id: prod.id, score: 82, verdict: 'Best value', pros: ['Lowest landed cost'], cons: ['Higher MOQ'] }, { id: prod2.id, score: 64, verdict: 'OK', pros: ['Low price'], cons: ['Missing data'] }] } }),
   'admin/products/form': base(staffUser, '/admin/products/new', { aiOn: true, title: 'New product', p: { cost_currency: 'CNY' }, specText: '', suppliers: lists.suppliers, photos: [{ id: 'doc1', title: 'front.jpg' }, { id: 'doc2', title: 'box.jpg' }], error: null }),
+  'admin/products/form#edit': ['admin/products/form', prodForm()],
+  'admin/products/form#nophotos': ['admin/products/form', prodForm({}, { photos: [], aiOn: false, hasPrimary: false })],
+  'admin/products/form#service': ['admin/products/form', prodForm({ spec: { Type: 'Service', Scope: 'Door to door' }, carton_qty: 12, carton_length_cm: 50, carton_width_cm: 40, carton_height_cm: 30, carton_cbm: 0.06 })],
+  'admin/products/form#cbm': ['admin/products/form', prodForm({ carton_length_cm: 50, carton_width_cm: 40, carton_height_cm: 30, carton_cbm: 0.2, carton_qty: 20 })],
+  'admin/products/form#errors': ['admin/products/form', prodForm({}, { body: { name: '', sku: 'BW-1', unit_cost: '-5', moq: '1.5', hs_code: 'abc', record_type: '', src_incoterm: 'FOB', src_lead: 'soon', src_valid: '', cost_currency: 'CNY', spec_k: ['Power', 'bad:key'], spec_v: ['10 W', 'x'], carton_length_cm: '50', carton_width_cm: '40', carton_height_cm: '30', carton_cbm: '0.2', keep_cbm: 'on' } })],
+  'admin/products/form#long': ['admin/products/form', prodForm({ name: '12mm Steel wire rope with polymer core, LK-R 6x19 (1+6+6/6) — extra long technical product name that must wrap cleanly in the page header and the form', spec: Object.fromEntries(Array.from({ length: 14 }, (_, k) => ['Attribute number ' + (k + 1), 'A rather long attribute value to make sure rows wrap and never overflow the page ' + k])) })],
   'admin/products/detail': prodDet(),
   'admin/products/detail#sparse': ['admin/products/detail', prodDet({ id: 'p8', sku: null, name: 'Bare product', category: null, description: null, spec: {}, supplier_id: null, suppliers: null, unit_cost: null, moq: null, hs_code: null, unit_weight_kg: null, carton_qty: null, carton_cbm: null, carton_weight_kg: null }, { quotes: [], docs: [], items: [], pos: [] })],
   'admin/products/detail#service': ['admin/products/detail', prodDet({ id: 'p9', name: 'Customer package (only delivery)', spec: { Type: 'Service', Scope: 'Door to door' }, carton_qty: null, carton_cbm: null, carton_weight_kg: null }, { quotes: [], docs: [], items: [], pos: [] })],

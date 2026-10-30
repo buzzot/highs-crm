@@ -1,69 +1,136 @@
 <%- include('../../partials/head') %>
-<div class="card narrow-md">
+<%
+  const E = typeof errors !== 'undefined' && errors ? errors : {};
+  const F = typeof f !== 'undefined' && f ? f : { type: '', incoterm: '', lead: '', valid: '', rows: [] };
+  const RT = typeof recordTypes !== 'undefined' ? recordTypes : [['', 'Physical product'], ['Sample', 'Sample'], ['Packaging', 'Packaging'], ['Service', 'Service'], ['Freight', 'Freight item']];
+  const INC = typeof incoterms !== 'undefined' ? incoterms : ['EXW', 'FCA', 'FOB', 'CIF', 'CFR', 'DAP', 'DDP'];
+  const CUR = typeof currencies !== 'undefined' ? currencies : ['CNY', 'USD', 'EUR'];
+  const AI = typeof aiOn !== 'undefined' && aiOn;
+  const HASP = typeof hasPrimary !== 'undefined' && hasPrimary;
+  const KEEP = typeof keepCbm !== 'undefined' && keepCbm;
+  const PH = typeof photos !== 'undefined' ? photos : [];
+  const mainId = (p.primary_photo_id && PH.some(x => x.id === p.primary_photo_id)) ? p.primary_photo_id : (PH[0] && PH[0].id);
+  const v = k => (p[k] ?? '');
+  const isNew = !p.id;
+  const typeOpts = RT.some(([x]) => x === F.type) ? RT : [...RT, [F.type, F.type]];
+  const off = /^(service|services|freight|freight item|shipping)$/i.test(F.type || '');
+  const incOpts = !F.incoterm || INC.includes(String(F.incoterm).toUpperCase()) ? INC : [...INC, F.incoterm];
+  const curOpts = CUR.includes(p.cost_currency || 'CNY') ? CUR : [...CUR, p.cost_currency];
+  const isoDate = /^\d{4}-\d{2}-\d{2}$/.test(F.valid || '');
+  const nErr = Object.keys(E).length;
+%>
+<div class="pe">
   <a class="back" href="<%= p.id ? '/admin/products/' + p.id : '/admin/products' %>">← Back</a>
-  <h1><%= title %></h1>
-  <% if (error) { %><div class="alert err"><%= error %></div><% } %>
-  <form method="post" action="<%= p.id ? '/admin/products/' + p.id : '/admin/products' %>" enctype="multipart/form-data">
-    <div class="row">
-      <label class="grow2">Name <input name="name" required value="<%= p.name || '' %>"></label>
-      <label>Our SKU <input name="sku" value="<%= p.sku || '' %>"></label>
-      <label>Supplier SKU <input name="supplier_sku" value="<%= p.supplier_sku || '' %>"></label>
-      <label>Category <input name="category" value="<%= p.category || '' %>"></label>
+  <div class="pe-head">
+    <h1><%= title %></h1>
+    <% if (p.id && p.name) { %><span class="muted pe-sub" title="<%= p.name %>"><%= p.name %></span><% } %>
+  </div>
+  <nav class="pe-nav" aria-label="Sections">
+    <a href="#sec-basic">Basic information</a><a href="#sec-photos">Photos &amp; AI</a><a href="#sec-spec">Specifications</a><a href="#sec-supply">Supplier &amp; pricing</a><a href="#sec-pack">Dimensions &amp; packing</a><a href="#sec-customs">Customs</a>
+  </nav>
+  <% if (error) { %><div class="alert err" role="alert"><%= error %></div><% } %>
+
+  <form method="post" id="pform" action="<%= p.id ? '/admin/products/' + p.id : '/admin/products' %>" enctype="multipart/form-data" novalidate>
+
+  <%# ---------------- 1. Basic information ---------------- %>
+  <section class="pe-card" id="sec-basic">
+    <h2>Basic information</h2>
+    <p class="pe-note">The product itself — the same whichever supplier makes it.</p>
+    <div class="pe-grid">
+      <label class="s2">Product name <span class="req" title="Required">*</span>
+        <input name="name" required maxlength="300" value="<%= v('name') %>" aria-invalid="<%= E.name ? 'true' : 'false' %>"><% if (E.name) { %><small class="pe-err" role="alert"><%= E.name %></small><% } %></label>
+      <label>Our SKU
+        <input name="sku" maxlength="100" value="<%= v('sku') %>"><% if (E.sku) { %><small class="pe-err" role="alert"><%= E.sku %></small><% } %></label>
+      <label>Category
+        <input name="category" maxlength="100" value="<%= v('category') %>"><% if (E.category) { %><small class="pe-err" role="alert"><%= E.category %></small><% } %></label>
+      <label>Record type
+        <select name="record_type" id="recType"><% typeOpts.forEach(([val, label]) => { %><option value="<%= val %>" <%= F.type === val ? 'selected' : '' %>><%= label %></option><% }) %></select></label>
+      <p class="pe-help s3">Service and freight records skip carton and container costing. Samples and packaging are treated as physical items.</p>
+      <label class="s4">Description
+        <textarea name="description" rows="3" maxlength="5000"><%= v('description') %></textarea><% if (E.description) { %><small class="pe-err" role="alert"><%= E.description %></small><% } %></label>
     </div>
-    <label>Description <textarea name="description" rows="3"><%= p.description || '' %></textarea></label>
-    <h3>Photos</h3>
-    <% if (photos.length) { %>
-    <div class="pgrid">
-      <% photos.forEach((ph, k) => { %>
-        <label class="pthumb" title="<%= ph.title %>">
-          <img src="/admin/documents/<%= ph.id %>/download" alt="" loading="lazy">
-          <% if (k === 0) { %><span class="pmain">Main</span><% } %>
-          <span class="prm"><input type="checkbox" name="remove_photo" value="<%= ph.id %>"> remove</span>
-        </label>
-      <% }) %>
-    </div>
-    <% } %>
-    <div class="photodrop" id="photoDrop" tabindex="0">
-      <input type="file" name="photos" id="photoInput" multiple accept="image/jpeg,image/png,image/webp,image/gif<%= typeof aiOn !== 'undefined' && aiOn ? ',application/pdf' : '' %>">
-      <span class="dicon">🖼</span>
-      <strong>Drag photos<%= typeof aiOn !== 'undefined' && aiOn ? ' or a PDF' : '' %> here, click to choose, or paste (Ctrl/⌘ V)</strong>
-      <span class="muted small">JPG, PNG, WebP or GIF · up to 12 photos, 10 MB each<%= photos.length ? '' : ' · the first photo becomes the main one' %><%= typeof aiOn !== 'undefined' && aiOn ? ' · a PDF (catalogue page, datasheet) is only read by the AI scan, not saved' : '' %></span>
-    </div>
-    <div class="pgrid" id="photoPreview"></div>
-    <% if (typeof aiOn !== 'undefined' && aiOn) { %>
-    <div class="aiscan" id="aiScan">
-      <div class="aiscan-head">
-        <div><strong>✨ AI scan</strong> <span class="muted small">reads the files you added above and suggests name, model no., specs, size, weight, price… — you approve before anything is filled in.</span></div>
-        <div class="aiscan-actions"><button type="button" class="btn small primary" id="aiRun" disabled>Scan with AI</button></div>
+  </section>
+
+  <%# ---------------- 2. Photos & AI import ---------------- %>
+  <section class="pe-card" id="sec-photos">
+    <div class="pe-h"><h2>Photos &amp; AI import <span class="cnt" id="phCount"><%= PH.length %></span></h2>
+      <div class="pe-tools">
+        <button type="button" class="btn small" id="phAdd">+ Add photos</button>
+        <% if (AI) { %><button type="button" class="btn small ghost" id="aiRun" disabled title="Reads the photos or PDFs you added and suggests values — you review them first">✨ Scan with AI</button><% } %>
       </div>
+    </div>
+    <input type="file" name="photos" id="photoInput" multiple hidden accept="image/jpeg,image/png,image/webp,image/gif<%= AI ? ',application/pdf' : '' %>">
+    <div class="pe-gal" id="photoDrop" tabindex="0" aria-label="Product photos. Drop images here or paste from the clipboard.">
+      <% PH.forEach((ph) => { %>
+        <figure class="pe-ph" data-id="<%= ph.id %>">
+          <button type="button" class="pe-pimg" data-preview="/admin/documents/<%= ph.id %>/download" data-title="<%= ph.title || '' %>" aria-label="Preview <%= ph.title || 'photo' %>"><img src="/admin/documents/<%= ph.id %>/download" alt="<%= ph.title || '' %>" loading="lazy" data-pimg></button>
+          <% if (ph.id === mainId) { %><span class="pe-main-tag">Main</span><% } %>
+          <figcaption>
+            <% if (HASP) { %><label class="pe-radio" title="Use as the main photo"><input type="radio" name="primary_photo_id" value="<%= ph.id %>" <%= ph.id === mainId ? 'checked' : '' %>> Main</label><% } %>
+            <label class="pe-rm" title="Remove when you save"><input type="checkbox" name="remove_photo" value="<%= ph.id %>"> Remove</label>
+          </figcaption>
+        </figure>
+      <% }) %>
+      <div id="photoPreview" class="pe-newwrap" style="display:contents"></div>
+      <div class="pe-empty" id="phEmpty" <%= PH.length ? 'hidden' : '' %>>No photos yet. <button type="button" class="linkbtn" id="phAdd2">Add photos</button>, drag them here, or paste an image (Ctrl/⌘ V).</div>
+    </div>
+    <p class="pe-help">JPG, PNG, WebP or GIF · up to 12 photos at a time, 10 MB each<%= AI ? ' · a PDF (catalogue page, datasheet) is only read by the AI scan, it is not saved' : '' %>.<%= HASP ? '' : ' The first photo uploaded is the main one.' %></p>
+    <% if (AI) { %>
+    <div class="pe-ai" id="aiScan">
       <div class="aiscan-msg" id="aiMsg" hidden></div>
       <div class="aiscan-review" id="aiReview" hidden>
-        <p class="small"><strong>Review the suggestions.</strong> Tick what you want to use, then press “Use selected”. <span class="muted">Nothing is saved until you press Save below.</span></p>
-        <table class="tbl compact"><thead><tr><th></th><th>Field</th><th>Now in the form</th><th>AI suggests</th></tr></thead><tbody id="aiRows"></tbody></table>
+        <p class="small"><strong>Review the suggestions.</strong> Fields that are already filled are not ticked — tick one only if you want it replaced. <span class="muted">Nothing is saved until you press Save.</span></p>
+        <div class="tblwrap"><table class="tbl compact"><thead><tr><th></th><th>Field</th><th>Now in the form</th><th>AI suggests</th></tr></thead><tbody id="aiRows"></tbody></table></div>
         <ul class="aiwarn small" id="aiWarn"></ul>
         <div class="actions"><button type="button" class="btn small primary" id="aiApply">Use selected</button><button type="button" class="btn small" id="aiCancel">Discard</button><span class="muted small" id="aiTok"></span></div>
       </div>
     </div>
     <% } %>
+  </section>
 
-    <label>Specifications <span class="muted small">— one per line, "Key: value"</span>
-      <textarea name="spec" rows="4" placeholder="Material: 304 stainless steel&#10;Capacity: 500 ml&#10;Colour: matte black"><%= specText || '' %></textarea>
-      <span class="muted small">For a service or freight item add the line <code>Type: Service</code> — it is then left out of carton and container costing.</span></label>
-    <h3>Supply</h3>
-    <div class="row">
-      <label class="grow2">Supplier <select data-picker name="supplier_id"><option value="">—</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= p.supplier_id === s.id ? 'selected' : '' %>><%= s.name %></option><% }) %><option value="__new">+ Add new supplier…</option></select></label>
-      <label>Unit cost <input type="number" step="0.0001" name="unit_cost" value="<%= p.unit_cost ?? '' %>"></label>
-      <label>Currency <select name="cost_currency"><% ['CNY','USD','EUR'].forEach(c => { %><option <%= (p.cost_currency || 'CNY') === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
-      <label>MOQ <input type="number" name="moq" value="<%= p.moq ?? '' %>"></label>
+  <%# ---------------- 3. Technical specifications ---------------- %>
+  <section class="pe-card" id="sec-spec">
+    <div class="pe-h"><h2>Technical specifications <span class="cnt" id="specCount"><%= F.rows.length %></span></h2>
+      <div class="pe-tools"><button type="button" class="btn small" id="specAdd">+ Add attribute</button></div></div>
+    <p class="pe-note">One attribute per row, such as <i>Power</i> → <i>10 W</i>. Paste a list of “Key: value” lines into a name field to turn it into rows.</p>
+    <div id="specRows" class="pe-spec">
+      <% F.rows.forEach(([k, val]) => { %>
+        <div class="pe-sr"><input name="spec_k" value="<%= k %>" placeholder="Attribute" maxlength="80" aria-label="Attribute name"><input name="spec_v" value="<%= val %>" placeholder="Value" aria-label="Attribute value"><button type="button" class="iconbtn" data-rm title="Remove this attribute" aria-label="Remove this attribute">×</button></div>
+      <% }) %>
+    </div>
+    <p class="pe-empty-s muted small" id="specEmpty" <%= F.rows.length ? 'hidden' : '' %>>No specifications yet.</p>
+    <% if (E.spec) { %><small class="pe-err" role="alert"><%= E.spec %></small><% } %>
+  </section>
+
+  <%# ---------------- 4. Supplier & pricing ---------------- %>
+  <section class="pe-card" id="sec-supply">
+    <h2>Supplier &amp; pricing</h2>
+    <p class="pe-note">What this supplier charges and promises. Changing it here does not change quotations or purchase orders already made — they keep the price they were created with.</p>
+    <div class="pe-grid">
+      <label class="s2">Supplier
+        <select data-picker name="supplier_id"><option value="">—</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= p.supplier_id === s.id ? 'selected' : '' %>><%= s.name %></option><% }) %><option value="__new">+ Add new supplier…</option></select></label>
+      <label>Supplier SKU <span class="pe-tag">supplier</span>
+        <input name="supplier_sku" maxlength="100" value="<%= v('supplier_sku') %>"><% if (E.supplier_sku) { %><small class="pe-err" role="alert"><%= E.supplier_sku %></small><% } %></label>
+      <label>MOQ <span class="pe-tag">pcs</span>
+        <input type="number" min="0" step="1" inputmode="numeric" name="moq" value="<%= v('moq') %>"><% if (E.moq) { %><small class="pe-err" role="alert"><%= E.moq %></small><% } %></label>
+      <label>Unit cost
+        <input type="number" min="0" step="0.0001" inputmode="decimal" name="unit_cost" value="<%= v('unit_cost') %>"><% if (E.unit_cost) { %><small class="pe-err" role="alert"><%= E.unit_cost %></small><% } %></label>
+      <label>Currency
+        <select name="cost_currency"><% curOpts.forEach(c => { %><option <%= (p.cost_currency || 'CNY') === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
+      <label>Price basis
+        <select name="src_incoterm"><option value="">Not recorded</option><% incOpts.forEach(c => { %><option <%= String(F.incoterm).toUpperCase() === c.toUpperCase() ? 'selected' : '' %>><%= c %></option><% }) %></select>
+        <% if (E.src_incoterm) { %><small class="pe-err" role="alert"><%= E.src_incoterm %></small><% } %></label>
+      <label>Production lead time <span class="pe-tag">days</span>
+        <input name="src_lead" inputmode="numeric" maxlength="12" value="<%= F.lead %>" placeholder="e.g. 30"><% if (E.src_lead) { %><small class="pe-err" role="alert"><%= E.src_lead %></small><% } %></label>
+      <label>Quotation valid until
+        <input name="src_valid" <%= isoDate || !F.valid ? 'type=date' : 'type=text' %> value="<%= F.valid %>"><% if (E.src_valid) { %><small class="pe-err" role="alert"><%= E.src_valid %></small><% } %></label>
     </div>
     <div class="newsup" id="newSup" hidden>
       <strong>New supplier</strong> <span class="muted small">— just the basics; complete the rest later on the supplier page</span>
-      <div class="row">
-        <label class="grow2">Company name <input id="ns_name" maxlength="200"></label>
+      <div class="pe-grid">
+        <label class="s2">Company name <input id="ns_name" maxlength="200"></label>
         <label>Contact person <input id="ns_contact"></label>
         <label>City <input id="ns_city"></label>
-      </div>
-      <div class="row">
         <label>Email <input type="email" id="ns_email"></label>
         <label>Phone <input id="ns_phone"></label>
         <label>WeChat <input id="ns_wechat"></label>
@@ -71,152 +138,252 @@
       <div class="aiscan-msg err" id="ns_err" hidden></div>
       <div class="actions"><button type="button" class="btn small primary" id="ns_save">Add supplier</button><button type="button" class="btn small" id="ns_cancel">Cancel</button></div>
     </div>
-    <h3>Customs</h3>
-    <div class="row">
-      <label>HS code <input name="hs_code" value="<%= p.hs_code || '' %>" placeholder="9617.00"></label>
+  </section>
+
+  <%# ---------------- 5. Dimensions & packing ---------------- %>
+  <section class="pe-card" id="sec-pack">
+    <h2>Dimensions &amp; packing</h2>
+    <p class="pe-note" id="packOff" <%= off ? '' : 'hidden' %>>This is a <%= (F.type || 'non-physical').toLowerCase() %> record, so packing and carton volume are not used. Existing values are kept as they are.</p>
+    <div class="pe-two <%= off ? 'is-off' : '' %>" id="packWrap">
+      <div class="pe-sub">
+        <h3>Individual product <span class="muted small">one piece, with its inner packaging</span></h3>
+        <div class="pe-grid g4">
+          <label>Weight <span class="pe-tag">kg</span><input type="number" min="0" step="0.001" inputmode="decimal" name="unit_weight_kg" value="<%= v('unit_weight_kg') %>"><% if (E.unit_weight_kg) { %><small class="pe-err"><%= E.unit_weight_kg %></small><% } %></label>
+          <label>Length <span class="pe-tag">cm</span><input type="number" min="0" step="0.1" inputmode="decimal" name="unit_length_cm" value="<%= v('unit_length_cm') %>"></label>
+          <label>Width <span class="pe-tag">cm</span><input type="number" min="0" step="0.1" inputmode="decimal" name="unit_width_cm" value="<%= v('unit_width_cm') %>"></label>
+          <label>Height <span class="pe-tag">cm</span><input type="number" min="0" step="0.1" inputmode="decimal" name="unit_height_cm" value="<%= v('unit_height_cm') %>"></label>
+        </div>
+      </div>
+      <div class="pe-sub">
+        <h3>Export carton</h3>
+        <div class="pe-grid g3">
+          <label>Pieces per carton<input type="number" min="0" step="1" inputmode="numeric" name="carton_qty" value="<%= v('carton_qty') %>"><% if (E.carton_qty) { %><small class="pe-err"><%= E.carton_qty %></small><% } %></label>
+          <label>Gross weight <span class="pe-tag">kg</span><input type="number" min="0" step="0.01" inputmode="decimal" name="carton_weight_kg" value="<%= v('carton_weight_kg') %>"><% if (E.carton_weight_kg) { %><small class="pe-err"><%= E.carton_weight_kg %></small><% } %></label>
+          <span class="pe-gap"></span>
+          <label>Length <span class="pe-tag">cm</span><input type="number" min="0" step="0.1" inputmode="decimal" name="carton_length_cm" value="<%= v('carton_length_cm') %>"></label>
+          <label>Width <span class="pe-tag">cm</span><input type="number" min="0" step="0.1" inputmode="decimal" name="carton_width_cm" value="<%= v('carton_width_cm') %>"></label>
+          <label>Height <span class="pe-tag">cm</span><input type="number" min="0" step="0.1" inputmode="decimal" name="carton_height_cm" value="<%= v('carton_height_cm') %>"></label>
+          <label>CBM <span class="pe-tag" id="cbmTag">m³</span><input type="number" min="0" step="0.0001" inputmode="decimal" name="carton_cbm" id="cbmIn" value="<%= v('carton_cbm') %>" data-entered="<%= v('carton_cbm') %>"><% if (E.carton_cbm) { %><small class="pe-err"><%= E.carton_cbm %></small><% } %></label>
+        </div>
+        <p class="pe-help" id="cbmNote">CBM is calculated from the carton size when all three sides are filled in.</p>
+        <label class="check pe-keep" id="keepRow" hidden><input type="checkbox" name="keep_cbm" id="keepCbm" <%= KEEP ? 'checked' : '' %>> <span id="keepTxt">Keep the entered CBM</span></label>
+      </div>
     </div>
-    <h3>Unit (one piece incl. inner packaging)</h3>
-    <div class="row">
-      <label>Weight kg <input type="number" step="0.001" name="unit_weight_kg" value="<%= p.unit_weight_kg ?? '' %>"></label>
-      <label>Length cm <input type="number" step="0.1" name="unit_length_cm" value="<%= p.unit_length_cm ?? '' %>"></label>
-      <label>Width cm <input type="number" step="0.1" name="unit_width_cm" value="<%= p.unit_width_cm ?? '' %>"></label>
-      <label>Height cm <input type="number" step="0.1" name="unit_height_cm" value="<%= p.unit_height_cm ?? '' %>"></label>
+  </section>
+
+  <%# ---------------- 6. Customs & classification ---------------- %>
+  <section class="pe-card" id="sec-customs">
+    <h2>Customs &amp; classification</h2>
+    <div class="pe-grid">
+      <label class="pe-hs">HS code
+        <input name="hs_code" maxlength="20" value="<%= v('hs_code') %>" placeholder="9617.00" inputmode="decimal"><% if (E.hs_code) { %><small class="pe-err" role="alert"><%= E.hs_code %></small><% } %></label>
+      <p class="pe-help s3">Saved exactly as entered, including a code given by the supplier. LumiTrade does not check it against an import tariff, so confirm the classification for the destination country before relying on it.</p>
     </div>
-    <h3>Export carton</h3>
-    <div class="row">
-      <label>Pcs / carton <input type="number" name="carton_qty" value="<%= p.carton_qty ?? '' %>"></label>
-      <label>Gross weight kg <input type="number" step="0.01" name="carton_weight_kg" value="<%= p.carton_weight_kg ?? '' %>"></label>
-      <label>Length cm <input type="number" step="0.1" name="carton_length_cm" value="<%= p.carton_length_cm ?? '' %>"></label>
-      <label>Width cm <input type="number" step="0.1" name="carton_width_cm" value="<%= p.carton_width_cm ?? '' %>"></label>
-      <label>Height cm <input type="number" step="0.1" name="carton_height_cm" value="<%= p.carton_height_cm ?? '' %>"></label>
-      <label>CBM <span class="muted small">auto from size</span><input type="number" step="0.0001" name="carton_cbm" value="<%= p.carton_cbm ?? '' %>"></label>
-    </div>
-    <div class="actions"><button class="btn primary">Save</button></div>
+  </section>
+
+  <div class="pe-foot" role="region" aria-label="Save">
+    <span class="pe-stat" id="peStat" aria-live="polite"><%= nErr ? nErr + ' field' + (nErr === 1 ? '' : 's') + ' need attention' : 'No changes' %></span>
+    <a class="btn" id="peCancel" href="<%= p.id ? '/admin/products/' + p.id : '/admin/products' %>">Cancel</a>
+    <button class="btn primary" id="peSave"><%= isNew ? 'Create product' : 'Save changes' %></button>
+  </div>
   </form>
 </div>
-<script>
-  // drag & drop / paste photos with previews; files are kept in the file input and uploaded on Save
-  (function () {
-    const drop = document.getElementById('photoDrop'), input = document.getElementById('photoInput'), prev = document.getElementById('photoPreview');
-    if (!drop) return;
-    const OK = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', ...(document.getElementById('aiScan') ? ['application/pdf'] : [])];
-    let files = [];
-    const sync = () => {
-      const dt = new DataTransfer(); files.forEach(f => dt.items.add(f)); input.files = dt.files;
-      prev.innerHTML = '';
-      files.forEach((f, i) => {
-        const card = document.createElement('div'); card.className = 'pthumb new';
-        const pdf = f.type === 'application/pdf';
-        const img = document.createElement(pdf ? 'div' : 'img');
-        if (pdf) { img.className = 'pdfthumb'; img.textContent = '📄'; card.title = f.name; } else { img.src = URL.createObjectURL(f); img.onload = () => URL.revokeObjectURL(img.src); }
-        const x = document.createElement('button'); x.type = 'button'; x.className = 'pdel'; x.title = 'Remove'; x.textContent = '×';
-        x.onclick = () => { files.splice(i, 1); sync(); };
-        const cap = document.createElement('span'); cap.className = 'pcap'; cap.textContent = pdf ? 'PDF · AI scan only' : (f.size / 1048576).toFixed(1) + ' MB';
-        if (f.size > 10 * 1048576) { card.classList.add('toobig'); cap.textContent = 'too large (max 10 MB)'; }
-        card.append(img, x, cap); prev.appendChild(card);
-      });
-      drop.classList.toggle('has', files.length > 0);
-      document.dispatchEvent(new CustomEvent('photofiles'));
-    };
-    window.__photoFiles = () => files;
-    const add = list => { for (const f of list) if (OK.includes(f.type) && files.length < 12) files.push(f); sync(); };
-    input.addEventListener('change', () => { const picked = [...input.files]; files = files.filter(f => !picked.includes(f)); add(picked); });
-    ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
-    ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
-    drop.addEventListener('drop', e => add(e.dataTransfer.files));
-    document.addEventListener('paste', e => { const imgs = [...(e.clipboardData?.files || [])].filter(f => OK.includes(f.type)); if (imgs.length) { e.preventDefault(); add(imgs); } });
-    drop.closest('form').addEventListener('submit', e => { if (files.some(f => f.size > 10 * 1048576)) { e.preventDefault(); alert('Remove photos larger than 10 MB first.'); } });
-  })();
-</script>
+
+<dialog class="pdd-lb" id="peLb" aria-label="Photo preview">
+  <div class="lbbar"><span class="lbcap" id="peLbCap"></span><button type="button" class="btn small" id="peLbX">Close ✕</button></div>
+  <div class="lbstage"><img id="peLbImg" alt=""><div class="lbfail" id="peLbFail" hidden>This photo could not be loaded.</div></div>
+</dialog>
 
 <script>
-  // AI scan: ask for suggestions, show them next to the current values, fill the form only for the ticked ones (nothing is saved here)
+(function () {
+  var form = document.getElementById('pform'), $ = function (id) { return document.getElementById(id); };
+  var MAX = 10 * 1048576, files = [];
+
+  // ---------- photos: gallery, add / drop / paste, preview, remove ----------
+  var input = $('photoInput'), drop = $('photoDrop'), prev = $('photoPreview'), empty = $('phEmpty');
+  var OK = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].concat($('aiScan') ? ['application/pdf'] : []);
+  function count() { var n = drop.querySelectorAll('.pe-ph').length; $('phCount').textContent = n; empty.hidden = n > 0; }
+  function sync() {
+    var dt = new DataTransfer(); files.forEach(function (f) { dt.items.add(f); }); input.files = dt.files;
+    prev.innerHTML = '';
+    files.forEach(function (f, i) {
+      var pdf = f.type === 'application/pdf', fig = document.createElement('figure'); fig.className = 'pe-ph new';
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'pe-pimg';
+      if (pdf) { b.classList.add('pdf'); b.textContent = 'PDF'; b.title = f.name; b.disabled = true; }
+      else { var im = document.createElement('img'); im.alt = f.name; im.src = URL.createObjectURL(f); im.onload = function () { /* keep the URL for the preview */ }; b.appendChild(im); b.dataset.preview = im.src; b.dataset.title = f.name; b.setAttribute('aria-label', 'Preview ' + f.name); }
+      var cap = document.createElement('figcaption'), tag = document.createElement('span'); tag.className = 'pe-newtag';
+      tag.textContent = pdf ? 'PDF · AI scan only' : (f.size > MAX ? 'Too large (max 10 MB)' : 'New · ' + (f.size / 1048576).toFixed(1) + ' MB'); if (f.size > MAX) fig.classList.add('toobig');
+      var x = document.createElement('button'); x.type = 'button'; x.className = 'iconbtn'; x.textContent = '×'; x.title = 'Remove'; x.setAttribute('aria-label', 'Remove ' + f.name); x.onclick = function () { files.splice(i, 1); sync(); };
+      cap.append(tag, x); fig.append(b, cap); prev.appendChild(fig);
+    });
+    drop.classList.toggle('has-new', files.length > 0);
+    $('phCount').textContent = drop.querySelectorAll('.pe-ph').length; empty.hidden = drop.querySelectorAll('.pe-ph').length > 0;
+    document.dispatchEvent(new CustomEvent('photofiles')); dirty();
+  }
+  window.__photoFiles = function () { return files; };
+  function add(list) { var skipped = 0; [].forEach.call(list, function (f) { if (OK.indexOf(f.type) >= 0 && files.length < 12) files.push(f); else skipped++; }); if (skipped) stat(skipped + ' file' + (skipped === 1 ? ' was' : 's were') + ' skipped (wrong type, or more than 12).'); sync(); }
+  $('phAdd').addEventListener('click', function () { input.click(); }); $('phAdd2').addEventListener('click', function () { input.click(); });
+  input.addEventListener('change', function () { var picked = [].slice.call(input.files); files = files.filter(function (f) { return picked.indexOf(f) < 0; }); add(picked); });
+  ['dragenter', 'dragover'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('over'); }); });
+  ['dragleave', 'drop'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('over'); }); });
+  drop.addEventListener('drop', function (e) { add(e.dataTransfer.files); });
+  document.addEventListener('paste', function (e) { var imgs = [].filter.call((e.clipboardData && e.clipboardData.files) || [], function (f) { return OK.indexOf(f.type) >= 0; }); if (imgs.length) { e.preventDefault(); add(imgs); } });
+  // a stored photo that cannot be loaded shows a neutral tile instead of a broken image
+  document.querySelectorAll('img[data-pimg]').forEach(function (img) { img.addEventListener('error', function () { var b = img.parentNode; b.classList.add('broken'); b.title = 'This photo could not be loaded'; img.remove(); }, { once: true }); });
+  // marking a photo for removal dims it; the main photo cannot also be removed
+  drop.addEventListener('change', function (e) {
+    var t = e.target; if (t.name === 'remove_photo') t.closest('.pe-ph').classList.toggle('rm', t.checked);
+    if (t.name === 'primary_photo_id') { var rm = t.closest('.pe-ph').querySelector('input[name=remove_photo]'); if (rm && rm.checked) { rm.checked = false; rm.closest('.pe-ph').classList.remove('rm'); } }
+  });
+  // preview
+  var lb = $('peLb'), lbi = $('peLbImg'), lbf = $('peLbFail');
+  drop.addEventListener('click', function (e) { var b = e.target.closest('[data-preview]'); if (!b || b.classList.contains('broken')) return; lbf.hidden = true; lbi.hidden = false; lbi.src = b.dataset.preview; lbi.alt = b.dataset.title || ''; $('peLbCap').textContent = b.dataset.title || ''; lb.showModal(); });
+  lbi.addEventListener('error', function () { lbi.hidden = true; lbf.hidden = false; });
+  $('peLbX').addEventListener('click', function () { lb.close(); }); lb.addEventListener('click', function (e) { if (e.target === lb || e.target.classList.contains('lbstage')) lb.close(); });
+  count();
+
+  // ---------- specifications: key / value rows ----------
+  var rows = $('specRows');
+  function specCount() { var n = rows.querySelectorAll('.pe-sr').length; $('specCount').textContent = n; $('specEmpty').hidden = n > 0; }
+  function addRow(k, v, focus) {
+    var d = document.createElement('div'); d.className = 'pe-sr';
+    d.innerHTML = '<input name="spec_k" placeholder="Attribute" maxlength="80" aria-label="Attribute name"><input name="spec_v" placeholder="Value" aria-label="Attribute value"><button type="button" class="iconbtn" data-rm title="Remove this attribute" aria-label="Remove this attribute">×</button>';
+    d.children[0].value = k || ''; d.children[1].value = v || ''; rows.appendChild(d); specCount(); if (focus) d.children[0].focus(); return d;
+  }
+  $('specAdd').addEventListener('click', function () { addRow('', '', true); dirty(); });
+  rows.addEventListener('click', function (e) { if (e.target.closest('[data-rm]')) { e.target.closest('.pe-sr').remove(); specCount(); dirty(); } });
+  rows.addEventListener('keydown', function (e) { if (e.key === 'Enter' && e.target.name === 'spec_v') { e.preventDefault(); addRow('', '', true); } });
+  // pasting several "Key: value" lines into a name field becomes one row per line
+  rows.addEventListener('paste', function (e) {
+    var t = e.target; if (t.name !== 'spec_k') return;
+    var text = (e.clipboardData || window.clipboardData).getData('text'), lines = text.split(/\r?\n/).filter(function (l) { return l.trim(); });
+    if (lines.length < 2 || !lines.every(function (l) { return l.indexOf(':') > 0; })) return;
+    e.preventDefault(); var host = t.closest('.pe-sr'), first = true;
+    lines.forEach(function (l) { var i = l.indexOf(':'), k = l.slice(0, i).trim(), v = l.slice(i + 1).trim(); if (first && !host.children[0].value && !host.children[1].value) { host.children[0].value = k; host.children[1].value = v; } else addRow(k, v); first = false; });
+    specCount(); dirty();
+  });
+  window.__specRows = function () { return [].map.call(rows.querySelectorAll('.pe-sr'), function (r) { return [r.children[0].value.trim(), r.children[1].value.trim()]; }); };
+  window.__addSpec = addRow; specCount();
+
+  // ---------- record type: packing is not used for services / freight (values stay, fields lock) ----------
+  var rt = $('recType'), wrap = $('packWrap'), cbm = $('cbmIn'), keepRow = $('keepRow'), keep = $('keepCbm');
+  var SIDES = ['carton_length_cm', 'carton_width_cm', 'carton_height_cm'].map(function (n) { return form.elements[n]; });
+  function nonPhysical() { return /^(service|freight|shipping)/i.test(rt.value); }
+  function calc() { var a = SIDES.map(function (i) { return Number(i.value); }); return a.every(function (x) { return x > 0; }) ? Math.round(a[0] * a[1] * a[2] / 1e6 * 10000) / 10000 : null; }
+  function packing() {
+    var off = nonPhysical(); wrap.classList.toggle('is-off', off); $('packOff').hidden = !off;
+    wrap.querySelectorAll('input').forEach(function (i) { if (i !== keep) { i.readOnly = off || (i === cbm && cbmLocked); i.tabIndex = off ? -1 : 0; } });
+    if (off) { keepRow.hidden = true; $('cbmNote').textContent = 'Not used for this record type.'; }
+  }
+  var cbmLocked = false;
+  function cbmState() {
+    if (nonPhysical()) return;
+    var c = calc(), entered = cbm.dataset.entered === '' ? null : Number(cbm.dataset.entered), differs = c != null && entered > 0 && Math.abs(entered - c) / c > 0.05;
+    if (c == null) { cbmLocked = false; cbm.readOnly = false; keepRow.hidden = true; $('cbmTag').textContent = 'm³ · entered'; $('cbmNote').textContent = 'No carton size yet, so this is the CBM as entered (for example from the supplier). Fill in length, width and height to calculate it.'; return; }
+    if (differs && keep.checked) { cbmLocked = false; cbm.readOnly = false; if (cbm.value === '' ) cbm.value = entered; keepRow.hidden = false; $('keepTxt').textContent = 'Keep the entered CBM (' + entered + ') instead of the ' + c + ' calculated from the size'; $('cbmTag').textContent = 'm³ · entered'; $('cbmNote').innerHTML = '⚠ The entered CBM (<b>' + entered + '</b>) differs from <b>' + c + '</b> calculated from the carton size. Check which is right — the entered value is kept while the box is ticked.'; return; }
+    cbmLocked = true; cbm.readOnly = true; cbm.value = c; keepRow.hidden = !differs; if (differs) $('keepTxt').textContent = 'Keep the entered CBM (' + entered + ') instead of the ' + c + ' calculated from the size';
+    $('cbmTag').textContent = 'm³ · calculated'; $('cbmNote').textContent = 'Calculated from the carton size (length × width × height).';
+  }
+  SIDES.forEach(function (i) { i.addEventListener('input', function () { cbmState(); packing(); }); });
+  keep.addEventListener('change', function () { cbmState(); packing(); dirty(); });
+  rt.addEventListener('change', function () { packing(); cbmState(); packing(); dirty(); });
+  cbm.addEventListener('input', function () { if (!cbmLocked) cbm.dataset.entered = cbm.value; });
+  cbmState(); packing();
+
+  // ---------- "+ Add new supplier…" ----------
   (function () {
-    const box = document.getElementById('aiScan'); if (!box) return;
-    const $ = id => document.getElementById(id), form = box.closest('form');
-    const LABELS = [['name', 'Name'], ['supplier_sku', 'Supplier SKU'], ['category', 'Category'], ['description', 'Description'], ['spec', 'Specifications'], ['hs_code', 'HS code (suggestion — verify)'],
-      ['unit_cost', 'Unit cost'], ['cost_currency', 'Currency'], ['moq', 'MOQ'], ['unit_weight_kg', 'Unit weight kg'], ['unit_length_cm', 'Unit length cm'], ['unit_width_cm', 'Unit width cm'], ['unit_height_cm', 'Unit height cm'],
-      ['carton_qty', 'Pcs / carton'], ['carton_weight_kg', 'Carton weight kg'], ['carton_length_cm', 'Carton length cm'], ['carton_width_cm', 'Carton width cm'], ['carton_height_cm', 'Carton height cm']];
-    const field = k => form.elements[k];
-    let card = null;
-    const scanFiles = () => (window.__photoFiles ? window.__photoFiles() : []).filter(f => f.size <= 10 * 1048576).slice(0, 6);
-    const refresh = () => { $('aiRun').disabled = !scanFiles().length; };
-    document.addEventListener('photofiles', refresh); refresh();
-    const msg = (t, err) => { const m = $('aiMsg'); m.hidden = !t; m.textContent = t || ''; m.className = 'aiscan-msg' + (err ? ' err' : ''); };
-    $('aiRun').addEventListener('click', async () => {
-      const all = scanFiles();
-      if (!all.length) return msg('Add a photo or a PDF above first.', true);
-      const fd = new FormData(); all.forEach(f => fd.append('files', f)); fd.append('name', field('name').value); fd.append('description', field('description').value);
-      const btn = $('aiRun'); btn.disabled = true; btn.textContent = 'Reading…'; msg('Reading the files — about 10–20 seconds…'); $('aiReview').hidden = true;
+    var sel = form.elements.supplier_id, box = $('newSup'); if (!sel || !box) return; var prevV = sel.value;
+    var err = function (t) { var e = $('ns_err'); e.hidden = !t; e.textContent = t || ''; };
+    var close = function () { box.hidden = true; err(''); if (sel.value === '__new') sel.value = prevV; };
+    sel.addEventListener('change', function () { if (sel.value === '__new') { box.hidden = false; $('ns_name').focus(); } else { prevV = sel.value; box.hidden = true; } });
+    $('ns_cancel').addEventListener('click', close);
+    $('ns_save').addEventListener('click', async function () {
+      var name = $('ns_name').value.trim(); if (!name) return err('Enter the supplier name.');
+      var btn = $('ns_save'); btn.disabled = true; err('');
       try {
-        const res = await fetch('/admin/products/ai-scan', { method: 'POST', body: fd, headers: { Accept: 'application/json' } });
-        const j = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(j.error || 'Scan failed.');
-        card = j.card; show(j);
-      } catch (e) { msg(e.message, true); } finally { btn.textContent = 'Scan with AI'; refresh(); }
+        var res = await fetch('/admin/products/quick-supplier', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ name: name, contact_name: $('ns_contact').value, city: $('ns_city').value, email: $('ns_email').value, phone: $('ns_phone').value, wechat: $('ns_wechat').value }) });
+        var j = await res.json().catch(function () { return {}; }); if (!res.ok) throw new Error(j.error || 'Could not add the supplier.');
+        if (![].some.call(sel.options, function (o) { return o.value === j.id; })) sel.insertBefore(new Option(j.name, j.id), sel.querySelector('option[value=__new]'));
+        sel.value = j.id; prevV = j.id; box.hidden = true; ['ns_name', 'ns_contact', 'ns_city', 'ns_email', 'ns_phone', 'ns_wechat'].forEach(function (i) { $(i).value = ''; }); dirty();
+      } catch (e) { err(e.message); } finally { btn.disabled = false; }
+    });
+    form.addEventListener('submit', function () { if (sel.value === '__new') sel.value = prevV; });
+  })();
+
+  // ---------- AI scan: suggestions are reviewed first; filled fields are never replaced unless ticked ----------
+  (function () {
+    var box = $('aiScan'); if (!box) return;
+    var LABELS = [['name', 'Name'], ['supplier_sku', 'Supplier SKU'], ['category', 'Category'], ['description', 'Description'], ['spec', 'Specifications'], ['hs_code', 'HS code (suggestion — verify)'], ['unit_cost', 'Unit cost'], ['cost_currency', 'Currency'], ['moq', 'MOQ'],
+      ['unit_weight_kg', 'Unit weight kg'], ['unit_length_cm', 'Unit length cm'], ['unit_width_cm', 'Unit width cm'], ['unit_height_cm', 'Unit height cm'], ['carton_qty', 'Pcs / carton'], ['carton_weight_kg', 'Carton weight kg'], ['carton_length_cm', 'Carton length cm'], ['carton_width_cm', 'Carton width cm'], ['carton_height_cm', 'Carton height cm']];
+    var card = null, field = function (k) { return form.elements[k]; };
+    var scanFiles = function () { return files.filter(function (f) { return f.size <= MAX; }).slice(0, 6); };
+    var refresh = function () { $('aiRun').disabled = !scanFiles().length; $('aiRun').title = scanFiles().length ? 'Reads the new photos or PDFs and suggests values — you review them first' : 'Add a photo or a PDF first, then scan it'; };
+    document.addEventListener('photofiles', refresh); refresh();
+    var msg = function (t, err) { var m = $('aiMsg'); m.hidden = !t; m.textContent = t || ''; m.className = 'aiscan-msg' + (err ? ' err' : ''); };
+    var specNow = function () { return window.__specRows().filter(function (r) { return r[0]; }).map(function (r) { return r[0] + ': ' + r[1]; }).join('\n'); };
+    var cur = function (k) { return k === 'spec' ? specNow() : (field(k) ? String(field(k).value || '').trim() : ''); };
+    $('aiRun').addEventListener('click', async function () {
+      var all = scanFiles(); if (!all.length) return msg('Add a photo or a PDF first.', true);
+      var fd = new FormData(); all.forEach(function (f) { fd.append('files', f); }); fd.append('name', field('name').value); fd.append('description', field('description').value);
+      var btn = $('aiRun'); btn.disabled = true; btn.textContent = 'Reading…'; msg('Reading the files — about 10–20 seconds…'); $('aiReview').hidden = true;
+      try { var res = await fetch('/admin/products/ai-scan', { method: 'POST', body: fd, headers: { Accept: 'application/json' } }); var j = await res.json().catch(function () { return {}; }); if (!res.ok) throw new Error(j.error || 'Scan failed.'); card = j.card; show(j); }
+      catch (e) { msg(e.message, true); } finally { btn.textContent = '✨ Scan with AI'; refresh(); }
     });
     function show(j) {
-      const rows = $('aiRows'); rows.innerHTML = ''; let n = 0;
-      LABELS.forEach(([k, label]) => {
-        const v = card[k]; if (v == null || v === '') return;
-        const el = field(k), cur = el ? String(el.value || '').trim() : '', same = cur === String(v);
-        if (same) return;
-        n++;
-        const tr = document.createElement('tr'), c0 = document.createElement('td'), cb = document.createElement('input');
-        cb.type = 'checkbox'; cb.dataset.k = k; cb.checked = !cur; c0.appendChild(cb);   // fill empty fields by default; overwriting needs a tick
-        const c1 = document.createElement('td'); c1.textContent = label;
-        const c2 = document.createElement('td'); c2.className = 'muted'; c2.textContent = cur || '—'; c2.style.whiteSpace = 'pre-line';
-        const c3 = document.createElement('td'); c3.textContent = String(v); c3.style.whiteSpace = 'pre-line';
-        tr.append(c0, c1, c2, c3); rows.appendChild(tr);
+      var tb = $('aiRows'); tb.innerHTML = ''; var n = 0;
+      LABELS.forEach(function (L) {
+        var k = L[0], v = card[k]; if (v == null || v === '') return; var now = cur(k); if (now === String(v)) return; n++;
+        var tr = document.createElement('tr'), c0 = document.createElement('td'), cb = document.createElement('input'); cb.type = 'checkbox'; cb.dataset.k = k; cb.checked = !now; cb.setAttribute('aria-label', 'Use ' + L[1]); c0.appendChild(cb);
+        var c1 = document.createElement('td'); c1.textContent = L[1]; var c2 = document.createElement('td'); c2.className = 'muted'; c2.textContent = now || '—'; c2.style.whiteSpace = 'pre-line'; var c3 = document.createElement('td'); c3.textContent = String(v); c3.style.whiteSpace = 'pre-line';
+        tr.append(c0, c1, c2, c3); tb.appendChild(tr);
       });
-      const w = $('aiWarn'); w.innerHTML = ''; (card.warnings || []).forEach(t => { const li = document.createElement('li'); li.textContent = '⚠ ' + t; w.appendChild(li); });
+      var w = $('aiWarn'); w.innerHTML = ''; (card.warnings || []).forEach(function (t) { var li = document.createElement('li'); li.textContent = '⚠ ' + t; w.appendChild(li); });
       $('aiTok').textContent = j.tokens ? j.tokens.toLocaleString('en-US') + ' tokens' : '';
       if (!n) { msg('The AI found nothing new to add — the form already has these values.'); $('aiReview').hidden = !(card.warnings || []).length; return; }
       msg(''); $('aiReview').hidden = false;
     }
-    $('aiApply').addEventListener('click', () => {
-      let done = 0;
-      $('aiRows').querySelectorAll('input[type=checkbox]:checked').forEach(cb => { const el = field(cb.dataset.k); if (el) { el.value = card[cb.dataset.k]; el.classList.add('aifilled'); done++; } });
-      $('aiReview').hidden = true; msg(done ? done + ' field' + (done === 1 ? '' : 's') + ' filled in (highlighted). Check them, then press Save.' : 'Nothing selected.');
+    $('aiApply').addEventListener('click', function () {
+      var done = 0;
+      $('aiRows').querySelectorAll('input[type=checkbox]:checked').forEach(function (cb) {
+        var k = cb.dataset.k, v = card[k];
+        if (k === 'spec') { String(v).split('\n').forEach(function (l) { var i = l.indexOf(':'); if (i < 1) return; var kk = l.slice(0, i).trim(), vv = l.slice(i + 1).trim(), hit = [].find.call(rows.querySelectorAll('.pe-sr'), function (r) { return r.children[0].value.trim().toLowerCase() === kk.toLowerCase(); }); if (hit) { hit.children[1].value = vv; hit.children[1].classList.add('aifilled'); } else addRow(kk, vv).classList.add('aifilled'); }); done++; return; }
+        var el = field(k); if (el) { el.value = v; el.classList.add('aifilled'); done++; }
+      });
+      $('aiReview').hidden = true; msg(done ? done + ' field' + (done === 1 ? '' : 's') + ' filled in (highlighted). Check them, then press Save.' : 'Nothing selected.'); cbmState(); dirty();
     });
-    $('aiCancel').addEventListener('click', () => { $('aiReview').hidden = true; msg(''); });
-    form.addEventListener('input', e => e.target.classList.remove('aifilled'));
+    $('aiCancel').addEventListener('click', function () { $('aiReview').hidden = true; msg(''); });
+    form.addEventListener('input', function (e) { e.target.classList.remove('aifilled'); });
   })();
-</script>
 
-<script>
-  // "+ Add new supplier…" in the supplier list: create the supplier in place and select it (the product itself is saved with the normal Save)
-  (function () {
-    const sel = document.querySelector('select[name=supplier_id]'), box = document.getElementById('newSup'); if (!sel || !box) return;
-    const $ = id => document.getElementById(id); let prev = sel.value;
-    const err = t => { const e = $('ns_err'); e.hidden = !t; e.textContent = t || ''; };
-    const close = () => { box.hidden = true; err(''); if (sel.value === '__new') sel.value = prev; };
-    sel.addEventListener('change', () => { if (sel.value === '__new') { box.hidden = false; $('ns_name').focus(); } else { prev = sel.value; box.hidden = true; } });
-    $('ns_cancel').addEventListener('click', close);
-    $('ns_save').addEventListener('click', async () => {
-      const name = $('ns_name').value.trim(); if (!name) return err('Enter the supplier name.');
-      const btn = $('ns_save'); btn.disabled = true; err('');
-      try {
-        const res = await fetch('/admin/products/quick-supplier', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({ name, contact_name: $('ns_contact').value, city: $('ns_city').value, email: $('ns_email').value, phone: $('ns_phone').value, wechat: $('ns_wechat').value }) });
-        const j = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(j.error || 'Could not add the supplier.');
-        if (![...sel.options].some(o => o.value === j.id)) { const o = new Option(j.name, j.id); sel.insertBefore(o, sel.querySelector('option[value=__new]')); }
-        sel.value = j.id; prev = j.id; box.hidden = true;
-        ['ns_name', 'ns_contact', 'ns_city', 'ns_email', 'ns_phone', 'ns_wechat'].forEach(i => { $(i).value = ''; });
-      } catch (e) { err(e.message); } finally { btn.disabled = false; }
-    });
-    sel.form.addEventListener('submit', () => { if (sel.value === '__new') sel.value = prev; });
-  })();
-</script>
+  // ---------- save workflow: unsaved-changes guard, checks, single submit ----------
+  var stat = function (t) { $('peStat').textContent = t; };
+  function snap() { var o = []; new FormData(form).forEach(function (v, k) { if (!(v instanceof File)) o.push(k + '=' + v); }); o.push('files=' + files.map(function (f) { return f.name + f.size; }).join('|')); return o.join('&'); }
+  var base = snap(), saving = false, isDirty = false;
+  function dirty() { isDirty = snap() !== base; if (!saving) stat(isDirty ? 'Unsaved changes' : 'No changes'); $('peStat').classList.toggle('on', isDirty); }
+  form.addEventListener('input', dirty); form.addEventListener('change', dirty);
+  window.addEventListener('beforeunload', function (e) { if (isDirty && !saving) { e.preventDefault(); e.returnValue = ''; } });
+  $('peCancel').addEventListener('click', function (e) { if (isDirty && !confirm('Discard your changes?')) e.preventDefault(); else saving = true; });
+  function showErr(el, text) { var host = el.closest('label') || el.parentNode; var s = host.querySelector('.pe-err.js'); if (!text) { if (s) s.remove(); el.removeAttribute('aria-invalid'); return; } if (!s) { s = document.createElement('small'); s.className = 'pe-err js'; s.setAttribute('role', 'alert'); host.appendChild(s); } s.textContent = text; el.setAttribute('aria-invalid', 'true'); }
+  function check() {
+    var bad = [];
+    var name = form.elements.name; showErr(name, name.value.trim() ? '' : 'Enter the product name.'); if (!name.value.trim()) bad.push(name);
+    [].forEach.call(form.querySelectorAll('input[type=number]'), function (i) { var t = i.value.trim(), m = ''; if (t && (!isFinite(Number(t)) || Number(t) < 0)) m = 'Enter a number, zero or more.'; showErr(i, m); if (m) bad.push(i); });
+    var ks = window.__specRows().map(function (r) { return r[0].toLowerCase(); }), rowsBad = window.__specRows().some(function (r) { return !r[0] && r[1]; }) || ks.some(function (k) { return k.indexOf(':') >= 0; }) || ks.filter(Boolean).length !== new Set(ks.filter(Boolean)).size;
+    if (rowsBad) { stat('Check the specification attributes: each needs a unique name without a colon.'); bad.push(rows); }
+    return bad;
+  }
+  form.addEventListener('submit', function (e) {
+    if (saving) { e.preventDefault(); return; }
+    if (files.some(function (f) { return f.size > MAX; })) { e.preventDefault(); stat('Remove photos larger than 10 MB first.'); return; }
+    var bad = check(); if (bad.length) { e.preventDefault(); if (bad[0].focus) bad[0].focus(); if (bad[0].scrollIntoView) bad[0].scrollIntoView({ block: 'center' }); return; }
+    saving = true; var b = $('peSave'); b.disabled = true; b.textContent = 'Saving…'; stat('Saving…');
+  });
+  window.addEventListener('pageshow', function () { saving = false; var b = $('peSave'); if (b) { b.disabled = false; b.textContent = <%- JSON.stringify(isNew ? 'Create product' : 'Save changes') %>; } });
 
-<script>
-// opened from the "missing data" menu: #f=carton_qty jumps to that field
-(function () {
-  var m = /^#f=([a-z_]+)$/.exec(location.hash); if (!m) return;
-  var el = document.querySelector('[name="' + m[1] + '"]'); if (!el) return;
-  var box = el.closest('details'); if (box) box.open = true;
-  el.scrollIntoView({ block: 'center' }); el.focus(); var l = el.closest('label'); if (l) l.classList.add('pd-flash');
+  // opened from a "missing data" link: #f=carton_qty jumps to that field
+  var m = /^#f=([a-z_]+)$/.exec(location.hash);
+  if (m) { var el = form.elements[m[1]]; if (el && el.focus) { el.scrollIntoView({ block: 'center' }); el.focus(); var l = el.closest('label'); if (l) l.classList.add('pd-flash'); } }
+  else if (<%- nErr ? 'true' : 'false' %>) { var first = form.querySelector('.pe-err'); if (first) { var t = first.closest('label, section'); (t && t.scrollIntoView) && t.scrollIntoView({ block: 'center' }); } }
 })();
 </script>
 <%- include('../../partials/foot') %>

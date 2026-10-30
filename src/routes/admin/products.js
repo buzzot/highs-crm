@@ -6,6 +6,7 @@ import { log } from '../../lib/activity.js';
 import { canAssign } from '../../lib/access.js';
 import { clean as cleanSub, missing as subMissing, toProduct, containerFit, changes, fromProduct } from '../../lib/supplier-product.js';
 import { productMetrics, fxToUsdStrict } from '../../lib/product-metrics.js';
+import { specParts, recordTypeOf, buildSpec, postedRows, validateProduct, cartonCbmToStore, isNonPhysical, cbmDiffers, cbmFromSize, RECORD_TYPES, INCOTERMS, CURRENCIES } from '../../lib/product-form.js';
 import { productPhotos as photosOf, splitSpec, physicalFacts, quoteRows, poRows, orderRows, requestRows } from '../../lib/product-detail.js';
 import { SORT_DEFS, PAGE_SIZE, filterProducts, paginate } from '../../lib/product-list.js';
 import { compareProducts, extractProductCard, aiEnabled } from '../../lib/ai.js';
@@ -42,17 +43,22 @@ const FIELDS = ['sku', 'supplier_sku', 'name', 'category', 'description', 'suppl
   'unit_length_cm', 'unit_width_cm', 'unit_height_cm', 'carton_qty', 'carton_cbm', 'carton_weight_kg', 'carton_length_cm', 'carton_width_cm', 'carton_height_cm'];
 const like = q => String(q || '').replace(/[,()%]/g, ' ').trim();
 
-// spec is edited as "Key: value" lines and stored as JSON
-const parseSpec = txt => Object.fromEntries(String(txt || '').split('\n').map(l => l.split(':')).filter(p => p.length > 1 && p[0].trim())
-  .map(([k, ...v]) => [k.trim(), v.join(':').trim()]));
-const specText = spec => Object.entries(spec || {}).map(([k, v]) => `${k}: ${v}`).join('\n');
-const body = b => {
-  const out = { ...clean(b, FIELDS), spec: parseSpec(b.spec) };
-  // carton CBM follows the carton size when all three sides are given
-  const [l, w, h] = ['carton_length_cm', 'carton_width_cm', 'carton_height_cm'].map(k => Number(out[k]));
-  if (l > 0 && w > 0 && h > 0) out.carton_cbm = Math.round(l * w * h / 1e6 * 10000) / 10000;
+/** The row to save. The specification is built from the posted attribute rows, record type and supplier terms; carton volume follows the carton size. */
+const body = (b, existingSpec = {}) => {
+  const out = { ...clean(b, FIELDS), spec: buildSpec(b, existingSpec) };
+  out.carton_cbm = cartonCbmToStore(b, !isNonPhysical(b.record_type));
+  if (out.carton_cbm === null || Number.isNaN(out.carton_cbm)) out.carton_cbm = null;
   return out;
 };
+/** Everything the edit form needs. After a failed save `b` (what was posted) wins over the stored product, so nothing typed is lost. */
+function formLocals(p, { b = null, errors = {}, error = null } = {}) {
+  const was = specParts(p.spec);
+  const from = b ? { type: b.record_type ?? '', incoterm: b.src_incoterm ?? '', lead: b.src_lead ?? '', valid: b.src_valid ?? '', rows: postedRows(b) }
+    : { type: recordTypeOf(p.spec), incoterm: was.incoterm.value, lead: was.lead.value, valid: was.valid.value, rows: was.rows };
+  return { p, errors, error, f: from, hasPrimary: Object.prototype.hasOwnProperty.call(p, 'primary_photo_id'), aiOn: aiEnabled(),
+    keepCbm: b ? b.keep_cbm === 'on' : cbmDiffers(p.carton_cbm, cbmFromSize(p.carton_length_cm, p.carton_width_cm, p.carton_height_cm)),
+    recordTypes: RECORD_TYPES, incoterms: INCOTERMS, currencies: CURRENCIES };
+}
 
 async function formData() {
   const { data } = await admin.from('suppliers').select('id, name').order('name');
@@ -85,11 +91,11 @@ async function listProducts(query) {
   return { rows, total: all.length, categories, suppliers, settings, sort };
 }
 
-async function firstPhotos(ids) {
+async function firstPhotos(ids, primary = {}) {
   const out = {}, count = {};
   for (let i = 0; i < ids.length; i += 100) {
     const { data } = await admin.from('documents').select('id, entity_id').eq('entity_type', 'product').eq('kind', 'product_photo').in('entity_id', ids.slice(i, i + 100)).order('created_at');
-    (data || []).forEach(d => { out[d.entity_id] ||= d.id; count[d.entity_id] = (count[d.entity_id] || 0) + 1; });
+    (data || []).forEach(d => { out[d.entity_id] ||= d.id; if (primary[d.entity_id] === d.id) out[d.entity_id] = d.id; count[d.entity_id] = (count[d.entity_id] || 0) + 1; });
   }
   return { first: out, count };
 }
@@ -97,7 +103,7 @@ async function firstPhotos(ids) {
 r.get('/', async (req, res) => {
   const { rows, total, categories, suppliers, settings, sort } = await listProducts(req.query);
   const { pages, page, shown } = paginate(rows, req.query.page, PAGE_SIZE);
-  const photos = await firstPhotos(shown.map(p => p.id));
+  const photos = await firstPhotos(shown.map(p => p.id), Object.fromEntries(shown.filter(p => p.primary_photo_id).map(p => [p.id, p.primary_photo_id])));
   const { count: pendingSubs } = await admin.from('supplier_products').select('id', { count: 'exact', head: true }).in('status', ['submitted', 'edit_requested', 'updated']); // null before migration 0028
   const cur = [...new Set(rows.map(p => p.cost_currency).filter(c => c && c !== 'USD'))].sort();
   const fxToUsd = fxToUsdStrict(settings);
@@ -151,7 +157,7 @@ r.get('/compare', async (req, res) => {
 });
 
 r.get('/new', async (req, res) => res.render('admin/products/form', {
-  title: 'New product', p: { cost_currency: 'CNY', supplier_id: req.query.supplier_id }, specText: '', suppliers: await formData(), photos: [], error: null, aiOn: aiEnabled(),
+  title: 'New product', suppliers: await formData(), photos: [], ...formLocals({ cost_currency: 'CNY', supplier_id: req.query.supplier_id }),
 }));
 
 // AI scan: read photos / a PDF and SUGGEST field values. Nothing is saved here — the form shows the suggestions and staff approve each one.
@@ -169,13 +175,14 @@ r.post('/ai-scan', (req, res) => scanUpload(req, res, async err => {
   } catch (e) { console.error('[product ai-scan]', e.message); res.status(502).json({ error: `AI could not read the files: ${e.message}` }); }
 }));
 r.post('/', withPhotos, async (req, res) => {
-  const again = async error => res.status(400).render('admin/products/form', { title: 'New product', p: req.body, specText: req.body.spec, suppliers: await formData(), photos: [],
-    error: `${error}${req.files?.length ? ' Please add the photos again.' : ''}` });
+  const again = async (error, errors = {}) => res.status(400).render('admin/products/form', { title: 'New product', suppliers: await formData(), photos: [], ...formLocals({ ...req.body }, { b: req.body, errors, error: `${error}${req.files?.length ? ' Please add the photos again.' : ''}` }) });
   if (req.photoError) return again(req.photoError);
+  const errors = validateProduct(req.body);
+  if (Object.keys(errors).length) return again('Some fields need attention — they are marked below. Nothing was saved.', errors);
   const { data, error } = await admin.from('products').insert(body(req.body)).select('id').single();
   if (error) return again(error.message);
   const n = await savePhotos(req, data.id);
-  res.redirect(`/admin/products/${data.id}` + (n ? `?msg=${encodeURIComponent(`Product created with ${n} photo${n === 1 ? '' : 's'}.`)}` : ''));
+  res.redirect(`/admin/products/${data.id}?msg=${encodeURIComponent(n ? `Product created with ${n} photo${n === 1 ? '' : 's'}.` : 'Product created.')}`);
 });
 
 // quick-add a supplier from the product form (JSON): name is enough; an existing supplier with the same name is reused
@@ -330,7 +337,7 @@ r.get('/:id', async (req, res) => {
   ]);
   if (!p) return notFound(res, 'Product');
   const m = productMetrics(p, fxToUsdStrict(settings), settings.container);
-  const photos = photosOf(docs || []), photoIds = new Set(photos.map(d => d.id));
+  const photos = photosOf(docs || [], p.primary_photo_id), photoIds = new Set(photos.map(d => d.id));
   res.render('admin/products/detail', {
     title: p.name, p, docs: docs || [], m, container: settings.container, fxList: ['CNY', 'EUR', 'GBP'].map(c => [c, fxToUsdStrict(settings)(c)]), photos, mainPhoto: photos[0] || null, otherDocs: (docs || []).filter(d => !photoIds.has(d.id)),
     spec: splitSpec(p.spec), phys: physicalFacts(p), quotes: quoteRows(quotes || []), requests: requestRows(quotes || []), orders: orderRows(items || []), pos: poRows(pos || [], id),
@@ -341,23 +348,34 @@ r.get('/:id', async (req, res) => {
 r.get('/:id/edit', async (req, res) => {
   const { data: p } = await admin.from('products').select('*').eq('id', req.params.id).single();
   if (!p) return notFound(res, 'Product');
-  res.render('admin/products/form', { title: 'Edit product', p, specText: specText(p.spec), suppliers: await formData(), photos: await productPhotos(p.id), error: null });
+  res.render('admin/products/form', { title: 'Edit product', suppliers: await formData(), photos: await productPhotos(p.id), ...formLocals(p) });
 });
 r.post('/:id', withPhotos, async (req, res) => {
   const id = req.params.id;
-  const again = async error => res.status(400).render('admin/products/form', { title: 'Edit product', p: { ...req.body, id }, specText: req.body.spec, suppliers: await formData(),
-    photos: await productPhotos(id), error: `${error}${req.files?.length ? ' Please add the new photos again.' : ''}` });
+  const { data: was } = await admin.from('products').select('*').eq('id', id).single();
+  if (!was) return notFound(res, 'Product');
+  const again = async (error, errors = {}) => res.status(400).render('admin/products/form', { title: 'Edit product', suppliers: await formData(), photos: await productPhotos(id),
+    ...formLocals({ ...was, ...req.body, id, ...('primary_photo_id' in was ? { primary_photo_id: was.primary_photo_id } : {}), spec: was.spec }, { b: req.body, errors, error: `${error}${req.files?.length ? ' Please add the new photos again.' : ''}` }) });
   if (req.photoError) return again(req.photoError);
-  const { error } = await admin.from('products').update(body(req.body)).eq('id', id);
+  const errors = validateProduct(req.body, was.spec);
+  if (Object.keys(errors).length) return again('Some fields need attention — they are marked below. Nothing was saved.', errors);
+  const row = body(req.body, was.spec);
+  const remove = [].concat(req.body.remove_photo || []);
+  // the main photo (only when migration 0039 has been run, i.e. the column exists): it must be one of this product's own photos and not one being removed
+  if (Object.prototype.hasOwnProperty.call(was, 'primary_photo_id') && req.body.primary_photo_id !== undefined) {
+    const want = String(req.body.primary_photo_id || '');
+    const own = want && !remove.includes(want) ? (await productPhotos(id)).some(d => d.id === want) : false;
+    row.primary_photo_id = own ? want : null;
+  }
+  const { error } = await admin.from('products').update(row).eq('id', id);
   if (error) return again(error.message);
   // photos ticked for removal (only this product's photos)
-  const remove = [].concat(req.body.remove_photo || []);
   if (remove.length) {
     const { data: own } = await admin.from('documents').select('id').eq('entity_type', 'product').eq('entity_id', id).in('id', remove);
     for (const d of own || []) await deleteDocument(d.id);
   }
-  await savePhotos(req, id);
-  res.redirect(`/admin/products/${id}`);
+  const n = await savePhotos(req, id);
+  res.redirect(`/admin/products/${id}?msg=${encodeURIComponent(n ? `Product saved, ${n} photo${n === 1 ? '' : 's'} added.` : 'Product saved.')}`);
 });
 
 export default r;

@@ -238,7 +238,7 @@
         <figure class="pdd-ph <%= i === 0 ? 'primary' : '' %>">
           <button type="button" class="pdd-pbtn" data-lb="<%= i %>" aria-label="Open <%= d.title || 'photo' %> full size" title="<%= d.title || '' %>"><img loading="lazy" src="<%= SRC(d) %>" alt="<%= d.title || p.name %>" data-pimg></button>
           <figcaption>
-            <% if (i === 0) { %><span class="tag pdd-prim" title="The first photo is the main image">Primary</span><% } %>
+            <% if (i === 0) { %><span class="tag pdd-prim" title="The main image — change it in Edit product">Primary</span><% } %>
             <% if (!d.client_visible) { %><span class="tag internal">internal</span><% } %>
             <a class="small" href="<%= SRC(d) %>" target="_blank" rel="noopener" title="Open the original file">Original</a>
             <form method="post" action="/admin/documents/<%= d.id %>/delete" class="inline" onsubmit="return confirm('Delete this photo?')"><input type="hidden" name="redirect" value="/admin/products/<%= p.id %>#docs"><button class="iconbtn danger" title="Delete photo" aria-label="Delete photo">×</button></form>
@@ -246,7 +246,7 @@
         </figure>
       <% }) %>
     </div>
-    <p class="cd-sub small muted">The first photo is the main image, shown on the Overview tab and in the product list. Photos keep their original proportions.</p>
+    <p class="cd-sub small muted">The main image (set in Edit product) is shown on the Overview tab and in the product list. Photos keep their original proportions.</p>
   </div>
   <% } %>
   <%- include('../../partials/docs', { docs: OTHER, entityType: 'product', entityId: p.id, redirect: '/admin/products/' + p.id + '#docs', kinds: ['product_photo', 'certificate', 'qc_report', 'proforma_invoice', 'other'], heading: PH_ALL.length ? 'Documents & upload' : 'Photos & documents', defaultKind: 'product_photo', defaultVisible: true }) %>

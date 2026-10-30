@@ -120,5 +120,5 @@ test('route: CSV export keeps its columns and appends the costing columns; filte
 });
 test('form: a Data-badge link (#f=field) focuses that field on the edit page', () => {
   const f = fs.readFileSync('src/views/admin/products/form.ejs', 'utf8');
-  assert.match(f, /#f=|\bf=/); assert.match(f, /pd-flash/); assert.match(f, /Type: Service/);
+  assert.match(f, /#f=|\bf=/); assert.match(f, /pd-flash/); assert.match(f, /recType/);
 });
