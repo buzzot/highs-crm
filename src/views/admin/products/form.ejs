@@ -45,28 +45,35 @@
   <%# ---------------- 1. Product information (with the specifications) ---------------- %>
   <section class="pe-card" id="sec-basic">
     <h2>Product information</h2>
-    <div class="pe-row">
-      <label class="field--full">Product name <span class="req" title="Required">*</span>
-        <input name="name" id="nameIn" required maxlength="300" value="<%= v('name') %>" aria-invalid="<%= E.name ? 'true' : 'false' %>"><% if (E.name) { %><small class="pe-err" role="alert"><%= E.name %></small><% } %></label>
-      <label class="field--medium">Our SKU
-        <input name="sku" id="skuIn" maxlength="100" value="<%= v('sku') %>"><% if (E.sku) { %><small class="pe-err" role="alert"><%= E.sku %></small><% } %></label>
-      <label class="field--medium">Category
-        <input name="category" id="catIn" maxlength="100" value="<%= v('category') %>"><% if (E.category) { %><small class="pe-err" role="alert"><%= E.category %></small><% } %></label>
-      <label class="field--medium"><span>Record type <%- tip('Service and freight records do not use cartons or container costing, so the packing fields are locked (their values are kept). Samples and packaging are treated as physical items.') %></span>
-        <select name="record_type" id="recType"><% typeOpts.forEach(([val, label]) => { %><option value="<%= val %>" <%= F.type === val ? 'selected' : '' %>><%= label %></option><% }) %></select></label>
-      <label class="field--full">Description
-        <textarea name="description" id="descIn" rows="2" maxlength="5000"><%= v('description') %></textarea><% if (E.description) { %><small class="pe-err" role="alert"><%= E.description %></small><% } %></label>
+    <div class="pe-blk">
+      <h3>Identity</h3>
+      <div class="pk-r pk-r1">
+        <label>Product name <span class="req" title="Required">*</span>
+          <input name="name" id="nameIn" required maxlength="300" value="<%= v('name') %>" aria-invalid="<%= E.name ? 'true' : 'false' %>"><% if (E.name) { %><small class="pe-err" role="alert"><%= E.name %></small><% } %></label>
+      </div>
+      <div class="pk-r pk-r3e">
+        <label>Our SKU
+          <input name="sku" id="skuIn" maxlength="100" value="<%= v('sku') %>"><% if (E.sku) { %><small class="pe-err" role="alert"><%= E.sku %></small><% } %></label>
+        <label>Category
+          <input name="category" id="catIn" maxlength="100" value="<%= v('category') %>"><% if (E.category) { %><small class="pe-err" role="alert"><%= E.category %></small><% } %></label>
+        <label><span>Record type <%- tip('Service and freight records do not use cartons or container costing, so the packing fields are locked (their values are kept). Samples and packaging are treated as physical items.') %></span>
+          <select name="record_type" id="recType"><% typeOpts.forEach(([val, label]) => { %><option value="<%= val %>" <%= F.type === val ? 'selected' : '' %>><%= label %></option><% }) %></select></label>
+      </div>
+      <div class="pk-r pk-r1">
+        <label>Description <span class="pe-unit">optional</span>
+          <textarea name="description" id="descIn" rows="2" maxlength="5000"><%= v('description') %></textarea><% if (E.description) { %><small class="pe-err" role="alert"><%= E.description %></small><% } %></label>
+      </div>
     </div>
 
-    <div class="pe-group" id="sec-spec">
-      <div class="pe-h"><h3>Technical specifications <span class="cnt" id="specCount"><%= F.rows.length %></span> <%- tip('One attribute per row; put the unit in the value (10 W, 25 mm). Paste a list of “Key: value” lines into an attribute name field to turn it into rows. Names must be unique and cannot contain a colon.') %></h3>
-        <div class="pe-tools"><button type="button" class="btn small" id="specAdd">+ Add attribute</button></div></div>
+    <div class="pe-blk" id="sec-spec">
+      <h3>Technical specifications <span class="cnt" id="specCount"><%= F.rows.length %></span> <%- tip('One attribute per row; put the unit in the value (10 W, 25 mm). Paste a list of “Key: value” lines into an attribute name field to turn it into rows. Names must be unique and cannot contain a colon.') %>
+        <span class="pe-sp"></span><button type="button" class="btn small" id="specAdd">+ Add attribute</button></h3>
       <div id="specRows" class="pe-spec">
         <% F.rows.forEach(([k, val]) => { %>
           <div class="pe-sr"><input name="spec_k" value="<%= k %>" placeholder="Attribute" maxlength="80" aria-label="Attribute name"><input name="spec_v" value="<%= val %>" placeholder="Value, with unit" aria-label="Attribute value"><button type="button" class="iconbtn" data-rm title="Remove this attribute" aria-label="Remove this attribute">×</button></div>
         <% }) %>
       </div>
-      <p class="pe-empty-s muted small" id="specEmpty" <%= F.rows.length ? 'hidden' : '' %>>No specifications yet.</p>
+      <p class="pe-empty-s" id="specEmpty" <%= F.rows.length ? 'hidden' : '' %>>No specifications yet — add attributes such as diameter, material or standard.</p>
       <% if (E.spec) { %><small class="pe-err" role="alert"><%= E.spec %></small><% } %>
     </div>
   </section>
@@ -74,44 +81,49 @@
   <%# ---------------- Supplier & pricing ---------------- %>
   <section class="pe-card" id="sec-supply">
     <h2>Supplier &amp; pricing <%- tip('Supplier terms are kept apart from the product itself. Quotations and supplier purchase orders keep the price they were created with — editing the cost here only affects new ones. Price basis, lead time and quote validity are saved with the product\'s specification data.') %></h2>
-    <div class="pe-row">
-      <label class="field--wide">Supplier
-        <select data-picker name="supplier_id"><option value="">—</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= p.supplier_id === s.id ? 'selected' : '' %>><%= s.name %></option><% }) %><option value="__new">+ Add new supplier…</option></select></label>
-      <label class="field--medium">Supplier SKU
-        <input name="supplier_sku" maxlength="100" value="<%= v('supplier_sku') %>"><% if (E.supplier_sku) { %><small class="pe-err" role="alert"><%= E.supplier_sku %></small><% } %></label>
-    </div>
-    <div class="newsup" id="newSup" hidden>
-      <strong>New supplier</strong> <span class="muted small">— just the basics; complete the rest later on the supplier page</span>
-      <div class="pe-grid">
-        <label class="s2">Company name <input id="ns_name" maxlength="200"></label>
-        <label>Contact person <input id="ns_contact"></label>
-        <label>City <input id="ns_city"></label>
-        <label>Email <input type="email" id="ns_email"></label>
-        <label>Phone <input id="ns_phone"></label>
-        <label>WeChat <input id="ns_wechat"></label>
+    <div class="pe-blk">
+      <h3>Supplier</h3>
+      <div class="pk-r pk-r2s">
+        <label>Supplier
+          <select data-picker name="supplier_id"><option value="">—</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= p.supplier_id === s.id ? 'selected' : '' %>><%= s.name %></option><% }) %><option value="__new">+ Add new supplier…</option></select></label>
+        <label>Supplier SKU
+          <input name="supplier_sku" maxlength="100" value="<%= v('supplier_sku') %>"><% if (E.supplier_sku) { %><small class="pe-err" role="alert"><%= E.supplier_sku %></small><% } %></label>
       </div>
-      <div class="aiscan-msg err" id="ns_err" hidden></div>
-      <div class="actions"><button type="button" class="btn small primary" id="ns_save">Add supplier</button><button type="button" class="btn small" id="ns_cancel">Cancel</button></div>
+      <div class="newsup" id="newSup" hidden>
+        <strong>New supplier</strong> <span class="muted small">— just the basics; complete the rest later on the supplier page</span>
+        <div class="pe-grid">
+          <label class="s2">Company name <input id="ns_name" maxlength="200"></label>
+          <label>Contact person <input id="ns_contact"></label>
+          <label>City <input id="ns_city"></label>
+          <label>Email <input type="email" id="ns_email"></label>
+          <label>Phone <input id="ns_phone"></label>
+          <label>WeChat <input id="ns_wechat"></label>
+        </div>
+        <div class="aiscan-msg err" id="ns_err" hidden></div>
+        <div class="actions"><button type="button" class="btn small primary" id="ns_save">Add supplier</button><button type="button" class="btn small" id="ns_cancel">Cancel</button></div>
+      </div>
     </div>
-    <div class="pe-row pe-gap">
-      <label class="field--compact">Unit cost
-        <input type="number" min="0" step="0.0001" inputmode="decimal" name="unit_cost" value="<%= v('unit_cost') %>"><% if (E.unit_cost) { %><small class="pe-err" role="alert"><%= E.unit_cost %></small><% } %></label>
-      <label class="field--compact">Currency
-        <select name="cost_currency"><% curOpts.forEach(c => { %><option <%= (p.cost_currency || 'CNY') === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
-      <label class="field--compact">Sold per <%- tip('The unit the price and MOQ are quoted in — pcs, m, kg, sets… Optional; pcs when left as is.') %>
-        <select name="sold_per" id="soldPer"><option value="">pcs</option><% unitOpts.filter(u => u !== 'pcs').forEach(u => { %><option <%= F.unit === u ? 'selected' : '' %>><%= u %></option><% }) %></select></label>
-      <label class="field--compact">MOQ <span class="pe-unit" data-unit><%= U %></span>
-        <input type="number" min="0" step="1" inputmode="numeric" name="moq" value="<%= v('moq') %>"><% if (E.moq) { %><small class="pe-err" role="alert"><%= E.moq %></small><% } %></label>
+    <div class="pe-blk">
+      <h3>Price &amp; minimum order</h3>
+      <div class="pk-r pk-rp">
+        <label>Factory price
+          <span class="pk-join"><input type="number" min="0" step="0.0001" inputmode="decimal" name="unit_cost" aria-label="Factory price" value="<%= v('unit_cost') %>"><select name="cost_currency" aria-label="Currency"><% curOpts.forEach(c => { %><option <%= (p.cost_currency || 'CNY') === c ? 'selected' : '' %>><%= c %></option><% }) %></select></span>
+          <% if (E.unit_cost) { %><small class="pe-err" role="alert"><%= E.unit_cost %></small><% } %></label>
+        <label>Sold per <%- tip('The unit the price and MOQ are quoted in — pcs, m, kg, sets… Optional; pcs when left as is.') %>
+          <select name="sold_per" id="soldPer"><option value="">pcs</option><% unitOpts.filter(u => u !== 'pcs').forEach(u => { %><option <%= F.unit === u ? 'selected' : '' %>><%= u %></option><% }) %></select></label>
+        <label>MOQ
+          <span class="pk-sfx"><input type="number" min="0" step="1" inputmode="numeric" name="moq" value="<%= v('moq') %>"><i data-unit><%= U %></i></span><% if (E.moq) { %><small class="pe-err" role="alert"><%= E.moq %></small><% } %></label>
+      </div>
     </div>
     <details class="pe-more" id="moreTerms" <%= E.src_incoterm || E.src_lead || E.src_valid ? 'open' : '' %>>
-      <summary><span>More purchasing terms</span><span class="pe-sum" id="moreSum"><%= [F.incoterm ? String(F.incoterm).toUpperCase() : '', F.lead ? F.lead + ' days' : '', F.valid ? 'valid until ' + F.valid : ''].filter(Boolean).join(' · ') || 'none set' %></span></summary>
-      <div class="pe-row">
-        <label class="field--medium">Price basis
+      <summary><span>More purchasing terms</span><span class="pe-sum" id="moreSum"><% const chips = [F.incoterm ? String(F.incoterm).toUpperCase() : '', F.lead ? F.lead + ' days lead time' : '', F.valid ? 'valid until ' + F.valid : ''].filter(Boolean); %><% if (chips.length) { chips.forEach(c => { %><span class="pe-chip"><%= c %></span><% }) } else { %>none set<% } %></span></summary>
+      <div class="pk-r pk-r3e">
+        <label>Price basis
           <select name="src_incoterm"><option value="">—</option><% incOpts.forEach(c => { %><option <%= String(F.incoterm).toUpperCase() === c.toUpperCase() ? 'selected' : '' %>><%= c %></option><% }) %></select>
           <% if (E.src_incoterm) { %><small class="pe-err" role="alert"><%= E.src_incoterm %></small><% } %></label>
-        <label class="field--compact">Lead time <span class="pe-unit">days</span>
+        <label>Lead time <span class="pe-unit">days</span>
           <input name="src_lead" inputmode="numeric" maxlength="12" value="<%= F.lead %>" placeholder="30"><% if (E.src_lead) { %><small class="pe-err" role="alert"><%= E.src_lead %></small><% } %></label>
-        <label class="field--medium">Quotation valid until
+        <label>Quotation valid until
           <input name="src_valid" <%= isoDate || !F.valid ? 'type=date' : 'type=text' %> value="<%= F.valid %>"><% if (E.src_valid) { %><small class="pe-err" role="alert"><%= E.src_valid %></small><% } %></label>
       </div>
     </details>
@@ -544,7 +556,7 @@
   // collapsed "More purchasing terms" keeps a one-line summary of what is filled in
   function unitLabels() { var u = form.elements.sold_per.value || 'pcs'; document.querySelectorAll('[data-unit]').forEach(function (e) { e.textContent = u; }); cbmState(); }
   ['sold_per', 'package_type'].forEach(function (n) { form.elements[n].addEventListener('change', unitLabels); });
-  function termsSum() { var inc = form.elements.src_incoterm.value, lead = form.elements.src_lead.value.trim(), val = form.elements.src_valid.value.trim(); $('moreSum').textContent = [inc, lead ? lead + ' days' : '', val ? 'valid until ' + val : ''].filter(Boolean).join(' · ') || 'none set'; }
+  function termsSum() { var inc = form.elements.src_incoterm.value, lead = form.elements.src_lead.value.trim(), val = form.elements.src_valid.value.trim(), box = $('moreSum'), parts = [inc, lead ? lead + ' days lead time' : '', val ? 'valid until ' + val : ''].filter(Boolean); box.textContent = ''; if (!parts.length) { box.textContent = 'none set'; return; } parts.forEach(function (t) { var c = document.createElement('span'); c.className = 'pe-chip'; c.textContent = t; box.appendChild(c); }); }
   ['src_incoterm', 'src_lead', 'src_valid'].forEach(function (n) { form.elements[n].addEventListener('input', termsSum); form.elements[n].addEventListener('change', termsSum); });
   heading();
 

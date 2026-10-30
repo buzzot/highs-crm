@@ -137,12 +137,13 @@ test('supplier & pricing: essentials always visible, the rest under "More purcha
   const more = sup.slice(sup.indexOf('<details'), sup.indexOf('</details>')), top = sup.slice(0, sup.indexOf('<details'));
   for (const n of ['supplier_id', 'supplier_sku', 'unit_cost', 'cost_currency', 'moq']) assert.match(top, new RegExp(`name="${n}"`), n + ' stays visible');
   for (const n of ['src_incoterm', 'src_lead', 'src_valid']) { assert.match(more, new RegExp(`name="${n}"`), n); assert.doesNotMatch(top, new RegExp(`name="${n}"`)); }
-  assert.match(more, /More purchasing terms/); assert.match(more, /id="moreSum">FOB · 30 days · valid until 2026-12-31</);
+  assert.match(more, /More purchasing terms/); assert.match(more, /id="moreSum"><span class="pe-chip">FOB<\/span><span class="pe-chip">30 days lead time<\/span><span class="pe-chip">valid until 2026-12-31<\/span>/);
   assert.doesNotMatch(more.slice(0, 20), /open/); assert.match(sup, /pe-more" id="moreTerms" >/);
   assert.match(html('admin/products/form#errors').replace(/\s+/g, ' '), /id="moreTerms" open/, 'a problem in a hidden term opens it');
-  const cls = n => (sup.match(new RegExp(`<label class="([^"]+)">[^<]*(?:<span[^>]*>[^<]*</span>)?\\s*<(?:input|select)[^>]*name="${n}"`)) || [])[1];
-  assert.equal(cls('unit_cost'), 'field--compact'); assert.equal(cls('moq'), 'field--compact'); assert.equal(cls('cost_currency'), 'field--compact'); assert.equal(cls('src_lead'), 'field--compact');
-  assert.equal(cls('supplier_sku'), 'field--medium'); assert.equal(cls('supplier_id'), 'field--wide'); assert.equal(cls('src_incoterm'), 'field--medium');
+  assert.equal((sup.match(/<h3>(Supplier|Price &amp; minimum order)<\/h3>/g) || []).length, 2, 'two labelled blocks');
+  assert.match(sup, /<span class="pk-join"><input[^>]*name="unit_cost"[\s\S]*?<select name="cost_currency"/, 'price and currency are one joined control');
+  assert.match(sup, /<i data-unit>/, 'the MOQ unit sits inside the field and follows Sold per');
+  assert.ok(sup.indexOf('name="supplier_sku"') > sup.indexOf('name="supplier_id"') && sup.indexOf('name="supplier_sku"') < sup.indexOf('Price &amp; minimum order'), 'supplier and its SKU share the first block');
   assert.doesNotMatch(sup, /pe-group|pe-grid g6/, 'no stacked sub-cards');
 });
 test('measurements: export packaging first, joined L × W × H fields, one volume field and one status line, the choice only on a conflict', () => {
@@ -234,7 +235,7 @@ test('edit form: Sold per and Package type selectors, with labels that follow th
   assert.match(html, /name="sold_per"[\s\S]*?<option selected>m<\/option>/);
   assert.match(html, /name="package_type"[\s\S]*?<option selected>Reel<\/option>/);
   assert.match(html, /Qty per package <span class="pe-unit" data-unit>m<\/span>/);
-  assert.match(html, /MOQ <span class="pe-unit" data-unit>m<\/span>/);
+  assert.match(html, /<i data-unit>m<\/i>/);
 });
 
 test('edit form: the default unit and package read plainly, without "(default)"', () => {

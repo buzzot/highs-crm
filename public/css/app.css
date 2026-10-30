@@ -2705,3 +2705,28 @@ dialog.fqdlg::backdrop { background: rgba(15,30,50,.45); }
 .pk-stat[hidden]{display:none}
 .pe-dims.is-off .pk-trio,.pe-dims.is-off .pk-sfx input{background:var(--line-2)}
 @media (max-width:560px){.pk-r3,.pk-r2{grid-template-columns:1fr 1fr}.pk-r3>label:first-child{grid-column:1/-1}.pk-r2>.pk-fl{grid-column:1/-1}}
+
+/* Product information / Supplier & pricing: the same grouped blocks as Dimensions & packaging */
+.pe-card .pe-blk{padding:14px 0;border-top:1px solid var(--line-2)}
+.pe-card .pe-blk:first-of-type{padding-top:2px;border-top:0}
+.pe-card .pe-blk>h3{margin:0 0 10px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pe-card .pe-blk>h3 .cnt{background:var(--line-2);border-radius:999px;padding:0 7px;font-size:11px;letter-spacing:0;color:var(--ink-2)}
+.pe-card .pe-blk>h3 .pe-sp{flex:1}
+.pe-card .pe-blk>h3 .btn{text-transform:none;letter-spacing:0}
+.pk-r1{grid-template-columns:minmax(0,1fr)}
+.pk-r3e{grid-template-columns:repeat(3,minmax(0,1fr))}
+.pk-r2s{grid-template-columns:minmax(0,1.6fr) minmax(0,1fr)}
+.pk-rp{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr) minmax(0,1fr)}
+.pk-join{display:flex;margin-top:4px;border:1px solid var(--line);border-radius:7px;background:#fff;overflow:hidden}
+.pk-join input,.pk-join select{border:0!important;margin:0!important;border-radius:0!important;box-shadow:none!important}
+.pk-join input{flex:1;min-width:0;width:auto}
+.pk-join select{width:84px!important;flex:none;background:#f4f6f8;border-left:1px solid var(--line)!important}
+.pk-join:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.pk-r textarea{width:100%;box-sizing:border-box;margin-top:4px;resize:vertical}
+.pk-r .pe-spec,.pe-blk .pe-spec{margin-top:2px}
+.pe-empty-s{margin:0;padding:9px 12px;font-size:13px;color:var(--muted);background:#f7f9fb;border-radius:8px}
+.pe-empty-s[hidden]{display:none}
+.pe-more .pe-sum{display:inline-flex;gap:6px;flex-wrap:wrap;align-items:center}
+.pe-chip{background:var(--line-2);border-radius:999px;padding:2px 9px;font-size:12px;color:var(--ink-2);font-weight:400}
+.pe-more>.pk-r{margin-top:12px}
+@media (max-width:640px){.pk-r3e,.pk-rp{grid-template-columns:1fr 1fr}.pk-r3e>label:first-child,.pk-rp>label:first-child,.pk-r2s{grid-template-columns:1fr}.pk-r3e>label:last-child{grid-column:1/-1}}
