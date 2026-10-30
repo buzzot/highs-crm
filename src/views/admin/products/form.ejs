@@ -43,7 +43,7 @@
   <section class="pe-card" id="sec-basic">
     <h2>Product information</h2>
     <div class="pe-row">
-      <label class="field--fill">Product name <span class="req" title="Required">*</span>
+      <label class="field--full">Product name <span class="req" title="Required">*</span>
         <input name="name" id="nameIn" required maxlength="300" value="<%= v('name') %>" aria-invalid="<%= E.name ? 'true' : 'false' %>"><% if (E.name) { %><small class="pe-err" role="alert"><%= E.name %></small><% } %></label>
       <label class="field--medium">Our SKU
         <input name="sku" id="skuIn" maxlength="100" value="<%= v('sku') %>"><% if (E.sku) { %><small class="pe-err" role="alert"><%= E.sku %></small><% } %></label>
