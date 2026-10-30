@@ -2635,3 +2635,16 @@ html:has(.pe){scroll-padding-bottom:110px}
 .pe-card.over{outline:2px dashed var(--accent);outline-offset:-6px;background:var(--accent-soft)}
 .pe-cols .pe-attach>.pe-attcol:first-child{padding-top:0;border-top:0}
 .pe-attcol[hidden],#attEmpty[hidden]{display:none}
+
+/* Styled select popup (public/js/select-ui.js) */
+select.sx-open { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.sx-pop { position: fixed; z-index: 3000; overflow-y: auto; box-sizing: border-box; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 30px rgba(15,23,42,.14), 0 2px 6px rgba(15,23,42,.06); font: 14px/1.4 var(--font); color: var(--ink); }
+.sx-opt { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 10px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+.sx-opt.in-group { padding-left: 18px; }
+.sx-opt .sx-t { overflow: hidden; text-overflow: ellipsis; }
+.sx-opt.is-active { background: var(--line-2); }
+.sx-opt.is-selected { color: var(--accent); font-weight: 500; }
+.sx-opt.is-selected.is-active { background: var(--accent-soft); }
+.sx-check { font-size: 13px; line-height: 1; }
+.sx-opt.is-disabled { color: var(--muted); cursor: not-allowed; }
+.sx-group { padding: 8px 10px 4px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }

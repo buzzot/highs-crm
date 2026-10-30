@@ -1,5 +1,6 @@
 </main>
 <% if (user && !['admin','staff'].includes(user.role)) { %></div></div><% } %>
 <script src="/js/app.js?v=<%= typeof assetV === 'undefined' ? '' : assetV %>"></script>
+<script src="/js/select-ui.js?v=<%= typeof assetV === 'undefined' ? '' : assetV %>"></script>
 </body>
 </html>

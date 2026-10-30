@@ -59,3 +59,8 @@ test('supplier portal never renders margins, sell prices or client names', () =>
     assert.doesNotMatch(html, /margin|landed|Acme|sell price|internal/i, `${name} leaks internal data`);
   }
 });
+
+test('styled select popup script is loaded and styled', () => {
+  assert.match(fs.readFileSync('src/views/partials/foot.ejs', 'utf8'), /\/js\/select-ui\.js/);
+  assert.match(fs.readFileSync('public/css/app.css', 'utf8'), /\.sx-pop\s*\{/);
+});
