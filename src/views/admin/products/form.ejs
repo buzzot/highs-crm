@@ -194,36 +194,34 @@
     <h2>Dimensions &amp; packaging</h2>
     <p class="pe-note" id="packOff" <%= off ? '' : 'hidden' %>>Not used for <%= (F.type || 'non-physical').toLowerCase() %> records — existing values are kept.</p>
     <div class="pe-dims <%= off ? 'is-off' : '' %>" id="packWrap">
-      <div class="pe-sub">
-        <h3>Individual product</h3>
-        <div class="pe-row">
-          <label class="field--compact">Weight <span class="pe-unit">kg</span><input type="number" min="0" step="0.001" inputmode="decimal" name="unit_weight_kg" value="<%= v('unit_weight_kg') %>"><% if (E.unit_weight_kg) { %><small class="pe-err"><%= E.unit_weight_kg %></small><% } %></label>
-          <label class="field--compact">Length <span class="pe-unit">cm</span><input type="number" min="0" step="0.1" inputmode="decimal" name="unit_length_cm" value="<%= v('unit_length_cm') %>"></label>
-          <label class="field--compact">Width <span class="pe-unit">cm</span><input type="number" min="0" step="0.1" inputmode="decimal" name="unit_width_cm" value="<%= v('unit_width_cm') %>"></label>
-          <label class="field--compact">Height <span class="pe-unit">cm</span><input type="number" min="0" step="0.1" inputmode="decimal" name="unit_height_cm" value="<%= v('unit_height_cm') %>"></label>
-        </div>
-      </div>
-      <div class="pe-sub">
-        <h3>Export carton</h3>
-        <div class="pe-row">
-          <label class="field--medium">Package type <%- tip('How the goods are packed for export — carton, pallet, drum / reel, roll… Optional; the figures below are then read per package.') %>
+      <div class="pe-blk">
+        <h3>Export packaging <span class="hint">how it is shipped</span></h3>
+        <div class="pk-r pk-r3">
+          <label>Package type <%- tip('How the goods are packed for export — carton, pallet, reel… Optional; the figures below are then read per package.') %>
             <select name="package_type" id="pkgType"><option value="">Carton</option><% pkgOpts.filter(u => u !== 'Carton').forEach(u => { %><option <%= F.pkg === u ? 'selected' : '' %>><%= u %></option><% }) %></select></label>
-          <label class="field--compact"><span id="qtyPerLbl"><%= U %></span> / <span id="pkgLbl"><%= (F.pkg || 'carton').toLowerCase() %></span><input type="number" min="1" step="1" inputmode="numeric" name="carton_qty" value="<%= v('carton_qty') %>"><% if (E.carton_qty) { %><small class="pe-err"><%= E.carton_qty %></small><% } %></label>
-          <label class="field--compact">Gross wt <span class="pe-unit">kg</span><input type="number" min="0" step="0.01" inputmode="decimal" name="carton_weight_kg" value="<%= v('carton_weight_kg') %>"><% if (E.carton_weight_kg) { %><small class="pe-err"><%= E.carton_weight_kg %></small><% } %></label>
-          <label class="field--compact">Length <span class="pe-unit">cm</span><input type="number" min="0" step="0.1" inputmode="decimal" name="carton_length_cm" value="<%= v('carton_length_cm') %>"></label>
-          <label class="field--compact">Width <span class="pe-unit">cm</span><input type="number" min="0" step="0.1" inputmode="decimal" name="carton_width_cm" value="<%= v('carton_width_cm') %>"></label>
-          <label class="field--compact">Height <span class="pe-unit">cm</span><input type="number" min="0" step="0.1" inputmode="decimal" name="carton_height_cm" value="<%= v('carton_height_cm') %>"></label>
+          <label>Qty per package <span class="pe-unit" data-unit><%= U %></span><input type="number" min="1" step="1" inputmode="numeric" name="carton_qty" value="<%= v('carton_qty') %>"><% if (E.carton_qty) { %><small class="pe-err"><%= E.carton_qty %></small><% } %></label>
+          <label>Gross weight <span class="pe-unit">kg</span><input type="number" min="0" step="0.01" inputmode="decimal" name="carton_weight_kg" value="<%= v('carton_weight_kg') %>"><% if (E.carton_weight_kg) { %><small class="pe-err"><%= E.carton_weight_kg %></small><% } %></label>
         </div>
-        <div class="pe-row pe-cbmrow" id="cbmBox">
-          <label class="field--compact">Carton CBM <span class="pe-unit">m³</span><input type="number" min="0" step="0.0001" inputmode="decimal" name="carton_cbm" id="cbmIn" value="<%= CB.supplier %>"><% if (E.carton_cbm) { %><small class="pe-err"><%= E.carton_cbm %></small><% } %></label>
-          <p class="pe-cbmline"><span id="cbmUse">—</span> <%- tip('Length × width × height ÷ 1,000,000 is worked out when all three carton sides are filled in. The CBM you type is the supplier-provided figure and is never overwritten.') %></p>
+        <div class="pk-r pk-r2" id="cbmBox">
+          <div class="pk-fl" role="group" aria-label="Package size, length by width by height in centimetres">Package size
+            <div class="pk-trio"><input type="number" min="0" step="0.1" inputmode="decimal" name="carton_length_cm" placeholder="L" aria-label="Length, cm" value="<%= v('carton_length_cm') %>"><b>×</b><input type="number" min="0" step="0.1" inputmode="decimal" name="carton_width_cm" placeholder="W" aria-label="Width, cm" value="<%= v('carton_width_cm') %>"><b>×</b><input type="number" min="0" step="0.1" inputmode="decimal" name="carton_height_cm" placeholder="H" aria-label="Height, cm" value="<%= v('carton_height_cm') %>"><em>cm</em></div></div>
+          <label>Volume <span class="pe-unit">CBM</span><span class="pk-sfx"><input type="number" min="0" step="0.0001" inputmode="decimal" name="carton_cbm" id="cbmIn" value="<%= CB.supplier %>"><i>m³</i></span><% if (E.carton_cbm) { %><small class="pe-err"><%= E.carton_cbm %></small><% } %></label>
         </div>
+        <p class="pk-stat" id="cbmLine"><span id="cbmUse">Enter the package size and the volume is calculated.</span> <%- tip('Length × width × height ÷ 1,000,000 is worked out when all three sides are filled in. A volume you type is the supplier-provided figure and is never overwritten.') %></p>
         <fieldset class="pe-pick" id="cbmPick" hidden>
           <legend id="cbmLegend">The supplier's CBM and the calculated one differ — use which?</legend>
           <label><input type="radio" name="cbm_use" value="entered" <%= CB.use !== 'calc' ? 'checked' : '' %>> <span id="cbmPickEnt">Supplier-provided</span></label>
           <label><input type="radio" name="cbm_use" value="calc" <%= CB.use === 'calc' ? 'checked' : '' %>> <span id="cbmPickCalc">Calculated from size</span></label>
         </fieldset>
         <p class="pe-help" id="cbmNote"></p>
+      </div>
+      <div class="pe-blk">
+        <h3>Single product <span class="hint">one piece, without outer packaging</span></h3>
+        <div class="pk-r pk-r2">
+          <label>Net weight <span class="pe-unit">kg</span><span class="pk-sfx"><input type="number" min="0" step="0.001" inputmode="decimal" name="unit_weight_kg" value="<%= v('unit_weight_kg') %>"><i>kg</i></span><% if (E.unit_weight_kg) { %><small class="pe-err"><%= E.unit_weight_kg %></small><% } %></label>
+          <div class="pk-fl" role="group" aria-label="Product size, length by width by height in centimetres">Size
+            <div class="pk-trio"><input type="number" min="0" step="0.1" inputmode="decimal" name="unit_length_cm" placeholder="L" aria-label="Length, cm" value="<%= v('unit_length_cm') %>"><b>×</b><input type="number" min="0" step="0.1" inputmode="decimal" name="unit_width_cm" placeholder="W" aria-label="Width, cm" value="<%= v('unit_width_cm') %>"><b>×</b><input type="number" min="0" step="0.1" inputmode="decimal" name="unit_height_cm" placeholder="H" aria-label="Height, cm" value="<%= v('unit_height_cm') %>"><em>cm</em></div></div>
+        </div>
       </div>
     </div>
   </section>
@@ -372,9 +370,17 @@
   function packing() {
     var off = nonPhysical(); wrap.classList.toggle('is-off', off); $('packOff').hidden = !off;
     wrap.querySelectorAll('input').forEach(function (i) { if (i.type === 'radio') { i.disabled = off || pick.hidden; return; } i.readOnly = off; i.tabIndex = off ? -1 : 0; });
-    $('cbmBox').hidden = off; if (off) { pick.hidden = true; $('cbmNote').textContent = ''; }
+    $('cbmLine').hidden = off; if (off) { pick.hidden = true; $('cbmNote').textContent = ''; }
   }
   // three volumes: supplier-provided (typed), calculated (from the sides) and the one used for freight; a difference is never settled silently
+  var CONT = { cbm: <%= Number((typeof container !== 'undefined' && container && container.container_cbm) || 68) %>, kg: <%= Number((typeof container !== 'undefined' && container && container.container_max_kg) || 26500) %> };
+  function pkgPlural() { var k = (form.elements.package_type.value || 'Carton').toLowerCase(); return k === 'other' ? 'packages' : k === 'wooden case' ? 'wooden cases' : k + 's'; }
+  function fitText(eff) {
+    var per = Number(form.elements.carton_qty.value), kg = Number(form.elements.carton_weight_kg.value), n = Math.floor(CONT.cbm / eff);
+    if (!(eff > 0) || !(n > 0)) return '';
+    if (kg > 0) n = Math.min(n, Math.floor(CONT.kg / kg));
+    return ' · about ' + n.toLocaleString('en-US') + ' ' + pkgPlural() + (per > 0 ? ' (' + (n * per).toLocaleString('en-US') + ' ' + (form.elements.sold_per.value || 'pcs') + ')' : '') + ' fit in a 40HQ';
+  }
   function cbmState() {
     if (nonPhysical()) return;
     var c = calc(), e = cbm.value.trim() === '' ? null : Number(cbm.value); if (!(e > 0)) e = null;
@@ -385,13 +391,16 @@
     else if (!diff) { eff = c; src = 'calculated from the carton size'; }
     else if (use && use.value === 'calc') { eff = c; src = 'calculated — your choice'; }
     else { eff = e; src = 'supplier-provided — your choice'; }
-    $('cbmUse').textContent = eff != null ? 'Used for freight: ' + eff + ' m³ · ' + src : 'No CBM yet — fill in the carton size';
+    var fit = eff != null ? fitText(eff) : '';
+    $('cbmUse').textContent = eff == null ? 'Enter the package size and the volume is calculated.'
+      : (c != null && !diff ? '✓ Calculated from the size' : c == null ? 'Supplier-provided volume (no size yet)' : (use && use.value === 'calc' ? 'Calculated from the size — your choice' : 'Supplier-provided volume — your choice')) + ' · ' + eff + ' m³ used for freight' + fit;
     $('cbmPickEnt').textContent = 'Supplier-provided: ' + e + ' m³'; $('cbmPickCalc').textContent = 'Calculated from size: ' + c + ' m³';
     var n = $('cbmNote'); n.classList.remove('warn');
     if (diff) $('cbmLegend').textContent = '⚠ The two volumes differ by ' + Math.round(Math.abs(e - c) / c * 100) + '% — which should be used?';
     n.textContent = !diff && c == null && e != null ? 'No carton size yet, so the supplier-provided CBM is used as entered.' : '';
   }
   SIDES.forEach(function (i) { i.addEventListener('input', cbmState); });
+  ['carton_qty', 'carton_weight_kg'].forEach(function (n) { form.elements[n].addEventListener('input', cbmState); });
   cbm.addEventListener('input', cbmState); radios.forEach(function (r) { r.addEventListener('change', function () { cbmState(); dirty(); }); });
   rt.addEventListener('change', function () { packing(); cbmState(); dirty(); });
   cbmState(); packing();
@@ -533,7 +542,7 @@
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') document.querySelectorAll('.pe-info.open').forEach(function (i) { i.classList.remove('open'); }); });
 
   // collapsed "More purchasing terms" keeps a one-line summary of what is filled in
-  function unitLabels() { var u = form.elements.sold_per.value || 'pcs', k = (form.elements.package_type.value || 'Carton').toLowerCase(); document.querySelectorAll('[data-unit],#qtyPerLbl').forEach(function (e) { e.textContent = u; }); $('pkgLbl').textContent = k; }
+  function unitLabels() { var u = form.elements.sold_per.value || 'pcs'; document.querySelectorAll('[data-unit]').forEach(function (e) { e.textContent = u; }); cbmState(); }
   ['sold_per', 'package_type'].forEach(function (n) { form.elements[n].addEventListener('change', unitLabels); });
   function termsSum() { var inc = form.elements.src_incoterm.value, lead = form.elements.src_lead.value.trim(), val = form.elements.src_valid.value.trim(); $('moreSum').textContent = [inc, lead ? lead + ' days' : '', val ? 'valid until ' + val : ''].filter(Boolean).join(' · ') || 'none set'; }
   ['src_incoterm', 'src_lead', 'src_valid'].forEach(function (n) { form.elements[n].addEventListener('input', termsSum); form.elements[n].addEventListener('change', termsSum); });

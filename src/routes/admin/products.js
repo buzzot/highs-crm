@@ -176,7 +176,7 @@ r.get('/compare', async (req, res) => {
 });
 
 r.get('/new', async (req, res) => res.render('admin/products/form', {
-  title: 'New product', suppliers: await formData(), photos: [], docs: [], ...formLocals({ cost_currency: 'CNY', supplier_id: req.query.supplier_id }),
+  title: 'New product', suppliers: await formData(), photos: [], docs: [], container: (await getSettings(admin)).container, ...formLocals({ cost_currency: 'CNY', supplier_id: req.query.supplier_id }),
 }));
 
 // AI scan: read photos / a PDF and SUGGEST field values. Nothing is saved here — the form shows the suggestions and staff approve each one.
@@ -204,7 +204,7 @@ r.post('/ai-scan', (req, res) => scanUpload(req, res, async err => {
   } catch (e) { console.error('[product ai-scan]', e.message); res.status(502).json({ error: `AI could not read the files: ${e.message}` }); }
 }));
 r.post('/', withPhotos, async (req, res) => {
-  const again = async (error, errors = {}) => res.status(400).render('admin/products/form', { title: 'New product', suppliers: await formData(), photos: [], docs: [], ...formLocals({ ...req.body }, { b: req.body, errors, error: `${error}${req.files?.length || req.docFiles?.length ? ' Please add the files again.' : ''}` }) });
+  const again = async (error, errors = {}) => res.status(400).render('admin/products/form', { title: 'New product', suppliers: await formData(), photos: [], docs: [], container: (await getSettings(admin)).container, ...formLocals({ ...req.body }, { b: req.body, errors, error: `${error}${req.files?.length || req.docFiles?.length ? ' Please add the files again.' : ''}` }) });
   if (req.photoError) return again(req.photoError);
   const errors = validateProduct(req.body);
   if (Object.keys(errors).length) return again('Some fields need attention — they are marked below. Nothing was saved.', errors);
@@ -377,7 +377,7 @@ r.get('/:id', async (req, res) => {
 r.get('/:id/edit', async (req, res) => {
   const { data: p } = await admin.from('products').select('*').eq('id', req.params.id).single();
   if (!p) return notFound(res, 'Product');
-  res.render('admin/products/form', { title: 'Edit product', suppliers: await formData(), photos: await productPhotos(p.id), docs: await productDocs(p.id), ...formLocals(p) });
+  res.render('admin/products/form', { title: 'Edit product', suppliers: await formData(), photos: await productPhotos(p.id), docs: await productDocs(p.id), container: (await getSettings(admin)).container, ...formLocals(p) });
 });
 r.post('/:id', withPhotos, async (req, res) => {
   const id = req.params.id;

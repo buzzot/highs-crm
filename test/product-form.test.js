@@ -83,7 +83,7 @@ test('form view: primary radios only when supported; no photos → empty state',
 test('form view: service records lock packing; mismatch offers the keep control', () => {
   assert.match(html('admin/products/form#service'), /is-off/);
   assert.doesNotMatch(html('admin/products/form#edit'), /packWrap" class="[^"]*is-off|pe-two is-off/);
-  assert.match(html('admin/products/form#cbm'), /name="cbm_use"/); assert.match(html('admin/products/form#cbm'), /Carton CBM/); assert.match(html('admin/products/form#cbm'), /id="cbmUse"/); assert.match(html('admin/products/form#cbm'), /Used for freight/);
+  assert.match(html('admin/products/form#cbm'), /name="cbm_use"/); assert.match(html('admin/products/form#cbm'), /Volume <span class="pe-unit">CBM/); assert.match(html('admin/products/form#cbm'), /id="cbmUse"/);
 });
 test('form view: failed save keeps typed values and shows field errors', () => {
   const h = html('admin/products/form#errors');
@@ -145,12 +145,14 @@ test('supplier & pricing: essentials always visible, the rest under "More purcha
   assert.equal(cls('supplier_sku'), 'field--medium'); assert.equal(cls('supplier_id'), 'field--wide'); assert.equal(cls('src_incoterm'), 'field--medium');
   assert.doesNotMatch(sup, /pe-group|pe-grid g6/, 'no stacked sub-cards');
 });
-test('measurements: two labelled groups of compact inputs; CBM is one field and one line, the choice only on a conflict', () => {
+test('measurements: export packaging first, joined L × W × H fields, one volume field and one status line, the choice only on a conflict', () => {
   const h = html('admin/products/form#edit'), pack = h.slice(h.indexOf('id="sec-pack"'), h.indexOf('class="pe-foot"'));
-  assert.match(pack, /<h3>Individual product<\/h3>/); assert.match(pack, /<h3>Export carton<\/h3>/);
-  assert.equal((pack.match(/field--compact/g) || []).length, 4 + 5 + 1);
-  assert.ok(pack.indexOf('name="carton_height_cm"') < pack.indexOf('id="cbmBox"'));
-  assert.match(pack, /id="cbmUse"/); assert.doesNotMatch(pack, /id="cbmCalc"|Calculated<|Used for freight &amp; costing/);
+  assert.match(pack, /<h3>Export packaging /); assert.match(pack, /<h3>Single product /);
+  assert.ok(pack.indexOf('Export packaging') < pack.indexOf('Single product'));
+  assert.equal((pack.match(/class="pk-trio"/g) || []).length, 2, 'one joined size field per block');
+  for (const n of ['carton_length_cm', 'carton_width_cm', 'carton_height_cm', 'unit_length_cm', 'unit_width_cm', 'unit_height_cm', 'carton_qty', 'carton_weight_kg', 'carton_cbm', 'unit_weight_kg', 'package_type']) assert.match(pack, new RegExp('name="' + n + '"'), n);
+  assert.ok(pack.indexOf('name="carton_height_cm"') < pack.indexOf('name="carton_cbm"'));
+  assert.match(pack, /id="cbmUse"/); assert.match(pack, /Qty per package/); assert.doesNotMatch(pack, /id="cbmCalc"|Carton CBM|Used for freight &amp; costing/);
   assert.match(pack, /id="cbmPick" hidden/, 'the comparison starts hidden');
 });
 test('customs is a small card in the left column', () => {
@@ -231,7 +233,7 @@ test('edit form: Sold per and Package type selectors, with labels that follow th
   const html = render('src/views/admin/products/form.ejs', { ...loc, units: ['pcs', 'm', 'kg'], packageTypes: ['Carton', 'Reel', 'Pallet'], f: { ...(loc.f || {}), unit: 'm', pkg: 'Reel', rows: (loc.f || {}).rows || [] } });
   assert.match(html, /name="sold_per"[\s\S]*?<option selected>m<\/option>/);
   assert.match(html, /name="package_type"[\s\S]*?<option selected>Reel<\/option>/);
-  assert.match(html, /<span id="qtyPerLbl">m<\/span> \/ <span id="pkgLbl">reel<\/span>/);
+  assert.match(html, /Qty per package <span class="pe-unit" data-unit>m<\/span>/);
   assert.match(html, /MOQ <span class="pe-unit" data-unit>m<\/span>/);
 });
 
