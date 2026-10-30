@@ -1,31 +1,31 @@
 <%- include('../../partials/head') %>
-<% const tab = (s, label, n) => `<a class="${(status === s && !unlinked) ? 'on' : ''}" href="/admin/purchasing${s ? '?status=' + s : ''}">${label}${n != null ? ' <span>' + n + '</span>' : ''}</a>`; %>
+<% const supQ = typeof supplier !== 'undefined' && supplier ? 'supplier=' + supplier.id : '';
+   const qsOf = (...p) => { const x = p.filter(Boolean).join('&'); return x ? '?' + x : ''; };
+%>
 <div class="pagehead">
   <div><h1>Purchasing</h1><p class="muted">Purchase orders to our suppliers — send them, and keep the supplier's confirmation, proforma invoice and packing list together.</p></div>
   <div class="headactions"><a class="btn" href="/admin/rfqs">RFQs</a><a class="btn" href="/admin/orders">From an order</a><a class="btn primary" href="/admin/purchasing/new">+ New purchase order</a></div>
 </div>
 <% if (error) { %><div class="alert err"><%= error %></div><% } %>
+<% if (supQ) { %><div class="alert info supfilter">Showing purchase orders for <strong><%= supplier.name %></strong> · <a href="/admin/suppliers/<%= supplier.id %>">Open supplier</a> · <a href="/admin/purchasing">Show all suppliers</a></div><% } %>
 
 <div class="statgrid">
-  <a class="stat <%= kpi.review ? 'attn' : '' %>" href="/admin/purchasing?status=replied"><span class="muted small">Needs your check</span><strong><%= kpi.review %></strong><span class="small muted">supplier replied</span></a>
-  <a class="stat" href="/admin/purchasing?status=sent"><span class="muted small">Waiting for reply</span><strong><%= kpi.waiting %></strong><span class="small muted">sent, no answer yet</span></a>
-  <a class="stat ok" href="/admin/purchasing?status=confirmed"><span class="muted small">Confirmed</span><strong><%= kpi.confirmed %></strong><span class="small muted">by the supplier</span></a>
-  <a class="stat" href="/admin/purchasing?status=draft"><span class="muted small">Drafts</span><strong><%= kpi.drafts %></strong><span class="small muted">not sent yet</span></a>
-  <a class="stat <%= unlinked ? 'sel' : '' %>" href="/admin/purchasing?order=none"><span class="muted small">Not linked to an order</span><strong><%= kpi.unlinked %></strong><span class="small muted">link when the order is confirmed</span></a>
+  <a class="stat <%= kpi.review ? 'attn' : '' %> <%= status === 'replied' ? 'sel' : '' %>" href="/admin/purchasing<%= qsOf('status=' + (status === 'replied' ? 'open' : 'replied'), supQ) %>"><span class="muted small">Needs your check</span><strong><%= kpi.review %></strong><span class="small muted">supplier replied</span></a>
+  <a class="stat <%= status === 'sent' ? 'sel' : '' %>" href="/admin/purchasing<%= qsOf('status=' + (status === 'sent' ? 'open' : 'sent'), supQ) %>"><span class="muted small">Waiting for reply</span><strong><%= kpi.waiting %></strong><span class="small muted">sent, no answer yet</span></a>
+  <a class="stat ok <%= status === 'confirmed' ? 'sel' : '' %>" href="/admin/purchasing<%= qsOf('status=' + (status === 'confirmed' ? 'open' : 'confirmed'), supQ) %>"><span class="muted small">Confirmed</span><strong><%= kpi.confirmed %></strong><span class="small muted">by the supplier</span></a>
+  <a class="stat <%= status === 'draft' ? 'sel' : '' %>" href="/admin/purchasing<%= qsOf('status=' + (status === 'draft' ? 'open' : 'draft'), supQ) %>"><span class="muted small">Drafts</span><strong><%= kpi.drafts %></strong><span class="small muted">not sent yet</span></a>
+  <a class="stat <%= unlinked ? 'sel' : '' %>" href="/admin/purchasing<%= qsOf('order=none', supQ) %>"><span class="muted small">Not linked to an order</span><strong><%= kpi.unlinked %></strong><span class="small muted">link when the order is confirmed</span></a>
 </div>
 
 <div class="card flush">
   <div class="toolbar">
-    <div class="tabs">
-      <%- tab('', 'All', kpi.total) %>
-      <%- tab('draft', 'Draft', counts.draft) %><%- tab('sent', 'Sent', counts.sent) %><%- tab('replied', 'Replied', counts.replied) %><%- tab('confirmed', 'Confirmed', counts.confirmed) %><%- tab('declined', 'Declined', counts.declined) %><%- tab('cancelled', 'Cancelled', counts.cancelled) %>
-    </div>
-    <input type="search" class="searchbox" id="poSearch" placeholder="Search PO, supplier, order…" aria-label="Search purchase orders">
+    <%- include('../../partials/viewtabs', { base: '/admin/purchasing', view, counts: vcounts, statuses, byStatus: counts, label: s => labels[s], keep: supQ + (unlinked ? (supQ ? '&' : '') + 'order=none' : '') }) %>
+    <input type="search" class="searchbox" id="poSearch" value="<%= q %>" placeholder="Search PO, supplier, order…" aria-label="Search purchase orders">
   </div>
   <% if (!pos.length) { %>
     <div class="emptybox">
-      <strong><%= status || unlinked ? 'Nothing here' : 'No purchase orders yet' %></strong>
-      <p class="muted"><%= status || unlinked ? 'No purchase order matches this filter.' : 'Create one for a client order — products are grouped by supplier — or start a purchase order without an order and link it later.' %></p>
+      <strong><%= status !== 'open' || unlinked ? 'Nothing here' : vcounts.closed ? 'No active purchase orders' : 'No purchase orders yet' %></strong>
+      <p class="muted"><%= status !== 'open' || unlinked ? 'No purchase order matches this filter.' : vcounts.closed ? vcounts.closed + ' closed (cancelled or declined) — see the Closed tab.' : 'Create one for a client order — products are grouped by supplier — or start a purchase order without an order and link it later.' %></p>
       <div class="actions"><a class="btn primary" href="/admin/purchasing/new">+ New purchase order</a><a class="btn" href="/admin/orders">Choose an order</a></div>
     </div>
   <% } else { %>
@@ -44,10 +44,18 @@
     <% }) %>
     </tbody>
   </table></div>
+  <div class="vhint" id="poHint" hidden></div>
   <script>
   (function () {
-    const rows = [...document.querySelectorAll('#poTable tbody tr')], q = document.getElementById('poSearch');
-    q.addEventListener('input', () => { const t = q.value.trim().toLowerCase(); rows.forEach(r => { r.hidden = t && !r.textContent.toLowerCase().includes(t); }); });
+    const rows = [...document.querySelectorAll('#poTable tbody tr')], q = document.getElementById('poSearch'), hint = document.getElementById('poHint');
+    const view = <%- JSON.stringify(status) %>, other = <%= vcounts.all - (status === 'open' ? vcounts.open : status === 'closed' ? vcounts.closed : status === 'all' ? vcounts.all : (counts[status] || 0)) %>;
+    const run = () => {
+      const t = q.value.trim().toLowerCase(); let shown = 0;
+      rows.forEach(r => { r.hidden = !!t && !r.textContent.toLowerCase().includes(t); if (!r.hidden) shown++; });
+      // a search that finds nothing here may still match something in the other view (e.g. a cancelled PO)
+      if (t && !shown && other > 0) { hint.hidden = false; hint.innerHTML = 'No match in this view. <a href="/admin/purchasing?status=all&q=' + encodeURIComponent(q.value.trim()) + '">Search in all purchase orders</a>'; } else hint.hidden = true;
+    };
+    q.addEventListener('input', run); run();
     rows.forEach(r => r.addEventListener('click', e => { if (!e.target.closest('a,button,input,select')) location.href = r.dataset.href; }));
   })();
   </script>

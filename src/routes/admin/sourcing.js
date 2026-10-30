@@ -1,3 +1,4 @@
+import { listView, viewCounts } from '../../lib/list-view.js';
 import multer from '../../lib/multer-utf8.js';
 import { Router } from '../../lib/router.js';
 import { aiEnabled, extractRequestItem, extractRequestFromText } from '../../lib/ai.js';
@@ -21,13 +22,16 @@ r.get('/', async (req, res) => {
   const newIds = (freshRows || []).map(x => x.id);
   const pendingIds = (pend || []).map(x => x.request_id), poIds = (poPend || []).map(x => x.request_id);
   const waiting = [...new Set([...pendingIds, ...poIds, ...newIds])];
-  const status = req.query.status || (waiting.length ? 'action' : 'open');
+  const LV = { active: ['new', 'reviewing', 'quoted'], closed: ['accepted', 'declined', 'cancelled'] };
+  // "Needs your action" is an alert, not a tab: the list opens on Active with those requests pinned on top
+  const onlyAction = req.query.status === 'action';
+  const { view, set } = listView(onlyAction ? 'open' : req.query.status, LV);
+  const status = onlyAction ? 'action' : view;
   let q = admin.from('requests')
     .select('*, organizations(id, name), assignee:profiles!requests_assigned_to_fkey(full_name, email), quotes(id, status)')
     .order('created_at', { ascending: false });
   if (status === 'action') q = q.in('id', waiting.length ? waiting : ['00000000-0000-0000-0000-000000000000']);
-  else if (status === 'open') q = q.in('status', ['new', 'reviewing', 'quoted']);
-  else if (status !== 'all') q = q.eq('status', status);
+  else if (set) q = q.in('status', set);
   if (req.query.mine) q = q.eq('assigned_to', req.user.id);
   const clientId = /^[0-9a-f-]{36}$/i.test(String(req.query.client || '')) ? req.query.client : '';   // from the Clients list
   if (clientId) q = q.eq('org_id', clientId);
@@ -36,8 +40,17 @@ r.get('/', async (req, res) => {
   const [{ data }, { data: counts }] = await Promise.all([q, admin.from('requests').select('id, status')]);
   const byStatus = {}, waitBy = {};
   (counts || []).forEach(x => { byStatus[x.status] = (byStatus[x.status] || 0) + 1; if (waiting.includes(x.id)) waitBy[x.status] = (waitBy[x.status] || 0) + 1; });
+  const rows = [...(data || [])];
+  if (!onlyAction) rows.sort((a, b) => (waiting.includes(b.id) ? 1 : 0) - (waiting.includes(a.id) ? 1 : 0));   // stable: newest first within each group
+  // a search typed in the Active view that only matches closed requests: say so instead of showing "Nothing here"
+  let closedHits = 0;
+  if (s && status === 'open') {
+    let cq = admin.from('requests').select('id', { count: 'exact', head: true }).in('status', LV.closed).or(`title.ilike.%${s}%,ref.ilike.%${s}%`);
+    if (clientId) cq = cq.eq('org_id', clientId);
+    closedHits = (await cq).count || 0;
+  }
   const clientRow = clientId ? (await admin.from('organizations').select('id, name').eq('id', clientId).maybeSingle()).data : null;
-  res.render('admin/sourcing/index', { title: 'Sourcing', clientFilter: clientRow, requests: data || [], pendingIds, poIds, newIds, waiting: waiting.length, waitBy, byStatus, statuses: REQUEST_STATUSES, status });
+  res.render('admin/sourcing/index', { title: 'Sourcing', clientFilter: clientRow, requests: rows, closedHits, vcounts: viewCounts(byStatus, LV), counts: { changes: new Set(pendingIds).size, pos: new Set(poIds).size, fresh: new Set(newIds).size }, pendingIds, poIds, newIds, waiting: waiting.length, waitBy, byStatus, statuses: REQUEST_STATUSES, status });
 });
 
 // Staff enter a request that reached them outside the system (client email, WeChat): pick the client, list the products

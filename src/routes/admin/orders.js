@@ -1,3 +1,4 @@
+import { listView, viewCounts } from '../../lib/list-view.js';
 import { Router } from '../../lib/router.js';
 import { admin } from '../../lib/supabase.js';
 import { log } from '../../lib/activity.js';
@@ -41,12 +42,20 @@ async function recalc(orderId) {
 
 r.get('/', async (req, res) => {
   let q = admin.from('order_overview').select('*').order('created_at', { ascending: false });
-  const status = req.query.status || 'open';
-  if (status === 'open') q = q.not('status', 'in', '("delivered","closed","cancelled")');
-  else if (status !== 'all') q = q.eq('status', status);
+  const LV = { active: ORDER_STATUSES.filter(x => !['delivered', 'closed', 'cancelled'].includes(x)), closed: ['delivered', 'closed', 'cancelled'] };
+  const { view: status, set } = listView(req.query.status, LV);
+  if (set) q = q.in('status', set);
   if (req.query.client) q = q.eq('org_id', req.query.client);
   const s = like(req.query.q);
-  if (s) q = q.or(`order_no.ilike.%${s}%,client_name.ilike.%${s}%,supplier_name.ilike.%${s}%`);
+  const searchOr = `order_no.ilike.%${s}%,client_name.ilike.%${s}%,supplier_name.ilike.%${s}%`;
+  if (s) q = q.or(searchOr);
+  // a search typed in the Active view that only matches closed orders: say so instead of showing "No orders"
+  let closedHits = 0;
+  if (s && status === 'open') {
+    let cq = admin.from('order_overview').select('id', { count: 'exact', head: true }).in('status', LV.closed).or(searchOr);
+    if (req.query.client) cq = cq.eq('org_id', req.query.client);
+    closedHits = (await cq).count || 0;
+  }
   const [{ data }, { data: all }, { data: clients }] = await Promise.all([
     q, admin.from('orders').select('status'), admin.from('organizations').select('id, name').order('name'),
   ]);
@@ -58,7 +67,7 @@ r.get('/', async (req, res) => {
   const live = list.filter(o => o.status !== 'cancelled');   // cancelled orders earn nothing: no margin, no profit, not in the totals
   await applyCashProfit(live);
   const totals = { goods: sumIn(settings, defCur, live.map(o => [o.subtotal, o.currency])), profit: sumIn(settings, defCur, live.map(o => [o.gross_profit, o.currency])), mixed: live.some(o => o.currency !== defCur) };
-  res.render('admin/orders/index', { title: 'Orders', totals, orders: list, byStatus, statuses: ORDER_STATUSES, status, clients: clients || [] });
+  res.render('admin/orders/index', { title: 'Orders', closedHits, vcounts: viewCounts(byStatus, LV), totals, orders: list, byStatus, statuses: ORDER_STATUSES, status, clients: clients || [] });
 });
 
 r.get('/new', async (req, res) => {

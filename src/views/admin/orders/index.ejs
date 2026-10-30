@@ -3,11 +3,7 @@
   <h1>Orders</h1>
   <a class="btn primary" href="/admin/orders/new">+ New order</a>
 </div>
-<div class="tabs">
-  <a href="/admin/orders?status=open" class="<%= status === 'open' ? 'on' : '' %>">Open</a>
-  <% statuses.filter(s => (byStatus[s] || 0) > 0 || status === s).forEach(s => { %><a href="/admin/orders?status=<%= s %>" class="<%= status === s ? 'on' : '' %>"><%= fmt.status(s) %> <span><%= byStatus[s] || 0 %></span></a><% }) %>
-  <a href="/admin/orders?status=all" class="<%= status === 'all' ? 'on' : '' %>">All</a>
-</div>
+<%- include('../../partials/viewtabs', { base: '/admin/orders', view: status, counts: vcounts, statuses, byStatus, label: s => fmt.status(s), keep: (query.client ? 'client=' + query.client : '') }) %>
 <div class="card">
   <form class="row tight" method="get">
     <input type="hidden" name="status" value="<%= status %>">
@@ -18,7 +14,7 @@
   <table class="tbl">
     <thead><tr><th>Order</th><th>Client</th><th>Supplier</th><th>Status</th><th class="right">Goods</th><th class="right">Cost</th><th class="right">Freight</th><th class="right">Margin</th><th class="right">Gross profit</th><th>Ship / ETA</th></tr></thead>
     <tbody>
-    <% if (!orders.length) { %><tr><td colspan="10" class="muted">No orders.</td></tr><% } %>
+    <% if (!orders.length) { %><tr><td colspan="10" class="muted"><%= status === 'open' && vcounts.closed && !query.q && !query.client ? 'No active orders — ' + vcounts.closed + ' closed (delivered or cancelled) are under Closed.' : 'No orders.' %></td></tr><% } %>
     <% let tg = 0, tp = 0; orders.forEach(o => { const cx = o.status === 'cancelled'; if (!cx) { tg += Number(o.subtotal||0); tp += Number(o.gross_profit||0); } %>
       <tr class="<%= cx ? 'dim' : '' %>">
         <td><a href="/admin/orders/<%= o.id %>"><strong><%= o.order_no %></strong></a><div class="muted small"><%= fmt.date(o.created_at) %></div></td>
@@ -36,5 +32,6 @@
     <% if (orders.length) { %><tr class="total"><td colspan="4"><%= orders.length %> orders<% if (totals.mixed) { %> <span class="muted small">· totals converted to <%= defCur %></span><% } %></td><td class="right"><%= fmt.money(totals.goods, defCur, 0) %></td><td colspan="3"></td><td class="right"><%= fmt.money(totals.profit, defCur, 0) %></td><td></td></tr><% } %>
     </tbody>
   </table>
+  <% if (closedHits) { %><div class="vhint"><%= closedHits %> more match<%= closedHits === 1 ? 'es' : '' %> in Closed orders · <a href="/admin/orders?status=closed&q=<%= encodeURIComponent(query.q || '') %><%= query.client ? '&client=' + query.client : '' %>">Show them</a></div><% } %>
 </div>
 <%- include('../../partials/foot') %>

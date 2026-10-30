@@ -1,4 +1,5 @@
 // Purchasing: purchase orders to suppliers, generated from a client order, sent by email, answered by email.
+import { listView, viewCounts } from '../../lib/list-view.js';
 import { randomUUID } from 'node:crypto';
 import multer from '../../lib/multer-utf8.js';
 import { Router } from '../../lib/router.js';
@@ -27,17 +28,24 @@ const MIGRATION = 'Run supabase/migrations/0021_purchasing.sql in Supabase first
 
 // ---- list ----
 r.get('/', async (req, res) => {
-  const status = SPO_STATUSES.includes(req.query.status) ? req.query.status : '';
+  const LV = { active: ['draft', 'sent', 'replied', 'confirmed'], closed: ['declined', 'cancelled'] };
+  const { view, set } = listView(req.query.status, LV);
+  const status = view;
   const unlinked = req.query.order === 'none';
   let q = admin.from('supplier_pos').select('*, suppliers(id, name), orders(id, order_no, organizations(name))').order('created_at', { ascending: false }).limit(300);
-  if (status) q = q.eq('status', status);
+  if (set) q = q.in('status', set);
   if (unlinked) q = q.is('order_id', null);
   else if (isId(req.query.order)) q = q.eq('order_id', req.query.order);
+  const supplierId = isId(req.query.supplier) ? req.query.supplier : '';   // opened from the Suppliers list: only this supplier's purchase orders
+  if (supplierId) q = q.eq('supplier_id', supplierId);
   const { data: pos, error } = await q;
-  const all = error ? [] : (await admin.from('supplier_pos').select('status, order_id')).data || [];
+  let allQ = admin.from('supplier_pos').select('status, order_id');
+  if (supplierId) allQ = allQ.eq('supplier_id', supplierId);
+  const all = error ? [] : (await allQ).data || [];
+  const supplier = supplierId ? (await admin.from('suppliers').select('id, name').eq('id', supplierId).maybeSingle()).data || { id: supplierId, name: 'this supplier' } : null;
   const counts = Object.fromEntries(SPO_STATUSES.map(s => [s, all.filter(x => x.status === s).length]));
   res.render('admin/purchasing/index', {
-    title: 'Purchasing', pos: pos || [], status, unlinked, labels: SPO_LABEL, statuses: SPO_STATUSES, counts,
+    title: 'Purchasing', pos: pos || [], status, view, vcounts: viewCounts(counts, LV), q: String(req.query.q || '').slice(0, 80), unlinked, supplier, labels: SPO_LABEL, statuses: SPO_STATUSES, counts,
     kpi: { total: all.length, waiting: counts.sent, review: counts.replied, confirmed: counts.confirmed, drafts: counts.draft, unlinked: all.filter(x => !x.order_id && !['cancelled', 'declined'].includes(x.status)).length },
     error: error ? (missingTable(error) ? MIGRATION : error.message) : null,
   });
@@ -353,16 +361,18 @@ r.post('/:id/pi/read', upload.array('files', 8), async (req, res) => {
 // payments to the supplier (shares of the PI total)
 const payBody = b => ({ amount: Math.round(Number(String(b.amount || '').replace(',', '.')) * 100) / 100, paid_on: day(b.paid_on),
   label: String(b.label || '').trim().slice(0, 40) || null, reference: String(b.reference || '').trim().slice(0, 120) || null });
-r.post('/:id/payments', async (req, res) => {
+r.post('/:id/payments', upload.array('files', 8), async (req, res) => {
   const po = await load(req.params.id);
   if (!po) return notFound(res, 'Purchase order');
   const to = `/admin/purchasing/${po.id}#supplier-pi`, b = payBody(req.body);
   if (!(b.amount > 0)) return back(res, to, { err: 'Enter the amount paid.' });
   const { data: pi } = await admin.from('supplier_pis').select('currency').eq('po_id', po.id).order('created_at', { ascending: false }).limit(1).maybeSingle();
-  const { error } = await admin.from('supplier_payments').insert({ ...b, paid_on: b.paid_on || new Date().toISOString().slice(0, 10), po_id: po.id, currency: pi?.currency || po.currency, created_by: req.user.id });
+  let proof = [];
+  try { proof = await attach(req, po, req.files, 'payment_proof'); } catch (e) { return back(res, to, { err: e.message }); }
+  const { error } = await admin.from('supplier_payments').insert({ ...b, proof_doc_ids: proof, paid_on: b.paid_on || new Date().toISOString().slice(0, 10), po_id: po.id, currency: pi?.currency || po.currency, created_by: req.user.id });
   if (error) return back(res, to, { err: migErr(error) });
   await log({ entityType: ent(po)[0], entityId: ent(po)[1], action: 'supplier_payment_recorded', actorId: req.user.id, detail: { note: `${po.ref}: ${money(b.amount, pi?.currency || po.currency)}` } });
-  back(res, to, { msg: 'Payment to the supplier recorded.' });
+  back(res, to, { msg: `Payment to the supplier recorded${proof.length ? ` with ${proof.length} proof file${proof.length > 1 ? 's' : ''}` : ''}.` });
 });
 r.post('/:id/payments/:sid/edit', async (req, res) => {
   const to = `/admin/purchasing/${req.params.id}#supplier-pi`, b = payBody(req.body);

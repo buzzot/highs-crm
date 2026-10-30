@@ -1,4 +1,5 @@
 // RFQs: one request for quotation sent to several suppliers; their answers are compared inside it.
+import { listView, viewCounts } from '../../lib/list-view.js';
 import multer from '../../lib/multer-utf8.js';
 import { Router } from '../../lib/router.js';
 import { admin } from '../../lib/supabase.js';
@@ -49,11 +50,13 @@ async function reviewMany(list, entity = null) {
 const parseJson = v => { try { const x = JSON.parse(v || '{}'); return x && typeof x === 'object' ? x : {}; } catch { return {}; } };
 
 r.get('/', async (req, res) => {
-  const status = ['draft', 'open', 'closed'].includes(req.query.status) ? req.query.status : '';
+  const LV = { active: ['draft', 'open'], closed: ['closed'] };
+  const { view: status, set } = listView(req.query.status, LV);
   let q = admin.from('rfqs').select('id, ref, title, status, deadline, currency, items, created_at, requests(ref), rfq_suppliers(id, status)').order('created_at', { ascending: false }).limit(200);
-  if (status) q = q.eq('status', status);
-  const { data, error } = await q;
-  res.render('admin/rfqs/index', { title: 'RFQs', rfqs: data || [], status, labels: RFQ_STATUS_LABEL, error: error ? (missingTable(error) ? MIGRATION : error.message) : null, msg: req.query.msg });
+  if (set) q = q.in('status', set);
+  const [{ data, error }, { data: allRows }] = await Promise.all([q, admin.from('rfqs').select('status')]);
+  const byStatus = {}; (allRows || []).forEach(x => { byStatus[x.status] = (byStatus[x.status] || 0) + 1; });
+  res.render('admin/rfqs/index', { title: 'RFQs', rfqs: data || [], status, byStatus, vcounts: viewCounts(byStatus, LV), statuses: ['draft', 'open', 'closed'], labels: RFQ_STATUS_LABEL, error: error ? (missingTable(error) ? MIGRATION : error.message) : null, msg: req.query.msg });
 });
 
 r.get('/new', async (req, res) => {

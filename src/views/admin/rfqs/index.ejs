@@ -4,11 +4,9 @@
 <% if (msg) { %><div class="alert ok"><%= msg %></div><% } %>
 <% if (error) { %><div class="alert err"><%= error %></div><% } %>
 <div class="card flush">
-  <div class="toolbar"><div class="tabs">
-    <% [['', 'All'], ['draft', 'Draft'], ['open', 'Open'], ['closed', 'Closed']].forEach(([k, l]) => { %><a class="<%= status === k ? 'on' : '' %>" href="/admin/rfqs<%= k ? '?status=' + k : '' %>"><%= l %></a><% }) %>
-  </div></div>
+  <div class="toolbar"><%- include('../../partials/viewtabs', { base: '/admin/rfqs', view: status, counts: vcounts, statuses, byStatus, label: s => labels[s], keep: '' }) %></div>
   <% if (!rfqs.length) { %>
-    <div class="emptybox"><strong>No RFQs yet</strong><p class="muted">Start one from a sourcing request, or create it here.</p><div class="actions"><a class="btn primary" href="/admin/rfqs/new">+ New RFQ</a></div></div>
+    <div class="emptybox"><strong><%= status !== 'open' ? 'Nothing here' : vcounts.closed ? 'No active RFQs' : 'No RFQs yet' %></strong><p class="muted"><%= status !== 'open' ? 'No RFQ matches this view.' : vcounts.closed ? vcounts.closed + ' closed — see the Closed tab. ' : '' %>Start one from a sourcing request, or create it here.</p><div class="actions"><a class="btn primary" href="/admin/rfqs/new">+ New RFQ</a></div></div>
   <% } else { %>
   <table class="tbl">
     <thead><tr><th>RFQ</th><th>Request</th><th>Products</th><th>Suppliers</th><th>Answered</th><th>Answer by</th><th>Status</th></tr></thead>
