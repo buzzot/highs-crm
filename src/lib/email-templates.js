@@ -118,7 +118,7 @@ export function newRequestEmail({ request, orgName, who, products, url, kind }) 
     subject: `${order ? 'New order' : 'New request'} ${request.ref} from ${orgName || 'a client'}`,
     html: layout({
       preheader: `${who} sent ${request.ref}`, eyebrow: order ? 'New order' : 'New sourcing request', title: order ? 'A client sent an order' : 'A client sent a request',
-      introHtml: `<strong>${esc(who)}</strong> from <strong>${esc(orgName || 'a client')}</strong> sent <strong>${esc(request.ref)} · ${esc(request.title)}</strong>${products > 1 ? ` (${products} products)` : ''}. Open it to start sourcing.`,
+      introHtml: `<strong>${esc(who)}</strong> from <strong>${esc(orgName || 'a client')}</strong> sent <strong>${esc(request.ref)} · ${esc(request.title)}</strong>${products > 1 ? ` (${products} products)` : ''}. ${order ? 'Open it to check the details, fill in prices and confirm it.' : 'Open it to start sourcing.'}`,
       buttonText: order ? 'Open order' : 'Open request', buttonUrl: url, fineHtml: 'You get this email because you handle this request or are an admin.',
     }),
     text: `${order ? 'New order' : 'New request'} ${request.ref} from ${orgName || 'a client'} (${who}). Open: ${url}`,

@@ -40,8 +40,8 @@
     <table class="tbl"><tbody>
       <% orders.slice(0, 6).forEach(o => { const eta = (o.shipments||[]).map(s=>s.eta).filter(Boolean).sort().pop(); const i = Math.max(0, STEPS.indexOf(o.status)); %>
         <tr class="rowlink" onclick="location='/portal/orders/<%= o.id %>'">
-          <td><strong><%= o.order_no %></strong><div class="muted small"><%= fmt.money(o.subtotal, o.currency) %><%= eta ? ' · ETA ' + fmt.date(eta) : '' %></div></td>
-          <td class="right"><span class="pill <%= o.status %>"><%= fmt.status(o.status) %></span><div class="prog"><span style="width:<%= o.status === 'cancelled' ? 0 : Math.round((i + 1) / STEPS.length * 100) %>%"></span></div></td>
+          <td><strong><%= o.order_no %></strong><div class="muted small"><%= o.review ? 'Under review' : fmt.money(o.subtotal, o.currency) %><%= eta ? ' · ETA ' + fmt.date(eta) : '' %></div></td>
+          <td class="right"><span class="pill <%= o.status %>"><%= o.review ? 'Under review' : fmt.status(o.status) %></span><% if (!o.review) { %><div class="prog"><span style="width:<%= o.status === 'cancelled' ? 0 : Math.round((i + 1) / STEPS.length * 100) %>%"></span></div><% } %></td>
         </tr>
       <% }) %>
     </tbody></table>

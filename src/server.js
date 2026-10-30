@@ -43,21 +43,23 @@ app.use(staticGzip(PUBLIC));
 app.use(express.static(PUBLIC, { maxAge: '10m' }));
 // the quote calculator in the browser uses the exact same pricing module as the server
 app.get('/js/pricing.js', (req, res) => res.type('application/javascript').sendFile(path.join(__dirname, 'lib', 'pricing.js')));
-// counts behind the red balls in the menu: four queries run together and are reused for 20 s
-let navCache = { at: 0, value: { sourcing: 0, orders: 0, purchasing: 0, products: 0 }, pending: null };
+// counts behind the red balls in the menu: a few queries run together and are reused for 20 s
+let navCache = { at: 0, value: { sourcing: 0, orders: 0, ordersNew: 0, purchasing: 0, products: 0 }, pending: null };
 async function navPending() {
   if (Date.now() - navCache.at < 20e3) return navCache.value;
   navCache.pending ||= (async () => {
     const n = async q => { try { return (await q).count || 0; } catch { return 0; } }; // a table missing before its migration counts as 0
     const head = (table, status) => admin.from(table).select('id', { count: 'exact', head: true }).eq('status', status);
     const prodQ = admin.from('supplier_products').select('id', { count: 'exact', head: true }).in('status', ['submitted', 'edit_requested', 'updated']);
-    const [rev, po, pay, spo, prods, fresh] = await Promise.all([n(head('request_revisions', 'pending')), n(head('purchase_orders', 'submitted')), n(head('order_payments', 'submitted')), n(head('supplier_pos', 'replied')), n(prodQ), n(head('requests', 'new'))]);
-    navCache = { at: Date.now(), value: { sourcing: rev + po + fresh, orders: pay, purchasing: spo, products: prods }, pending: null };
+    const newOrdersQ = admin.from('orders').select('id', { count: 'exact', head: true }).eq('source', 'portal').eq('status', 'new');   // orders the clients sent: red until the team changes the status
+    const [rev, po, pay, spo, prods, fresh, newOrders] = await Promise.all([n(head('request_revisions', 'pending')), n(head('purchase_orders', 'submitted')), n(head('order_payments', 'submitted')), n(head('supplier_pos', 'replied')), n(prodQ), n(head('requests', 'new')), n(newOrdersQ)]);
+    navCache = { at: Date.now(), value: { sourcing: rev + po + fresh, orders: pay + newOrders, ordersNew: newOrders, ordersPay: pay, purchasing: spo, products: prods }, pending: null };
     return navCache.value;
   })().finally(() => { navCache.pending = null; });
   return navCache.pending;
 }
 
+app.locals.refreshNav = () => { navCache.at = 0; };   // routes call this after a change that moves a red ball (e.g. an order's status)
 const ASSET_V = Date.now().toString(36);   // new on every start/deploy, so browsers never keep an old stylesheet or script
 app.use((req, res, next) => {
   Object.assign(res.locals, { assetV: ASSET_V, RFQ_UNITS, PACKAGE_TYPES, fmt, icon, showValue, deliveryLabel, path: req.path, query: req.query, msg: req.query.msg, err: req.query.err });

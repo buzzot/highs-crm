@@ -86,3 +86,26 @@ test('quote all products: "No freight" is offered and is the default for a new q
   assert.match(fs.readFileSync(path.join(views, 'admin/pricing/quote_multi.ejs'), 'utf8'), /<option value="none" selected>No freight/);
   assert.match(fs.readFileSync(path.join(root, 'supabase/migrations/0041_freight_mode_none.sql'), 'utf8'), /'none'/);
 });
+
+test('a portal order under review shows what the client sent — no prices, totals, payment form or costs', () => {
+  const [tpl, locals] = resolve('portal/order_detail_review', pages['portal/order_detail_review']);
+  const html = render(path.join(views, tpl + '.ejs'), locals);
+  assert.match(html, /Under review/); assert.match(html, /Your target price/); assert.match(html, /Steel wire rope/);
+  assert.match(html, /Kazan, Russia/);
+  assert.doesNotMatch(html, /Goods total|Unit price|Submit payment|I have paid|id="pay"/);
+  assert.doesNotMatch(html, /0\.0000|\$0\.00/);
+});
+
+test('staff see the client order block, the client target column and an edit form per item', () => {
+  const html = render(path.join(views, 'admin/orders/detail.ejs'), pages['admin/orders/detail']);
+  assert.match(html, /Order sent by the client/); assert.match(html, /PO-77/); assert.match(html, /no price yet/);
+  assert.match(html, /action="\/admin\/orders\/ord1\/items\/i1"/);
+});
+
+test('menu: red ball on Orders for new client orders and payments, with a plain title', () => {
+  const l = (np) => ({ ...pages['admin/orders/index'], navPending: np });
+  let html = render(path.join(views, 'admin/orders/index.ejs'), l({ sourcing: 0, orders: 3, ordersNew: 2, ordersPay: 1, purchasing: 0, products: 0 }));
+  assert.match(html, /Orders<span class="navball" title="2 new orders from clients to review · 1 payment to confirm">3<\/span>/);
+  html = render(path.join(views, 'admin/orders/index.ejs'), l({ sourcing: 0, orders: 0, ordersNew: 0, ordersPay: 0, purchasing: 0, products: 0 }));
+  assert.doesNotMatch(html, /Orders<span class="navball"/);
+});

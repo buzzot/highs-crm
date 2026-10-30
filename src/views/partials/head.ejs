@@ -19,7 +19,7 @@
   <div class="links">
     <% if (isStaff) { %>
       <a href="/admin" class="<%= path === '/admin' ? 'on' : '' %>">Dashboard</a>
-      <a href="/admin/orders" class="<%= path.startsWith('/admin/orders') ? 'on' : '' %>">Orders<% if (typeof navPending !== 'undefined' && navPending.orders > 0) { %><span class="navball" title="<%= navPending.orders %> payment<%= navPending.orders > 1 ? 's' : '' %> to confirm"><%= navPending.orders > 99 ? '99+' : navPending.orders %></span><% } %></a>
+      <a href="/admin/orders" class="<%= path.startsWith('/admin/orders') ? 'on' : '' %>">Orders<% if (typeof navPending !== 'undefined' && navPending.orders > 0) { %><span class="navball" title="<%= [navPending.ordersNew > 0 ? navPending.ordersNew + ' new order' + (navPending.ordersNew > 1 ? 's' : '') + ' from clients to review' : '', navPending.ordersPay > 0 ? navPending.ordersPay + ' payment' + (navPending.ordersPay > 1 ? 's' : '') + ' to confirm' : ''].filter(Boolean).join(' · ') %>"><%= navPending.orders > 99 ? '99+' : navPending.orders %></span><% } %></a>
       <a href="/admin/clients" class="<%= path.startsWith('/admin/clients') ? 'on' : '' %>">Clients</a>
       <a href="/admin/suppliers" class="<%= path.startsWith('/admin/suppliers') ? 'on' : '' %>">Suppliers</a>
       <a href="/admin/products" class="<%= path.startsWith('/admin/products') ? 'on' : '' %>">Products<% if (typeof navPending !== 'undefined' && navPending.products > 0) { %><span class="navball" title="<%= navPending.products %> supplier product<%= navPending.products > 1 ? 's' : '' %> to review (new, edit requests or updates)"><%= navPending.products > 99 ? '99+' : navPending.products %></span><% } %></a>

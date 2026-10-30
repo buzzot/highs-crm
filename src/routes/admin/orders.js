@@ -18,6 +18,7 @@ import { paymentDecidedEmail } from '../../lib/email-templates.js';
 import { recalcOrder, confirmedReceived } from '../../lib/payments-db.js';
 import { cashProfit } from '../../lib/payments.js';
 import { applyCashProfit } from '../../lib/order-profit.js';
+import { orderInfoRows } from '../../lib/order-request.js';
 const appUrl = () => (process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
 import { rfqEmail } from '../../lib/email-templates.js';
 import { replyAddress, subjectTag } from '../../lib/freight.js';
@@ -124,8 +125,12 @@ r.get('/:id', async (req, res) => {
   ]);
   const { data: spos } = await admin.from('supplier_pos').select('id, ref, status, total, currency, sent_at, last_reply_at, suppliers(name)').eq('order_id', id).order('created_at'); // empty before migration 0021
   const { data: freePos } = await admin.from('supplier_pos').select('id, ref, title, total, currency, status, suppliers(name)').is('order_id', null).not('status', 'in', '("cancelled","declined")').order('created_at', { ascending: false }); // empty before migration 0021/0022
+  // an order the client sent from the portal (migration 0043): what they asked for
+  let portal = null;
+  { const { data: x, error: pe } = await admin.from('orders').select('source, order_info').eq('id', id).maybeSingle();
+    if (!pe && x?.source === 'portal') portal = { rows: orderInfoRows(x.order_info), unpriced: (items || []).filter(i => !(Number(i.unit_price) > 0)).length }; }
   res.render('admin/orders/detail', {
-    freePos: freePos || [], spos: spos || [], pay: pay || {}, payments: payRows || [],
+    portal, freePos: freePos || [], spos: spos || [], pay: pay || {}, payments: payRows || [],
     pis: pis || [], pos: pos || [], title: order.order_no, order, items: items || [], shipments: shipments || [], packing: packing || [], events: events || [],
     docs: docs || [], suppliers: suppliers || [], products: products || [], statuses: ORDER_STATUSES,
     land: landed(order, items), cash: cashProfit({ received: await confirmedReceived(id, order.currency), cost: order.cost_total, freight: order.freight_total, due: pay?.amount_due }), msg: req.query.msg, err: req.query.err,
@@ -215,6 +220,7 @@ r.post('/:id/status', async (req, res) => {
       clientVisible: bool(req.body.client_visible), detail: { from: o.status, to, note: req.body.note || undefined },
     });
   }
+  req.app.locals.refreshNav?.();   // the red ball for new client orders goes as soon as the status changes
   back(res, `/admin/orders/${id}`, { msg: 'Status updated.' });
 });
 
@@ -235,6 +241,18 @@ r.post('/:id/items', async (req, res) => {
   const { error } = await admin.from('order_items').insert({ ...b, order_id: req.params.id });
   if (!error) await recalc(req.params.id);
   back(res, `/admin/orders/${req.params.id}`, error ? { err: error.message } : { msg: 'Item added.' });
+});
+// change an item: description, quantity, cost and price (an order the client sent starts with prices at 0)
+r.post('/:id/items/:iid', async (req, res) => {
+  const b = clean(req.body, ['description', 'quantity', 'unit_cost', 'unit_price', 'hs_code']);
+  const num = v => (v == null ? null : Number(String(v).replace(',', '.')));
+  const patch = { description: b.description, hs_code: b.hs_code, quantity: Math.round(num(b.quantity)), unit_cost: num(b.unit_cost), unit_price: num(b.unit_price) ?? 0 };
+  const back1 = m => back(res, `/admin/orders/${req.params.id}`, m);
+  if (!patch.description) return back1({ err: 'The item needs a description.' });
+  if (!(patch.quantity >= 0) || !(patch.unit_price >= 0) || (patch.unit_cost != null && !(patch.unit_cost >= 0))) return back1({ err: 'Quantity, cost and price must be numbers, zero or more.' });
+  const { error } = await admin.from('order_items').update(patch).eq('id', req.params.iid).eq('order_id', req.params.id);
+  if (!error) await recalc(req.params.id);
+  back1(error ? { err: error.message } : { msg: 'Item saved.' });
 });
 r.post('/:id/items/:iid/delete', async (req, res) => {
   await admin.from('order_items').delete().eq('id', req.params.iid).eq('order_id', req.params.id);

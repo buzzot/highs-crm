@@ -1,28 +1,39 @@
 <%- include('../partials/head') %>
-<% const steps = ['new','confirmed','deposit_paid','in_production','qc','packed','shipped','in_transit','customs','delivered','closed']; const idx = steps.indexOf(order.status); %>
+<% const isReview = typeof review !== 'undefined' && !!review; const portalRows = typeof orderRows !== 'undefined' ? orderRows : []; const steps = ['new','confirmed','deposit_paid','in_production','qc','packed','shipped','in_transit','customs','delivered','closed']; const idx = steps.indexOf(order.status); %>
 <div class="pagehead">
   <div><a class="back" href="/portal/orders">← Orders</a><h1>Order <%= order.order_no %></h1></div>
   <div class="headactions"><% if (Number(order.amount_due) > 0) { %><span class="pill lg pay-<%= order.payment_status %>"><%= ({ unpaid: 'Unpaid', partial: 'Partially paid', paid: 'Paid' })[order.payment_status] %></span><% } %>
-  <span class="pill lg <%= order.status %>"><%= fmt.status(order.status) %></span></div>
+  <span class="pill lg <%= order.status %>"><%= isReview && order.status === 'new' ? 'Under review' : fmt.status(order.status) %></span></div>
 </div>
 <% if (typeof msg !== 'undefined' && msg) { %><div class="alert ok"><%= msg %></div><% } %>
 <% if (typeof err !== 'undefined' && err) { %><div class="alert err"><%= err %></div><% } %>
 <div class="card">
   <ol class="steps">
-    <% steps.forEach((s, i) => { %><li class="<%= i < idx ? 'done' : i === idx ? 'now' : '' %>"><%= fmt.status(s) %></li><% }) %>
+    <% steps.forEach((s, i) => { %><li class="<%= i < idx ? 'done' : i === idx ? 'now' : '' %>"><%= isReview && s === 'new' ? 'Under review' : fmt.status(s) %></li><% }) %>
   </ol>
 </div>
 <div class="grid2">
   <div>
+    <% if (isReview) { %>
+    <div class="alert info"><strong>We are checking your order.</strong> We will confirm prices, freight and the proforma invoice — usually within one business day. You can follow it here.</div>
+    <% } %>
     <div class="card">
       <h2>Items</h2>
+      <% if (isReview) { %>
+      <table class="tbl"><thead><tr><th>Product</th><th>Qty</th><th class="right">Your target price</th></tr></thead><tbody>
+      <% order.order_items.forEach(i => { %><tr><td><%= i.description %><% if (i.sku) { %><div class="muted small"><%= i.sku %></div><% } %></td><td><%= i.quantity %><%= i.unit ? ' ' + i.unit : '' %></td><td class="right"><%= i.target_unit_price != null ? fmt.money(i.target_unit_price, order.currency, 4) : '—' %></td></tr><% }) %>
+      </tbody></table>
+      <% } else { %>
       <table class="tbl"><thead><tr><th>Description</th><th>Qty</th><th>Unit price</th><th>Total</th></tr></thead><tbody>
       <% order.order_items.forEach(i => { %><tr><td><%= i.description %></td><td><%= i.quantity %></td><td><%= fmt.money(i.unit_price, order.currency, 4) %></td><td><%= fmt.money(i.quantity * i.unit_price, order.currency) %></td></tr><% }) %>
       <tr class="total"><td colspan="3">Goods total</td><td><%= fmt.money(order.subtotal, order.currency) %></td></tr>
       </tbody></table>
+      <% } %>
       <% if (order.client_notes) { %><p class="pre"><%= order.client_notes %></p><% } %>
     </div>
+    <% if (portalRows.length) { %><div class="card"><h2>Order details</h2><%- include('../partials/order_details', { rows: portalRows }) %></div><% } %>
     <% const due = Number(order.amount_due) > 0; const sched = order.payment_schedule || []; const left = due ? Math.round((Number(order.amount_due) - Number(order.amount_paid)) * 100) / 100 : 0; %>
+    <% if (!isReview) { %>
     <div class="card" id="pay">
       <h2>Payment</h2>
       <% if (!due) { %><p class="muted">The payment details will appear here when we send you the proforma invoice.</p>
@@ -68,6 +79,7 @@
         <% } else { %><p class="ok">Fully paid — thank you.</p><% } %>
       <% } %>
     </div>
+    <% } %>
     <div class="card">
       <h2>Shipments</h2>
       <% if (!shipments.length) { %><p class="muted">Not shipped yet.</p><% } %>
@@ -107,7 +119,7 @@
       <h2>Timeline</h2>
       <ul class="timeline">
         <% events.forEach(e => { %><li><span class="t"><%= fmt.datetime(e.created_at) %></span> <%= fmt.status(e.action) %><% if (e.detail?.note) { %> — <%= e.detail.note %><% } %></li><% }) %>
-        <li><span class="t"><%= fmt.datetime(order.created_at) %></span> order confirmed</li>
+        <% if (!(typeof fromPortal !== 'undefined' && fromPortal && events.some(e => e.action === 'order_placed'))) { %><li><span class="t"><%= fmt.datetime(order.created_at) %></span> <%= typeof fromPortal !== 'undefined' && fromPortal ? 'order sent' : 'order confirmed' %></li><% } %>
       </ul>
     </div>
   </div>

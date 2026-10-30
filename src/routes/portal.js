@@ -15,7 +15,7 @@ import { recalcOrder } from '../lib/payments-db.js';
 const appUrl = () => (process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
 import { uploadDocument, signedUrl } from '../lib/storage.js';
 import { parseItems, validateItems, requestTitle, splitFiles, UNITS } from '../lib/request-items.js';
-import { parseOrderInfo, validateOrder, orderInfoRows, orderInfoText, INCOTERMS, TRANSPORT } from '../lib/order-request.js';
+import { parseOrderInfo, validateOrder, validateOrderItems, buildPortalOrder, awaitingPrices, orderInfoRows, orderInfoText, INCOTERMS, TRANSPORT } from '../lib/order-request.js';
 import { EDITABLE, DELIVERY, snapshot, buildRevision, diff } from '../lib/request-revisions.js';
 import { dropRevisionFiles, notifyStaffOfChange } from '../lib/request-changes.js';
 const deliveryOf = v => (DELIVERY[v] ? v : null);
@@ -77,19 +77,20 @@ r.get('/', async (req, res) => {
     req.db.from('requests').select(REQ).order('created_at', { ascending: false }).limit(30),
     req.db.from('orders').select(`${ORDER}, shipments(eta, status)`).order('created_at', { ascending: false }).limit(10),
   ]);
-  const requests = (requestsRaw || []).filter(visibleReq).slice(0, 10);
+  const orderIds = await orderRequestIds(req.user.org_id, requestsRaw);   // orders sent before migration 0043 are still stored as requests
+  const requests = (requestsRaw || []).filter(visibleReq).filter(x => !orderIds.has(x.id)).slice(0, 10);
   const open = (orders || []).filter(o => !['delivered', 'closed', 'cancelled'].includes(o.status));
   // counts over everything, not just the 10 most recent
   const [{ data: allReq }, { data: allOrd }] = await Promise.all([
-    req.db.from('requests').select('status, ref'), req.db.from('orders').select('status'),
+    req.db.from('requests').select('id, status, ref, title'), req.db.from('orders').select('status, subtotal'),
   ]);
   const kpi = {
-    openRequests: (allReq || []).filter(visibleReq).filter(x => ['new', 'reviewing'].includes(x.status)).length,
-    quotesWaiting: (allReq || []).filter(visibleReq).filter(x => x.status === 'quoted').length,
-    inProgress: (allOrd || []).filter(x => ['new', 'confirmed', 'deposit_paid', 'in_production', 'qc', 'packed'].includes(x.status)).length,
+    openRequests: (allReq || []).filter(visibleReq).filter(x => !orderIds.has(x.id)).filter(x => ['new', 'reviewing'].includes(x.status)).length,
+    quotesWaiting: (allReq || []).filter(visibleReq).filter(x => !orderIds.has(x.id)).filter(x => x.status === 'quoted').length,
+    inProgress: (allOrd || []).filter(x => !isReview(x)).filter(x => ['new', 'confirmed', 'deposit_paid', 'in_production', 'qc', 'packed'].includes(x.status)).length,
     onTheWay: (allOrd || []).filter(x => ['shipped', 'in_transit', 'customs'].includes(x.status)).length,
   };
-  res.render('portal/dashboard', { title: 'Overview', requests: requests || [], orders: orders || [], openCount: open.length, kpi });
+  res.render('portal/dashboard', { title: 'Overview', requests: requests || [], orders: (orders || []).map(o => ({ ...o, review: isReview(o) })), openCount: open.length, kpi });
 });
 
 // ---- requests ----
@@ -463,9 +464,46 @@ r.get('/orders/new', (req, res) => orderForm(req, res));
 r.post('/orders', upload.any(), async (req, res) => {
   const f = req.body, items = parseItems(f), info = parseOrderInfo(f);
   const again = error => orderForm(req, res.status(400), { error, form: { ...f, ...info }, items: items.length ? items : [{}] }).catch(() => res.status(500).render('error', { title: 'Error', message: error }));
-  const bad = validateItems(items) || validateOrder(info, f);
+  const bad = validateItems(items) || validateOrderItems(items) || validateOrder(info, f);
   if (bad) return again(bad);
   if ((req.files || []).length > 20) return again('Too many files — up to 20 per order.');
+  const { general } = splitFiles(req.files);
+  const saveFiles = async (entityType, id) => {
+    for (const file of general) {
+      try { await uploadDocument({ file, entityType, entityId: id, kind: file.mimetype?.startsWith('image/') ? 'product_photo' : 'other', uploadedBy: req.user.id }); }
+      catch (e) { console.error(`[order] ${id}: upload ${file.originalname} failed: ${e.message}`); }
+    }
+  };
+  const notify = async (ref, title, url, assigned) => {
+    try {
+      const { data: org } = await admin.from('organizations').select('name').eq('id', req.user.org_id).maybeSingle();
+      const to = await staffEmails({ assigned_to: assigned || null });
+      if (to.length) await sendEmail({ to, ...newRequestEmail({ request: { ref, title }, orgName: org?.name, who: req.user.full_name || req.user.email, products: items.length, kind: 'order', url }) });
+    } catch (e) { console.error(`[order] email to staff failed: ${e.message}`); }
+  };
+
+  // 1) a real order (migration 0043): status 'new', shown in My orders and in the team's Orders list
+  const built = buildPortalOrder({ orgId: req.user.org_id, userId: req.user.id, form: f, info, items, currencyOk: CURRENCY_OK });
+  const ins = await admin.from('orders').insert(built.order).select('id, order_no').single();
+  if (!ins.error) {
+    const oid = ins.data.id;
+    const { error: iErr } = await admin.from('order_items').insert(built.items.map(x => ({ ...x, order_id: oid })));
+    if (iErr) {   // never keep an order without its products: remove it and fall back below
+      console.error(`[order] ${oid}: products not saved (${iErr.message}), using the request fallback`);
+      await admin.from('orders').delete().eq('id', oid);
+    } else {
+      await saveFiles('order', oid);
+      await log({ entityType: 'order', entityId: oid, action: 'order_placed', actorId: req.user.id, clientVisible: true, detail: { products: items.length, note: 'Order sent from the portal' } });
+      let owner = null;
+      try { owner = (await admin.from('orders').select('owner_id').eq('id', oid).maybeSingle()).data?.owner_id || null; } catch { /* before migration 0036 */ }
+      await notify(ins.data.order_no, requestTitle(f.title, items), `${appUrl()}/admin/orders/${oid}`, owner);
+      return res.redirect('/portal/orders?placed=1');
+    }
+  } else if (!/source|order_info|submitted_by|sku|unit|target_unit_price/.test(ins.error.message || '')) {
+    return again(ins.error.message);   // a real problem, not the missing migration
+  }
+
+  // 2) migration 0043 not run yet: keep the old behaviour (a sourcing request marked as an order) so nothing is lost
   const mode = deliveryOf(f.delivery_mode), single = items.length === 1 ? items[0] : null;
   const head = {
     org_id: req.user.org_id, created_by: req.user.id,
@@ -476,30 +514,23 @@ r.post('/orders', upload.any(), async (req, res) => {
     needed_by: f.needed_by || null, delivery_mode: mode,
   };
   let { data, error } = await admin.from('requests').insert({ ...head, kind: 'order', order_info: info }).select('id').single();
-  if (error && /kind|order_info/.test(error.message || '')) {   // migration 0042 not run yet: keep the details in the description
+  if (error && /kind|order_info/.test(error.message || '')) {
     ({ data, error } = await admin.from('requests').insert({ ...head, title: `[Order] ${head.title}`.slice(0, 200), description: orderInfoText(info, mode) }).select('id').single());
   }
   if (error) return again(error.message);
-  const { data: saved, error: iErr } = await admin.from('request_items')
-    .insert(items.map((it, i) => ({ request_id: data.id, position: i, name: it.name, sku: it.sku, description: it.description, quantity: it.quantity, unit: it.unit, target_unit_price: it.target_unit_price })))
-    .select('id, position');
+  const { error: iErr } = await admin.from('request_items')
+    .insert(items.map((it, i) => ({ request_id: data.id, position: i, name: it.name, sku: it.sku, description: it.description, quantity: it.quantity, unit: it.unit, target_unit_price: it.target_unit_price })));
   if (iErr) console.error(`[order] ${data.id}: products not saved: ${iErr.message}`);
-  const { general } = splitFiles(req.files);
-  for (const file of general) {
-    try { await uploadDocument({ file, entityType: 'request', entityId: data.id, kind: file.mimetype?.startsWith('image/') ? 'product_photo' : 'other', uploadedBy: req.user.id }); }
-    catch (e) { console.error(`[order] ${data.id}: upload ${file.originalname} failed: ${e.message}`); }
-  }
+  await saveFiles('request', data.id);
   await log({ entityType: 'request', entityId: data.id, action: 'created', actorId: req.user.id, clientVisible: true, detail: { products: items.length, note: 'Order sent from the portal' } });
-  try {
-    const { data: rq } = await admin.from('requests').select('id, ref, title, assigned_to').eq('id', data.id).single();
-    const { data: org } = await admin.from('organizations').select('name').eq('id', req.user.org_id).maybeSingle();
-    const to = await staffEmails(rq || {});
-    if (to.length && rq) await sendEmail({ to, ...newRequestEmail({ request: rq, orgName: org?.name, who: req.user.full_name || req.user.email, products: items.length, kind: 'order', url: `${appUrl()}/admin/sourcing/${rq.id}` }) });
-  } catch (e) { console.error(`[order] email to staff failed: ${e.message}`); }
+  const { data: rq } = await admin.from('requests').select('id, ref, title, assigned_to').eq('id', data.id).single();
+  if (rq) await notify(rq.ref, rq.title, `${appUrl()}/admin/sourcing/${rq.id}`, rq.assigned_to);
   res.redirect('/portal/orders?placed=1');
 });
 
 // ---- orders ----
+// an order the client has just sent: still 'new' and without prices — the team is checking it
+const isReview = o => o.status === 'new' && awaitingPrices(o);
 r.get('/orders', async (req, res) => {
   const { data } = await req.db.from('orders').select(`${ORDER}, shipments(eta, status, tracking_no)`).order('created_at', { ascending: false });
   const { data: reqRows } = await req.db.from('requests').select(REQ).order('created_at', { ascending: false });
@@ -510,8 +541,8 @@ r.get('/orders', async (req, res) => {
   const all = [...pendingRaw, ...(data || [])];
   const groups = {
     all: () => true,
-    pending: x => x.pending && ['new', 'reviewing', 'quoted'].includes(x.status),
-    production: x => !x.pending && ['new', 'confirmed', 'deposit_paid', 'in_production', 'qc', 'packed'].includes(x.status),
+    pending: x => x.pending ? ['new', 'reviewing', 'quoted'].includes(x.status) : isReview(x),
+    production: x => !x.pending && !isReview(x) && ['new', 'confirmed', 'deposit_paid', 'in_production', 'qc', 'packed'].includes(x.status),
     shipping: x => !x.pending && ['shipped', 'in_transit', 'customs'].includes(x.status),
     delivered: x => !x.pending && ['delivered', 'closed'].includes(x.status),
   };
@@ -519,7 +550,7 @@ r.get('/orders', async (req, res) => {
   const q = String(req.query.q || '').trim().toLowerCase();
   const list = all.filter(groups[tab]).filter(x => !q || `${x.order_no} ${x.title || ''}`.toLowerCase().includes(q));
   const counts = Object.fromEntries(Object.entries(groups).map(([k, f]) => [k, all.filter(f).length]));
-  res.render('portal/orders', { title: 'My orders', orders: list, counts, tab, q, placed: !!req.query.placed });
+  res.render('portal/orders', { title: 'My orders', orders: list.map(o => (o.pending ? o : { ...o, review: isReview(o) })), counts, tab, q, placed: !!req.query.placed });
 });
 
 r.get('/orders/:id', async (req, res) => {
@@ -536,7 +567,19 @@ r.get('/orders/:id', async (req, res) => {
   const { data: payments } = await admin.from('order_payments').select('*').eq('order_id', order.id).eq('org_id', req.user.org_id).order('created_at');
   const proofIds = new Set((payments || []).flatMap(x => x.proof_doc_ids || []));
   const open = order.payment_status === 'paid' ? null : nextInstalment(order.payment_schedule, order.amount_paid);
-  res.render('portal/order_detail', { title: order.order_no, order, shipments: shipments || [], documents: documents.filter(d => !proofIds.has(d.id)), events: events || [], packing: packing || [], payments: payments || [], proofDocs: documents.filter(d => proofIds.has(d.id)), open, msg: req.query.msg, err: req.query.err });
+  // an order sent from the portal: show what the client sent, never prices or costs the team has not given yet
+  let sent = null, orderRows = [];
+  try {
+    const { data: o2 } = await admin.from('orders').select('source, order_info').eq('id', order.id).eq('org_id', req.user.org_id).maybeSingle();
+    if (o2?.source === 'portal') {
+      sent = true; orderRows = orderInfoRows(o2.order_info);
+      const { data: lines } = await admin.from('order_items').select('id, sku, unit, target_unit_price').eq('order_id', order.id);
+      const by = new Map((lines || []).map(l => [l.id, l]));
+      order.order_items = (order.order_items || []).map(i => ({ ...i, sku: by.get(i.id)?.sku || null, unit: by.get(i.id)?.unit || null, target_unit_price: by.get(i.id)?.target_unit_price ?? null }));
+    }
+  } catch { /* before migration 0043 */ }
+  const review = !!sent && awaitingPrices(order);
+  res.render('portal/order_detail', { title: order.order_no, review, fromPortal: !!sent, orderRows, order, shipments: shipments || [], documents: documents.filter(d => !proofIds.has(d.id)), events: events || [], packing: packing || [], payments: payments || [], proofDocs: documents.filter(d => proofIds.has(d.id)), open, msg: req.query.msg, err: req.query.err });
 });
 
 // the client reports a payment: amount, date, proof of payment (confirmed by Lumi Trade afterwards)

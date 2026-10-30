@@ -20,6 +20,15 @@
   </form>
 </div>
 
+<% if (typeof portal !== 'undefined' && portal) { %>
+<div class="card portalorder">
+  <h2>Order sent by the client <% if (order.status === 'new') { %><span class="pill new">needs review</span><% } %></h2>
+  <% if (order.status === 'new') { %><p class="muted">Check the details below, fill in each item's price and cost (Items → Edit), choose the supplier, then change the status to Confirmed. The red mark in the menu stays until the status changes.</p><% } %>
+  <% if (portal.unpriced) { %><div class="alert warn"><%= portal.unpriced %> item<%= portal.unpriced > 1 ? 's have' : ' has' %> no price yet. While the goods total is 0 the client sees this order as “Under review” without prices.</div><% } %>
+  <%- include('../../partials/order_details', { rows: portal.rows }) %>
+</div>
+<% } %>
+
 <div class="kpis five">
   <div class="kpi"><span class="n"><%= fmt.money(order.subtotal, cur) %></span><span class="l">Goods (client)</span></div>
   <div class="kpi"><span class="n"><%= fmt.money(order.cost_total, cur) %></span><span class="l">Product cost</span></div>
@@ -33,13 +42,26 @@
     <div class="card">
       <h2>Items</h2>
       <table class="tbl">
-        <thead><tr><th>Description</th><th>HS</th><th>Qty</th><th class="right">Unit cost</th><th class="right">Unit price</th><th class="right">Landed / unit</th><th class="right">Total</th><th></th></tr></thead>
+        <thead><tr><th>Description</th><th>HS</th><th>Qty</th><% if (items.some(i => i.target_unit_price != null)) { %><th class="right">Client target</th><% } %><th class="right">Unit cost</th><th class="right">Unit price</th><th class="right">Landed / unit</th><th class="right">Total</th><th></th></tr></thead>
         <tbody>
         <% land.items.forEach(i => { %>
           <tr>
-            <td><%= i.description %><% if (i.products) { %><div class="small"><a href="/admin/products/<%= i.products.id %>"><%= i.products.sku || 'product' %></a></div><% } %></td>
+            <td><%= i.description %><% if (i.products) { %><div class="small"><a href="/admin/products/<%= i.products.id %>"><%= i.products.sku || 'product' %></a></div><% } else if (i.sku) { %><div class="small muted"><%= i.sku %></div><% } %>
+              <details class="rowedit"><summary class="link small">Edit</summary>
+                <form method="post" action="/admin/orders/<%= order.id %>/items/<%= i.id %>" class="sub">
+                  <label>Description <input name="description" value="<%= i.description %>" required></label>
+                  <div class="row">
+                    <label>Qty <input name="quantity" type="number" min="0" step="1" value="<%= i.quantity %>" required></label>
+                    <label>Unit cost <input name="unit_cost" inputmode="decimal" value="<%= i.unit_cost ?? '' %>"></label>
+                    <label>Unit price <input name="unit_price" inputmode="decimal" value="<%= Number(i.unit_price) || '' %>" placeholder="0"></label>
+                    <label>HS code <input name="hs_code" value="<%= i.hs_code || '' %>"></label>
+                  </div>
+                  <button class="btn small primary">Save</button>
+                </form>
+              </details></td>
             <td class="small"><%= i.hs_code || '—' %></td>
-            <td><%= i.quantity %></td>
+            <td><%= i.quantity %><%= i.unit && i.unit !== 'pcs' ? ' ' + i.unit : '' %></td>
+            <% if (items.some(x => x.target_unit_price != null)) { %><td class="right muted"><%= i.target_unit_price != null ? fmt.money(i.target_unit_price, cur, 4) : '—' %></td><% } %>
             <td class="right muted"><%= fmt.money(i.unit_cost, cur, 4) %></td>
             <td class="right"><%= fmt.money(i.unit_price, cur, 4) %></td>
             <td class="right" title="client price + share of logistics"><%= fmt.money(i.landed_unit_price, cur, 4) %></td>
@@ -47,7 +69,7 @@
             <td class="right"><form method="post" action="/admin/orders/<%= order.id %>/items/<%= i.id %>/delete" class="inline" onsubmit="return confirm('Remove item?')"><button class="link small danger">×</button></form></td>
           </tr>
         <% }) %>
-        <tr class="total"><td colspan="6">Goods total · logistics spread <%= fmt.money(land.freightPerUnit, cur, 4) %>/unit over <%= land.qty %> units</td><td class="right"><%= fmt.money(order.subtotal, cur) %></td><td></td></tr>
+        <tr class="total"><td colspan="<%= items.some(x => x.target_unit_price != null) ? 7 : 6 %>">Goods total · logistics spread <%= fmt.money(land.freightPerUnit, cur, 4) %>/unit over <%= land.qty %> units</td><td class="right"><%= fmt.money(order.subtotal, cur) %></td><td></td></tr>
         </tbody>
       </table>
       <details>
