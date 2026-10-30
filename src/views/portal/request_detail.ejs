@@ -1,7 +1,7 @@
 <%- include('../partials/head') %>
 <% const pend = typeof pending !== 'undefined' ? pending : null; const editable = typeof canEdit !== 'undefined' && canEdit; const decided = typeof lastDecision !== 'undefined' ? lastDecision : null; %>
 <div class="pagehead">
-  <div><a class="back" href="/portal/requests">← Requests</a><h1><%= request.ref %> · <%= request.title %></h1></div>
+  <div><% const isOrd = typeof orderRows !== 'undefined' && orderRows.length; %><a class="back" href="<%= isOrd ? '/portal/orders' : '/portal/requests' %>">← <%= isOrd ? 'Orders' : 'Requests' %></a><h1><%= request.ref %> · <%= request.title %></h1></div>
   <div class="headactions">
     <% if (editable && !pend) { %><a class="btn" href="/portal/requests/<%= request.id %>/edit"><%- icon('edit') %> Edit request</a><% } %>
     <span class="pill lg <%= request.status %>"><%= fmt.status(request.status) %></span>

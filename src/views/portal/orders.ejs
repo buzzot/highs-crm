@@ -2,10 +2,12 @@
 <% const STEPS = ['confirmed','deposit_paid','in_production','qc','packed','shipped','in_transit','customs','delivered','closed']; %>
 <div class="phead">
   <div><span class="eyebrow">Orders</span><h1>My orders</h1><p class="sub">Follow production, shipping and documents for every order.</p></div>
+  <div class="actions"><a class="btn primary" href="/portal/orders/new"><%- icon('plus') %> New order</a></div>
 </div>
+<% if (typeof placed !== 'undefined' && placed) { %><div class="alert ok"><strong>Order sent to Lumi Trade.</strong> It is listed below as “Under review”. We will come back with final prices, freight and a proforma invoice — usually within one business day.</div><% } %>
 <div class="tcard">
   <nav class="tabs2">
-    <% [['all','All'],['production','In production'],['shipping','On the way'],['delivered','Delivered']].forEach(([k, l]) => { %>
+    <% [['all','All'],['pending','Awaiting confirmation'],['production','In production'],['shipping','On the way'],['delivered','Delivered']].forEach(([k, l]) => { %>
       <a href="?tab=<%= k %>" class="<%= tab === k ? 'on' : '' %>"><%= l %> <span><%= counts[k] %></span></a>
     <% }) %>
   </nav>
@@ -14,7 +16,14 @@
     <thead><tr><th>Order</th><th class="right">Goods total</th><th>Status</th><th>Progress</th><th>Tracking</th><th>ETA</th></tr></thead>
     <tbody>
     <% if (!orders.length) { %><tr><td colspan="6"><div class="empty slim"><p><%= q || tab !== 'all' ? 'Nothing matches.' : 'No orders yet — they appear here once you accept a quote.' %></p></div></td></tr><% } %>
-    <% orders.forEach(o => { const sh = (o.shipments||[]).slice().sort((a,b)=>(b.eta||'').localeCompare(a.eta||''))[0]; const i = Math.max(0, STEPS.indexOf(o.status)); const pct = o.status === 'cancelled' ? 0 : Math.round((i + 1) / STEPS.length * 100); %>
+    <% orders.forEach(o => { if (o.pending) { %>
+      <tr class="rowlink" onclick="location='/portal/requests/<%= o.id %>'">
+        <td><a href="/portal/requests/<%= o.id %>"><strong><%= o.title %></strong></a><div class="muted small"><%= o.order_no %> · sent <%= fmt.date(o.created_at) %></div></td>
+        <td class="right muted">—</td>
+        <td><span class="pill <%= o.status %>"><%= o.status === 'quoted' ? 'proforma ready' : ['new','reviewing'].includes(o.status) ? 'under review' : fmt.status(o.status) %></span></td>
+        <td class="muted small">Awaiting confirmation</td><td class="muted">—</td><td class="muted">—</td>
+      </tr>
+    <% return; } const sh = (o.shipments||[]).slice().sort((a,b)=>(b.eta||'').localeCompare(a.eta||''))[0]; const i = Math.max(0, STEPS.indexOf(o.status)); const pct = o.status === 'cancelled' ? 0 : Math.round((i + 1) / STEPS.length * 100); %>
       <tr class="rowlink" onclick="location='/portal/orders/<%= o.id %>'">
         <td><a href="/portal/orders/<%= o.id %>"><strong><%= o.order_no %></strong></a><div class="muted small">placed <%= fmt.date(o.created_at) %></div></td>
         <td class="right"><%= fmt.money(o.subtotal, o.currency) %></td>

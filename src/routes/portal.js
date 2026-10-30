@@ -93,9 +93,17 @@ r.get('/', async (req, res) => {
 });
 
 // ---- requests ----
+// Orders sent from "New order" are stored as requests (kind = 'order', or a "[Order] " title before migration 0042);
+// they are listed under My orders, not My requests.
+async function orderRequestIds(orgId, rows) {
+  const ids = new Set((rows || []).filter(x => String(x.title || '').startsWith('[Order] ')).map(x => x.id));
+  try { const { data } = await admin.from('requests').select('id').eq('org_id', orgId).eq('kind', 'order'); (data || []).forEach(x => ids.add(x.id)); } catch { /* migration not run */ }
+  return ids;
+}
 r.get('/requests', async (req, res) => {
   const { data } = await req.db.from('requests').select(REQ).order('created_at', { ascending: false });
-  const all = (data || []).filter(visibleReq);
+  const orderIds = await orderRequestIds(req.user.org_id, data);
+  const all = (data || []).filter(visibleReq).filter(x => !orderIds.has(x.id));
   const groups = {
     all: () => true,
     open: x => ['new', 'reviewing'].includes(x.status),
@@ -488,24 +496,30 @@ r.post('/orders', upload.any(), async (req, res) => {
     const to = await staffEmails(rq || {});
     if (to.length && rq) await sendEmail({ to, ...newRequestEmail({ request: rq, orgName: org?.name, who: req.user.full_name || req.user.email, products: items.length, kind: 'order', url: `${appUrl()}/admin/sourcing/${rq.id}` }) });
   } catch (e) { console.error(`[order] email to staff failed: ${e.message}`); }
-  res.redirect(`/portal/requests/${data.id}?placed=1`);
+  res.redirect('/portal/orders?placed=1');
 });
 
 // ---- orders ----
 r.get('/orders', async (req, res) => {
   const { data } = await req.db.from('orders').select(`${ORDER}, shipments(eta, status, tracking_no)`).order('created_at', { ascending: false });
-  const all = data || [];
+  const { data: reqRows } = await req.db.from('requests').select(REQ).order('created_at', { ascending: false });
+  const orderIds = await orderRequestIds(req.user.org_id, reqRows);
+  // submitted orders that are not yet confirmed (accepted ones already exist as real orders)
+  const pendingRaw = (reqRows || []).filter(x => orderIds.has(x.id) && x.status !== 'accepted')
+    .map(x => ({ ...x, pending: true, order_no: x.ref, title: String(x.title || '').replace(/^\[Order\]\s*/, '') }));
+  const all = [...pendingRaw, ...(data || [])];
   const groups = {
     all: () => true,
-    production: x => ['new', 'confirmed', 'deposit_paid', 'in_production', 'qc', 'packed'].includes(x.status),
-    shipping: x => ['shipped', 'in_transit', 'customs'].includes(x.status),
-    delivered: x => ['delivered', 'closed'].includes(x.status),
+    pending: x => x.pending && ['new', 'reviewing', 'quoted'].includes(x.status),
+    production: x => !x.pending && ['new', 'confirmed', 'deposit_paid', 'in_production', 'qc', 'packed'].includes(x.status),
+    shipping: x => !x.pending && ['shipped', 'in_transit', 'customs'].includes(x.status),
+    delivered: x => !x.pending && ['delivered', 'closed'].includes(x.status),
   };
   const tab = groups[req.query.tab] ? req.query.tab : 'all';
   const q = String(req.query.q || '').trim().toLowerCase();
-  const list = all.filter(groups[tab]).filter(x => !q || x.order_no.toLowerCase().includes(q));
+  const list = all.filter(groups[tab]).filter(x => !q || `${x.order_no} ${x.title || ''}`.toLowerCase().includes(q));
   const counts = Object.fromEntries(Object.entries(groups).map(([k, f]) => [k, all.filter(f).length]));
-  res.render('portal/orders', { title: 'My orders', orders: list, counts, tab, q });
+  res.render('portal/orders', { title: 'My orders', orders: list, counts, tab, q, placed: !!req.query.placed });
 });
 
 r.get('/orders/:id', async (req, res) => {
