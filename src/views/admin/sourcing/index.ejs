@@ -9,7 +9,8 @@
 <% const needBits = [counts.fresh && counts.fresh + ' new', counts.changes && counts.changes + ' with changes to approve', counts.pos && counts.pos + ' with a PO to approve'].filter(Boolean).join(' · '); %>
 <%- include('../../partials/viewtabs', { base: '/admin/sourcing', view: status === 'action' ? 'none' : status, counts: vcounts, statuses, byStatus, label: s => fmt.status(s), keep: mq.replace(/^&/, ''), need: waiting > 0 || status === 'action' ? { count: waiting, on: status === 'action', title: needBits + (status === 'action' ? ' — click to show all requests' : ' — click to show only these'), href: '/admin/sourcing?status=' + (status === 'action' ? 'open' : 'action') + mq } : null }) %>
 <div class="card">
-  <form class="row tight" method="get"><input type="hidden" name="status" value="<%= status %>"><% if (mine) { %><input type="hidden" name="mine" value="1"><% } %><input name="q" value="<%= query.q || '' %>" placeholder="Search title or ref…"><button class="btn">Search</button></form>
+  <form class="row tight live-form" method="get" data-live><input type="hidden" name="status" value="<%= status %>"><% if (mine) { %><input type="hidden" name="mine" value="1"><% } %><input name="q" value="<%= query.q || '' %>" placeholder="Search title or ref…"><button class="btn live-hide">Search</button></form>
+  <div data-live-results>
   <table class="tbl">
     <thead><tr><th>Ref</th><th>Request</th><th>Client</th><th>Qty</th><th>Target</th><th>Needed by</th><th>Quotes</th><th>Owner</th><th>Status</th></tr></thead>
     <tbody>
@@ -30,5 +31,6 @@
     </tbody>
   </table>
   <% if (closedHits) { %><div class="vhint"><%= closedHits %> more match<%= closedHits === 1 ? 'es' : '' %> in Closed requests · <a href="/admin/sourcing?status=closed&q=<%= encodeURIComponent(query.q || '') %><%= mq %>">Show them</a></div><% } %>
+  </div>
 </div>
 <%- include('../../partials/foot') %>

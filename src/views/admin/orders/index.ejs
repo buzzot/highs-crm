@@ -5,12 +5,13 @@
 </div>
 <%- include('../../partials/viewtabs', { base: '/admin/orders', view: status, counts: vcounts, statuses, byStatus, label: s => fmt.status(s), keep: (query.client ? 'client=' + query.client : '') }) %>
 <div class="card">
-  <form class="row tight" method="get">
+  <form class="row tight live-form" method="get" data-live>
     <input type="hidden" name="status" value="<%= status %>">
     <input name="q" value="<%= query.q || '' %>" placeholder="Order no, client, supplier…">
     <select data-picker="Client" name="client"><option value="">All clients</option><% clients.forEach(c => { %><option value="<%= c.id %>" <%= query.client === c.id ? 'selected' : '' %>><%= c.name %></option><% }) %></select>
-    <button class="btn">Filter</button>
+    <button class="btn live-hide">Filter</button>
   </form>
+  <div data-live-results>
   <table class="tbl">
     <thead><tr><th>Order</th><th>Client</th><th>Supplier</th><th>Status</th><th class="right">Goods</th><th class="right">Cost</th><th class="right">Freight</th><th class="right">Margin</th><th class="right">Gross profit</th><th>Ship / ETA</th></tr></thead>
     <tbody>
@@ -33,5 +34,6 @@
     </tbody>
   </table>
   <% if (closedHits) { %><div class="vhint"><%= closedHits %> more match<%= closedHits === 1 ? 'es' : '' %> in Closed orders · <a href="/admin/orders?status=closed&q=<%= encodeURIComponent(query.q || '') %><%= query.client ? '&client=' + query.client : '' %>">Show them</a></div><% } %>
+  </div>
 </div>
 <%- include('../../partials/foot') %>

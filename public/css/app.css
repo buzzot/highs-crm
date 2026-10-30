@@ -2788,3 +2788,5 @@ dialog.fqdlg::backdrop { background: rgba(15,30,50,.45); }
 .vtabs .needtab .navball { margin-left: 7px; background: #b3261e; color: #fff; }
 .vtabs .needtab.on { background: #b3261e; color: #fff; border-color: #b3261e; }
 .vtabs .needtab.on .navball { background: #fff; color: #b3261e; }
+
+.live-form .live-hide { display: none; }

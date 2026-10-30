@@ -108,7 +108,30 @@ const RU = document.documentElement.lang === 'ru';   // Russian client portal: t
     const z = dlg ? [...zones].find(x => dlg.contains(x)) : activeZone && document.contains(activeZone) ? activeZone : [...zones].find(x => document.contains(x));
     if (z) { ev.preventDefault(); z.add(pasted); z.scrollIntoView({ block: 'nearest' }); }
   });
-  // fade flash messages
+  
+// live search: <form data-live> with a <div data-live-results> — typing (or changing a menu) reloads just the results, no button needed
+(function () {
+  document.querySelectorAll('form[data-live]').forEach(form => {
+    const box = document.querySelector('[data-live-results]'); if (!box) return;
+    let timer, seq = 0;
+    const run = async () => {
+      const my = ++seq, url = form.action.split('?')[0] + '?' + new URLSearchParams(new FormData(form)).toString();
+      try {
+        const res = await fetch(url, { headers: { Accept: 'text/html' }, credentials: 'same-origin' });
+        if (!res.ok || my !== seq) return;
+        const doc = new DOMParser().parseFromString(await res.text(), 'text/html'), fresh = doc.querySelector('[data-live-results]');
+        if (!fresh || my !== seq) return;
+        box.innerHTML = fresh.innerHTML;
+        history.replaceState(null, '', url);
+      } catch (e) { /* keep what is shown; Enter still submits the form normally */ }
+    };
+    form.addEventListener('input', e => { if (e.target.matches('input[type=search], input:not([type]), input[type=text]')) { clearTimeout(timer); timer = setTimeout(run, 300); } });
+    form.addEventListener('change', e => { if (e.target.matches('select')) run(); });
+    form.addEventListener('submit', e => { e.preventDefault(); clearTimeout(timer); run(); });
+  });
+})();
+
+// fade flash messages
   setTimeout(() => document.querySelectorAll('.flash.ok').forEach(f => f.classList.add('gone')), 4000);
 })();
 
