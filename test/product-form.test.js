@@ -234,3 +234,12 @@ test('edit form: Sold per and Package type selectors, with labels that follow th
   assert.match(html, /<span id="qtyPerLbl">m<\/span> \/ <span id="pkgLbl">reel<\/span>/);
   assert.match(html, /MOQ <span class="pe-unit" data-unit>m<\/span>/);
 });
+
+test('edit form: the default unit and package read plainly, without "(default)"', () => {
+  const base = pages['admin/products/form#edit'] || pages['admin/products/form'];
+  const loc = Array.isArray(base) ? base[1] : base;
+  const html = render('src/views/admin/products/form.ejs', loc);
+  assert.match(html, /<option value="">pcs<\/option>/);
+  assert.match(html, /<option value="">Carton<\/option>/);
+  assert.doesNotMatch(html, /\(default\)/);
+});

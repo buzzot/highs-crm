@@ -98,8 +98,8 @@
         <input type="number" min="0" step="0.0001" inputmode="decimal" name="unit_cost" value="<%= v('unit_cost') %>"><% if (E.unit_cost) { %><small class="pe-err" role="alert"><%= E.unit_cost %></small><% } %></label>
       <label class="field--compact">Currency
         <select name="cost_currency"><% curOpts.forEach(c => { %><option <%= (p.cost_currency || 'CNY') === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
-      <label class="field--compact">Sold per <%- tip('The unit the price and MOQ are quoted in — pcs, m, kg, sets… Optional; pcs when empty.') %>
-        <select name="sold_per" id="soldPer"><option value="">pcs (default)</option><% unitOpts.filter(u => u !== 'pcs').forEach(u => { %><option <%= F.unit === u ? 'selected' : '' %>><%= u %></option><% }) %></select></label>
+      <label class="field--compact">Sold per <%- tip('The unit the price and MOQ are quoted in — pcs, m, kg, sets… Optional; pcs when left as is.') %>
+        <select name="sold_per" id="soldPer"><option value="">pcs</option><% unitOpts.filter(u => u !== 'pcs').forEach(u => { %><option <%= F.unit === u ? 'selected' : '' %>><%= u %></option><% }) %></select></label>
       <label class="field--compact">MOQ <span class="pe-unit" data-unit><%= U %></span>
         <input type="number" min="0" step="1" inputmode="numeric" name="moq" value="<%= v('moq') %>"><% if (E.moq) { %><small class="pe-err" role="alert"><%= E.moq %></small><% } %></label>
     </div>
@@ -207,7 +207,7 @@
         <h3>Export carton</h3>
         <div class="pe-row">
           <label class="field--medium">Package type <%- tip('How the goods are packed for export — carton, pallet, drum / reel, roll… Optional; the figures below are then read per package.') %>
-            <select name="package_type" id="pkgType"><option value="">Carton (default)</option><% pkgOpts.filter(u => u !== 'Carton').forEach(u => { %><option <%= F.pkg === u ? 'selected' : '' %>><%= u %></option><% }) %></select></label>
+            <select name="package_type" id="pkgType"><option value="">Carton</option><% pkgOpts.filter(u => u !== 'Carton').forEach(u => { %><option <%= F.pkg === u ? 'selected' : '' %>><%= u %></option><% }) %></select></label>
           <label class="field--compact"><span id="qtyPerLbl"><%= U %></span> / <span id="pkgLbl"><%= (F.pkg || 'carton').toLowerCase() %></span><input type="number" min="1" step="1" inputmode="numeric" name="carton_qty" value="<%= v('carton_qty') %>"><% if (E.carton_qty) { %><small class="pe-err"><%= E.carton_qty %></small><% } %></label>
           <label class="field--compact">Gross wt <span class="pe-unit">kg</span><input type="number" min="0" step="0.01" inputmode="decimal" name="carton_weight_kg" value="<%= v('carton_weight_kg') %>"><% if (E.carton_weight_kg) { %><small class="pe-err"><%= E.carton_weight_kg %></small><% } %></label>
           <label class="field--compact">Length <span class="pe-unit">cm</span><input type="number" min="0" step="0.1" inputmode="decimal" name="carton_length_cm" value="<%= v('carton_length_cm') %>"></label>
