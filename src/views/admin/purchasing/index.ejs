@@ -19,7 +19,7 @@
 
 <div class="card flush">
   <div class="toolbar">
-    <%- include('../../partials/viewtabs', { base: '/admin/purchasing', view, counts: vcounts, statuses, byStatus: counts, label: s => labels[s], keep: supQ + (unlinked ? (supQ ? '&' : '') + 'order=none' : '') }) %>
+    <%- include('../../partials/viewtabs', { base: '/admin/purchasing', view, counts: vcounts, statuses, byStatus: counts, label: s => labels[s], menu: false, keep: supQ + (unlinked ? (supQ ? '&' : '') + 'order=none' : '') }) %>
     <input type="search" class="searchbox" id="poSearch" value="<%= q %>" placeholder="Search PO, supplier, order…" aria-label="Search purchase orders">
   </div>
   <% if (!pos.length) { %>
