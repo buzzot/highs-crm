@@ -14,18 +14,22 @@
   const isNew = !p.id;
   const typeOpts = RT.some(([x]) => x === F.type) ? RT : [...RT, [F.type, F.type]];
   const off = /^(service|services|freight|freight item|shipping)$/i.test(F.type || '');
+  const CB = F.cbm || { supplier: v('carton_cbm'), use: 'entered' };
+  let tipN = 0;
+  const tip = (text) => { tipN++; return '<span class="pe-info"><button type="button" class="pe-i" aria-label="More information" aria-describedby="tip' + tipN + '">i</button><span class="pe-tipbox" role="tooltip" id="tip' + tipN + '">' + text + '</span></span>'; };
+  const supName = ((typeof suppliers !== 'undefined' ? suppliers : []).find(x => x.id === p.supplier_id) || {}).name || '';
+  const heading = String(p.name || '').trim() || (isNew ? 'New Product' : 'Untitled product');
+  const meta = [p.sku ? 'SKU ' + p.sku : '', p.category || '', supName].filter(Boolean);
   const incOpts = !F.incoterm || INC.includes(String(F.incoterm).toUpperCase()) ? INC : [...INC, F.incoterm];
   const curOpts = CUR.includes(p.cost_currency || 'CNY') ? CUR : [...CUR, p.cost_currency];
   const isoDate = /^\d{4}-\d{2}-\d{2}$/.test(F.valid || '');
   const nErr = Object.keys(E).length;
 %>
 <div class="pe">
-  <a class="back" href="<%= p.id ? '/admin/products/' + p.id : '/admin/products' %>">← Back</a>
-  <div class="pe-head">
-    <h1><%= title %></h1>
-    <% if (p.id && p.name) { %><span class="muted pe-sub" title="<%= p.name %>"><%= p.name %></span><% } %>
-  </div>
-  <nav class="pe-nav" aria-label="Sections">
+  <nav class="pe-crumb" aria-label="Breadcrumb"><a href="/admin/products">Products</a><span aria-hidden="true"> / </span><span aria-current="page"><%= isNew ? 'New product' : 'Edit product' %></span></nav>
+  <h1 class="pe-title" id="peTitle"><%= heading %></h1>
+  <p class="pe-meta" id="peMeta"><%= meta.join(' · ') %></p>
+  <nav class="pe-nav" id="peNav" aria-label="Jump to section">
     <a href="#sec-basic">Basic information</a><a href="#sec-photos">Photos &amp; AI</a><a href="#sec-spec">Specifications</a><a href="#sec-supply">Supplier &amp; pricing</a><a href="#sec-pack">Dimensions &amp; packing</a><a href="#sec-customs">Customs</a>
   </nav>
   <% if (error) { %><div class="alert err" role="alert"><%= error %></div><% } %>
@@ -36,19 +40,17 @@
   <%# ---------------- 1. Basic information ---------------- %>
   <section class="pe-card" id="sec-basic">
     <h2>Basic information</h2>
-    <p class="pe-note">The product itself — the same whichever supplier makes it.</p>
-    <div class="pe-grid">
-      <label class="s2">Product name <span class="req" title="Required">*</span>
-        <input name="name" required maxlength="300" value="<%= v('name') %>" aria-invalid="<%= E.name ? 'true' : 'false' %>"><% if (E.name) { %><small class="pe-err" role="alert"><%= E.name %></small><% } %></label>
-      <label>Our SKU
-        <input name="sku" maxlength="100" value="<%= v('sku') %>"><% if (E.sku) { %><small class="pe-err" role="alert"><%= E.sku %></small><% } %></label>
-      <label>Category
-        <input name="category" maxlength="100" value="<%= v('category') %>"><% if (E.category) { %><small class="pe-err" role="alert"><%= E.category %></small><% } %></label>
-      <label>Record type
+    <div class="pe-grid g6">
+      <label class="c4">Product name <span class="req" title="Required">*</span>
+        <input name="name" id="nameIn" required maxlength="300" value="<%= v('name') %>" aria-invalid="<%= E.name ? 'true' : 'false' %>"><% if (E.name) { %><small class="pe-err" role="alert"><%= E.name %></small><% } %></label>
+      <label class="c2">Our SKU
+        <input name="sku" id="skuIn" maxlength="100" value="<%= v('sku') %>"><% if (E.sku) { %><small class="pe-err" role="alert"><%= E.sku %></small><% } %></label>
+      <label class="c3">Category
+        <input name="category" id="catIn" maxlength="100" value="<%= v('category') %>"><% if (E.category) { %><small class="pe-err" role="alert"><%= E.category %></small><% } %></label>
+      <label class="c3"><span>Record type <%- tip('Service and freight records do not use cartons or container costing, so the packing fields are locked (their values are kept). Samples and packaging are treated as physical items.') %></span>
         <select name="record_type" id="recType"><% typeOpts.forEach(([val, label]) => { %><option value="<%= val %>" <%= F.type === val ? 'selected' : '' %>><%= label %></option><% }) %></select></label>
-      <p class="pe-help s3">Service and freight records skip carton and container costing. Samples and packaging are treated as physical items.</p>
-      <label class="s4">Description
-        <textarea name="description" rows="3" maxlength="5000"><%= v('description') %></textarea><% if (E.description) { %><small class="pe-err" role="alert"><%= E.description %></small><% } %></label>
+      <label class="c6">Description
+        <textarea name="description" rows="2" maxlength="5000"><%= v('description') %></textarea><% if (E.description) { %><small class="pe-err" role="alert"><%= E.description %></small><% } %></label>
     </div>
   </section>
 
@@ -63,19 +65,19 @@
     <input type="file" name="photos" id="photoInput" multiple hidden accept="image/jpeg,image/png,image/webp,image/gif<%= AI ? ',application/pdf' : '' %>">
     <div class="pe-gal" id="photoDrop" tabindex="0" aria-label="Product photos. Drop images here or paste from the clipboard.">
       <% PH.forEach((ph) => { %>
-        <figure class="pe-ph" data-id="<%= ph.id %>">
-          <button type="button" class="pe-pimg" data-preview="/admin/documents/<%= ph.id %>/download" data-title="<%= ph.title || '' %>" aria-label="Preview <%= ph.title || 'photo' %>"><img src="/admin/documents/<%= ph.id %>/download" alt="<%= ph.title || '' %>" loading="lazy" data-pimg></button>
+        <figure class="pe-ph <%= ph.id === mainId ? 'main' : '' %>" data-id="<%= ph.id %>">
+          <button type="button" class="pe-pimg" data-preview="/admin/documents/<%= ph.id %>/download" data-title="<%= ph.title || '' %>" aria-label="View <%= ph.title || 'photo' %> full size"><img src="/admin/documents/<%= ph.id %>/download" alt="<%= ph.title || '' %>" loading="lazy" data-pimg></button>
           <% if (ph.id === mainId) { %><span class="pe-main-tag">Main</span><% } %>
-          <figcaption>
-            <% if (HASP) { %><label class="pe-radio" title="Use as the main photo"><input type="radio" name="primary_photo_id" value="<%= ph.id %>" <%= ph.id === mainId ? 'checked' : '' %>> Main</label><% } %>
-            <label class="pe-rm" title="Remove when you save"><input type="checkbox" name="remove_photo" value="<%= ph.id %>"> Remove</label>
-          </figcaption>
+          <button type="button" class="pe-x" data-rmphoto title="Remove this photo" aria-label="Remove <%= ph.title || 'photo' %>">&times;</button>
+          <input type="checkbox" name="remove_photo" value="<%= ph.id %>" hidden>
+          <div class="pe-rmnote" hidden><span>Removed when you save</span><button type="button" class="linkbtn" data-undo>Undo</button></div>
+          <% if (HASP) { %><figcaption><label class="pe-radio" title="Use as the main photo"><input type="radio" name="primary_photo_id" value="<%= ph.id %>" <%= ph.id === mainId ? 'checked' : '' %>> <span><%= ph.id === mainId ? 'Main photo' : 'Make main' %></span></label></figcaption><% } %>
         </figure>
       <% }) %>
       <div id="photoPreview" class="pe-newwrap" style="display:contents"></div>
       <div class="pe-empty" id="phEmpty" <%= PH.length ? 'hidden' : '' %>>No photos yet. <button type="button" class="linkbtn" id="phAdd2">Add photos</button>, drag them here, or paste an image (Ctrl/⌘ V).</div>
     </div>
-    <p class="pe-help">JPG, PNG, WebP or GIF · up to 12 photos at a time, 10 MB each<%= AI ? ' · a PDF (catalogue page, datasheet) is only read by the AI scan, it is not saved' : '' %>.<%= HASP ? '' : ' The first photo uploaded is the main one.' %></p>
+    <p class="pe-help">JPG, PNG, WebP or GIF · up to 12 at a time, 10 MB each <%- tip("Drop images on the gallery or paste one from the clipboard." + (AI ? " A PDF (catalogue page, datasheet) is only read by the AI scan — it is not saved." : "") + (HASP ? "" : " The first photo uploaded is the main one.") + " Removing a stored photo only takes effect when you press Save changes.") %></p>
     <% if (AI) { %>
     <div class="pe-ai" id="aiScan">
       <div class="aiscan-msg" id="aiMsg" hidden></div>
@@ -95,37 +97,37 @@
   <section class="pe-card" id="sec-spec">
     <div class="pe-h"><h2>Technical specifications <span class="cnt" id="specCount"><%= F.rows.length %></span></h2>
       <div class="pe-tools"><button type="button" class="btn small" id="specAdd">+ Add attribute</button></div></div>
-    <p class="pe-note">One attribute per row, such as <i>Power</i> → <i>10 W</i>. Paste a list of “Key: value” lines into a name field to turn it into rows.</p>
+    <p class="pe-note">One attribute per row, e.g. Power → 10 W. <%- tip("Paste a list of “Key: value” lines into an attribute name field to turn it into rows. Names must be unique and cannot contain a colon.") %></p>
     <div id="specRows" class="pe-spec">
       <% F.rows.forEach(([k, val]) => { %>
         <div class="pe-sr"><input name="spec_k" value="<%= k %>" placeholder="Attribute" maxlength="80" aria-label="Attribute name"><input name="spec_v" value="<%= val %>" placeholder="Value" aria-label="Attribute value"><button type="button" class="iconbtn" data-rm title="Remove this attribute" aria-label="Remove this attribute">×</button></div>
       <% }) %>
     </div>
-    <p class="pe-empty-s muted small" id="specEmpty" <%= F.rows.length ? 'hidden' : '' %>>No specifications yet.</p>
+    <p class="pe-empty-s muted small" id="specEmpty" <%= F.rows.length ? 'hidden' : '' %>>No specifications yet — <button type="button" class="linkbtn" id="specAdd2">add an attribute</button>.</p>
     <% if (E.spec) { %><small class="pe-err" role="alert"><%= E.spec %></small><% } %>
   </section>
 
   <%# ---------------- 4. Supplier & pricing ---------------- %>
   <section class="pe-card" id="sec-supply">
     <h2>Supplier &amp; pricing</h2>
-    <p class="pe-note">What this supplier charges and promises. Changing it here does not change quotations or purchase orders already made — they keep the price they were created with.</p>
-    <div class="pe-grid">
-      <label class="s2">Supplier
+    <p class="pe-note">Supplier terms, separate from the product itself. Price changes do not alter existing quotes or POs. <%- tip("Quotations and supplier purchase orders keep the price they were created with — editing the cost here only affects new ones. Price basis, lead time and quote validity are saved with the product's specification data.") %></p>
+    <div class="pe-grid g6">
+      <label class="c3">Supplier
         <select data-picker name="supplier_id"><option value="">—</option><% suppliers.forEach(s => { %><option value="<%= s.id %>" <%= p.supplier_id === s.id ? 'selected' : '' %>><%= s.name %></option><% }) %><option value="__new">+ Add new supplier…</option></select></label>
-      <label>Supplier SKU <span class="pe-tag">supplier</span>
+      <label class="c2">Supplier SKU <span class="pe-tag">supplier</span>
         <input name="supplier_sku" maxlength="100" value="<%= v('supplier_sku') %>"><% if (E.supplier_sku) { %><small class="pe-err" role="alert"><%= E.supplier_sku %></small><% } %></label>
-      <label>MOQ <span class="pe-tag">pcs</span>
+      <label class="c1">MOQ <span class="pe-tag">pcs</span>
         <input type="number" min="0" step="1" inputmode="numeric" name="moq" value="<%= v('moq') %>"><% if (E.moq) { %><small class="pe-err" role="alert"><%= E.moq %></small><% } %></label>
-      <label>Unit cost
+      <label class="c1">Unit cost
         <input type="number" min="0" step="0.0001" inputmode="decimal" name="unit_cost" value="<%= v('unit_cost') %>"><% if (E.unit_cost) { %><small class="pe-err" role="alert"><%= E.unit_cost %></small><% } %></label>
-      <label>Currency
+      <label class="c1">Currency
         <select name="cost_currency"><% curOpts.forEach(c => { %><option <%= (p.cost_currency || 'CNY') === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label>
-      <label>Price basis
+      <label class="c1">Price basis
         <select name="src_incoterm"><option value="">Not recorded</option><% incOpts.forEach(c => { %><option <%= String(F.incoterm).toUpperCase() === c.toUpperCase() ? 'selected' : '' %>><%= c %></option><% }) %></select>
         <% if (E.src_incoterm) { %><small class="pe-err" role="alert"><%= E.src_incoterm %></small><% } %></label>
-      <label>Production lead time <span class="pe-tag">days</span>
+      <label class="c1">Lead time <span class="pe-tag">days</span>
         <input name="src_lead" inputmode="numeric" maxlength="12" value="<%= F.lead %>" placeholder="e.g. 30"><% if (E.src_lead) { %><small class="pe-err" role="alert"><%= E.src_lead %></small><% } %></label>
-      <label>Quotation valid until
+      <label class="c2">Quotation valid until
         <input name="src_valid" <%= isoDate || !F.valid ? 'type=date' : 'type=text' %> value="<%= F.valid %>"><% if (E.src_valid) { %><small class="pe-err" role="alert"><%= E.src_valid %></small><% } %></label>
     </div>
     <div class="newsup" id="newSup" hidden>
@@ -146,10 +148,10 @@
   <%# ---------------- 5. Dimensions & packing ---------------- %>
   <section class="pe-card" id="sec-pack">
     <h2>Dimensions &amp; packing</h2>
-    <p class="pe-note" id="packOff" <%= off ? '' : 'hidden' %>>This is a <%= (F.type || 'non-physical').toLowerCase() %> record, so packing and carton volume are not used. Existing values are kept as they are.</p>
+    <p class="pe-note" id="packOff" <%= off ? '' : 'hidden' %>>Not used for <%= (F.type || 'non-physical').toLowerCase() %> records — existing values are kept.</p>
     <div class="pe-two <%= off ? 'is-off' : '' %>" id="packWrap">
       <div class="pe-sub">
-        <h3>Individual product <span class="muted small">one piece, with its inner packaging</span></h3>
+        <h3>Individual product</h3>
         <div class="pe-grid g4">
           <label>Weight <span class="pe-tag">kg</span><input type="number" min="0" step="0.001" inputmode="decimal" name="unit_weight_kg" value="<%= v('unit_weight_kg') %>"><% if (E.unit_weight_kg) { %><small class="pe-err"><%= E.unit_weight_kg %></small><% } %></label>
           <label>Length <span class="pe-tag">cm</span><input type="number" min="0" step="0.1" inputmode="decimal" name="unit_length_cm" value="<%= v('unit_length_cm') %>"></label>
@@ -159,17 +161,24 @@
       </div>
       <div class="pe-sub">
         <h3>Export carton</h3>
-        <div class="pe-grid g3">
-          <label>Pieces per carton<input type="number" min="0" step="1" inputmode="numeric" name="carton_qty" value="<%= v('carton_qty') %>"><% if (E.carton_qty) { %><small class="pe-err"><%= E.carton_qty %></small><% } %></label>
+        <div class="pe-grid g5">
+          <label>Pieces per carton<input type="number" min="1" step="1" inputmode="numeric" name="carton_qty" value="<%= v('carton_qty') %>"><% if (E.carton_qty) { %><small class="pe-err"><%= E.carton_qty %></small><% } %></label>
           <label>Gross weight <span class="pe-tag">kg</span><input type="number" min="0" step="0.01" inputmode="decimal" name="carton_weight_kg" value="<%= v('carton_weight_kg') %>"><% if (E.carton_weight_kg) { %><small class="pe-err"><%= E.carton_weight_kg %></small><% } %></label>
-          <span class="pe-gap"></span>
           <label>Length <span class="pe-tag">cm</span><input type="number" min="0" step="0.1" inputmode="decimal" name="carton_length_cm" value="<%= v('carton_length_cm') %>"></label>
           <label>Width <span class="pe-tag">cm</span><input type="number" min="0" step="0.1" inputmode="decimal" name="carton_width_cm" value="<%= v('carton_width_cm') %>"></label>
           <label>Height <span class="pe-tag">cm</span><input type="number" min="0" step="0.1" inputmode="decimal" name="carton_height_cm" value="<%= v('carton_height_cm') %>"></label>
-          <label>CBM <span class="pe-tag" id="cbmTag">m³</span><input type="number" min="0" step="0.0001" inputmode="decimal" name="carton_cbm" id="cbmIn" value="<%= v('carton_cbm') %>" data-entered="<%= v('carton_cbm') %>"><% if (E.carton_cbm) { %><small class="pe-err"><%= E.carton_cbm %></small><% } %></label>
         </div>
-        <p class="pe-help" id="cbmNote">CBM is calculated from the carton size when all three sides are filled in.</p>
-        <label class="check pe-keep" id="keepRow" hidden><input type="checkbox" name="keep_cbm" id="keepCbm" <%= KEEP ? 'checked' : '' %>> <span id="keepTxt">Keep the entered CBM</span></label>
+        <div class="pe-cbm" id="cbmBox">
+          <label>Supplier-provided CBM <span class="pe-tag">m³</span><input type="number" min="0" step="0.0001" inputmode="decimal" name="carton_cbm" id="cbmIn" value="<%= CB.supplier %>"><% if (E.carton_cbm) { %><small class="pe-err"><%= E.carton_cbm %></small><% } %></label>
+          <div class="pe-cbm-c"><span class="lbl">Calculated from size <%- tip('Length × width × height ÷ 1,000,000, worked out when all three carton sides are filled in.') %></span><strong id="cbmCalc">—</strong></div>
+          <div class="pe-cbm-c"><span class="lbl">Used for freight &amp; costing</span><strong id="cbmUse">—</strong></div>
+        </div>
+        <fieldset class="pe-pick" id="cbmPick" hidden>
+          <legend>The two volumes differ — which one should be used?</legend>
+          <label><input type="radio" name="cbm_use" value="entered" <%= CB.use !== 'calc' ? 'checked' : '' %>> <span id="cbmPickEnt">Supplier-provided</span></label>
+          <label><input type="radio" name="cbm_use" value="calc" <%= CB.use === 'calc' ? 'checked' : '' %>> <span id="cbmPickCalc">Calculated from size</span></label>
+        </fieldset>
+        <p class="pe-help" id="cbmNote"></p>
       </div>
     </div>
   </section>
@@ -177,17 +186,17 @@
   <%# ---------------- 6. Customs & classification ---------------- %>
   <section class="pe-card" id="sec-customs">
     <h2>Customs &amp; classification</h2>
-    <div class="pe-grid">
-      <label class="pe-hs">HS code
+    <div class="pe-hsrow">
+      <label class="pe-hs">HS code <span class="pe-tag">as entered</span> <%- tip('Saved exactly as entered, including a code given by the supplier. LumiTrade does not check it against an import tariff, so confirm the classification for the destination country before relying on it.') %>
         <input name="hs_code" maxlength="20" value="<%= v('hs_code') %>" placeholder="9617.00" inputmode="decimal"><% if (E.hs_code) { %><small class="pe-err" role="alert"><%= E.hs_code %></small><% } %></label>
-      <p class="pe-help s3">Saved exactly as entered, including a code given by the supplier. LumiTrade does not check it against an import tariff, so confirm the classification for the destination country before relying on it.</p>
+      <p class="pe-help pe-hsnote">Not verified — confirm for the destination country.</p>
     </div>
   </section>
 
   <div class="pe-foot" role="region" aria-label="Save">
     <span class="pe-stat" id="peStat" aria-live="polite"><%= nErr ? nErr + ' field' + (nErr === 1 ? '' : 's') + ' need attention' : 'No changes' %></span>
     <a class="btn" id="peCancel" href="<%= p.id ? '/admin/products/' + p.id : '/admin/products' %>">Cancel</a>
-    <button class="btn primary" id="peSave"><%= isNew ? 'Create product' : 'Save changes' %></button>
+    <button class="btn primary" id="peSave" <%= !isNew && !nErr ? 'disabled' : '' %>><%= isNew ? 'Create product' : 'Save changes' %></button>
   </div>
   </form>
 </div>
@@ -205,7 +214,7 @@
   // ---------- photos: gallery, add / drop / paste, preview, remove ----------
   var input = $('photoInput'), drop = $('photoDrop'), prev = $('photoPreview'), empty = $('phEmpty');
   var OK = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].concat($('aiScan') ? ['application/pdf'] : []);
-  function count() { var n = drop.querySelectorAll('.pe-ph').length; $('phCount').textContent = n; empty.hidden = n > 0; }
+  function count() { var n = drop.querySelectorAll('.pe-ph:not(.rm)').length; $('phCount').textContent = n; empty.hidden = n > 0; }
   function sync() {
     var dt = new DataTransfer(); files.forEach(function (f) { dt.items.add(f); }); input.files = dt.files;
     prev.innerHTML = '';
@@ -220,7 +229,7 @@
       cap.append(tag, x); fig.append(b, cap); prev.appendChild(fig);
     });
     drop.classList.toggle('has-new', files.length > 0);
-    $('phCount').textContent = drop.querySelectorAll('.pe-ph').length; empty.hidden = drop.querySelectorAll('.pe-ph').length > 0;
+    count();
     document.dispatchEvent(new CustomEvent('photofiles')); dirty();
   }
   window.__photoFiles = function () { return files; };
@@ -233,11 +242,23 @@
   document.addEventListener('paste', function (e) { var imgs = [].filter.call((e.clipboardData && e.clipboardData.files) || [], function (f) { return OK.indexOf(f.type) >= 0; }); if (imgs.length) { e.preventDefault(); add(imgs); } });
   // a stored photo that cannot be loaded shows a neutral tile instead of a broken image
   document.querySelectorAll('img[data-pimg]').forEach(function (img) { img.addEventListener('error', function () { var b = img.parentNode; b.classList.add('broken'); b.title = 'This photo could not be loaded'; img.remove(); }, { once: true }); });
-  // marking a photo for removal dims it; the main photo cannot also be removed
-  drop.addEventListener('change', function (e) {
-    var t = e.target; if (t.name === 'remove_photo') t.closest('.pe-ph').classList.toggle('rm', t.checked);
-    if (t.name === 'primary_photo_id') { var rm = t.closest('.pe-ph').querySelector('input[name=remove_photo]'); if (rm && rm.checked) { rm.checked = false; rm.closest('.pe-ph').classList.remove('rm'); } }
+  // removing a stored photo is only marked here — the file is deleted when the whole form is saved (Undo until then)
+  function markRm(fig, on) {
+    var cb = fig.querySelector('input[name=remove_photo]'); cb.checked = on; fig.classList.toggle('rm', on); fig.querySelector('.pe-rmnote').hidden = !on; fig.querySelector('[data-rmphoto]').hidden = on;
+    if (on) { var r = fig.querySelector('input[name=primary_photo_id]'); if (r && r.checked) { var other = [].find.call(drop.querySelectorAll('.pe-ph:not(.rm) input[name=primary_photo_id]'), function (x) { return x !== r; }); if (other) { other.checked = true; setMain(other.closest('.pe-ph')); } } }
+    count(); dirty();
+  }
+  function setMain(fig) {
+    drop.querySelectorAll('.pe-ph.main').forEach(function (f) { f.classList.remove('main'); var t = f.querySelector('.pe-main-tag'); if (t) t.remove(); var sp = f.querySelector('.pe-radio span'); if (sp) sp.textContent = 'Make main'; });
+    fig.classList.add('main'); var t = document.createElement('span'); t.className = 'pe-main-tag'; t.textContent = 'Main'; fig.insertBefore(t, fig.querySelector('.pe-x')); var sp2 = fig.querySelector('.pe-radio span'); if (sp2) sp2.textContent = 'Main photo';
+    drop.insertBefore(fig, drop.firstChild);
+  }
+  drop.addEventListener('click', function (e) {
+    var x = e.target.closest('[data-rmphoto]'), u = e.target.closest('[data-undo]');
+    if (x) { if (confirm('Remove this photo?\n\nIt is deleted only when you press Save changes — until then you can undo.')) markRm(x.closest('.pe-ph'), true); }
+    if (u) markRm(u.closest('.pe-ph'), false);
   });
+  drop.addEventListener('change', function (e) { var t = e.target; if (t.name === 'primary_photo_id') setMain(t.closest('.pe-ph')); });
   // preview
   var lb = $('peLb'), lbi = $('peLbImg'), lbf = $('peLbFail');
   drop.addEventListener('click', function (e) { var b = e.target.closest('[data-preview]'); if (!b || b.classList.contains('broken')) return; lbf.hidden = true; lbi.hidden = false; lbi.src = b.dataset.preview; lbi.alt = b.dataset.title || ''; $('peLbCap').textContent = b.dataset.title || ''; lb.showModal(); });
@@ -253,7 +274,7 @@
     d.innerHTML = '<input name="spec_k" placeholder="Attribute" maxlength="80" aria-label="Attribute name"><input name="spec_v" placeholder="Value" aria-label="Attribute value"><button type="button" class="iconbtn" data-rm title="Remove this attribute" aria-label="Remove this attribute">×</button>';
     d.children[0].value = k || ''; d.children[1].value = v || ''; rows.appendChild(d); specCount(); if (focus) d.children[0].focus(); return d;
   }
-  $('specAdd').addEventListener('click', function () { addRow('', '', true); dirty(); });
+  $('specAdd').addEventListener('click', function () { addRow('', '', true); dirty(); }); $('specAdd2').addEventListener('click', function () { addRow('', '', true); dirty(); });
   rows.addEventListener('click', function (e) { if (e.target.closest('[data-rm]')) { e.target.closest('.pe-sr').remove(); specCount(); dirty(); } });
   rows.addEventListener('keydown', function (e) { if (e.key === 'Enter' && e.target.name === 'spec_v') { e.preventDefault(); addRow('', '', true); } });
   // pasting several "Key: value" lines into a name field becomes one row per line
@@ -269,28 +290,37 @@
   window.__addSpec = addRow; specCount();
 
   // ---------- record type: packing is not used for services / freight (values stay, fields lock) ----------
-  var rt = $('recType'), wrap = $('packWrap'), cbm = $('cbmIn'), keepRow = $('keepRow'), keep = $('keepCbm');
+  var rt = $('recType'), wrap = $('packWrap'), cbm = $('cbmIn'), pick = $('cbmPick');
   var SIDES = ['carton_length_cm', 'carton_width_cm', 'carton_height_cm'].map(function (n) { return form.elements[n]; });
+  var radios = [].slice.call(pick.querySelectorAll('input[type=radio]'));
   function nonPhysical() { return /^(service|freight|shipping)/i.test(rt.value); }
   function calc() { var a = SIDES.map(function (i) { return Number(i.value); }); return a.every(function (x) { return x > 0; }) ? Math.round(a[0] * a[1] * a[2] / 1e6 * 10000) / 10000 : null; }
+  function differs(e, c) { return e > 0 && c > 0 && Math.abs(e - c) / c > 0.05 && Math.abs(e - c) > 0.001; }
   function packing() {
     var off = nonPhysical(); wrap.classList.toggle('is-off', off); $('packOff').hidden = !off;
-    wrap.querySelectorAll('input').forEach(function (i) { if (i !== keep) { i.readOnly = off || (i === cbm && cbmLocked); i.tabIndex = off ? -1 : 0; } });
-    if (off) { keepRow.hidden = true; $('cbmNote').textContent = 'Not used for this record type.'; }
+    wrap.querySelectorAll('input').forEach(function (i) { if (i.type === 'radio') { i.disabled = off || pick.hidden; return; } i.readOnly = off; i.tabIndex = off ? -1 : 0; });
+    $('cbmBox').hidden = off; if (off) { pick.hidden = true; $('cbmNote').textContent = ''; }
   }
-  var cbmLocked = false;
+  // three volumes: supplier-provided (typed), calculated (from the sides) and the one used for freight; a difference is never settled silently
   function cbmState() {
     if (nonPhysical()) return;
-    var c = calc(), entered = cbm.dataset.entered === '' ? null : Number(cbm.dataset.entered), differs = c != null && entered > 0 && Math.abs(entered - c) / c > 0.05;
-    if (c == null) { cbmLocked = false; cbm.readOnly = false; keepRow.hidden = true; $('cbmTag').textContent = 'm³ · entered'; $('cbmNote').textContent = 'No carton size yet, so this is the CBM as entered (for example from the supplier). Fill in length, width and height to calculate it.'; return; }
-    if (differs && keep.checked) { cbmLocked = false; cbm.readOnly = false; if (cbm.value === '' ) cbm.value = entered; keepRow.hidden = false; $('keepTxt').textContent = 'Keep the entered CBM (' + entered + ') instead of the ' + c + ' calculated from the size'; $('cbmTag').textContent = 'm³ · entered'; $('cbmNote').innerHTML = '⚠ The entered CBM (<b>' + entered + '</b>) differs from <b>' + c + '</b> calculated from the carton size. Check which is right — the entered value is kept while the box is ticked.'; return; }
-    cbmLocked = true; cbm.readOnly = true; cbm.value = c; keepRow.hidden = !differs; if (differs) $('keepTxt').textContent = 'Keep the entered CBM (' + entered + ') instead of the ' + c + ' calculated from the size';
-    $('cbmTag').textContent = 'm³ · calculated'; $('cbmNote').textContent = 'Calculated from the carton size (length × width × height).';
+    var c = calc(), e = cbm.value.trim() === '' ? null : Number(cbm.value); if (!(e > 0)) e = null;
+    var diff = c != null && e != null && differs(e, c);
+    $('cbmCalc').textContent = c != null ? c + ' m³' : 'Needs L × W × H';
+    pick.hidden = !diff; radios.forEach(function (r) { r.disabled = !diff; });
+    var use = form.querySelector('input[name=cbm_use]:checked'), eff = null, src = '';
+    if (c == null) { eff = e; src = e != null ? 'as entered by the supplier' : ''; }
+    else if (!diff) { eff = c; src = 'calculated from the size'; }
+    else if (use && use.value === 'calc') { eff = c; src = 'calculated — your choice'; }
+    else { eff = e; src = 'supplier-provided — your choice'; }
+    $('cbmUse').textContent = eff != null ? eff + ' m³ · ' + src : '—';
+    $('cbmPickEnt').textContent = 'Supplier-provided: ' + e + ' m³'; $('cbmPickCalc').textContent = 'Calculated from size: ' + c + ' m³';
+    var n = $('cbmNote'); n.classList.toggle('warn', diff);
+    n.textContent = diff ? '⚠ The supplier-provided CBM differs from the calculated one by ' + Math.round(Math.abs(e - c) / c * 100) + '%. Check the carton size or the supplier figure.' : (c == null && e != null ? 'No carton size yet, so the supplier-provided CBM is used as entered.' : '');
   }
-  SIDES.forEach(function (i) { i.addEventListener('input', function () { cbmState(); packing(); }); });
-  keep.addEventListener('change', function () { cbmState(); packing(); dirty(); });
-  rt.addEventListener('change', function () { packing(); cbmState(); packing(); dirty(); });
-  cbm.addEventListener('input', function () { if (!cbmLocked) cbm.dataset.entered = cbm.value; });
+  SIDES.forEach(function (i) { i.addEventListener('input', cbmState); });
+  cbm.addEventListener('input', cbmState); radios.forEach(function (r) { r.addEventListener('change', function () { cbmState(); dirty(); }); });
+  rt.addEventListener('change', function () { packing(); cbmState(); dirty(); });
   cbmState(); packing();
 
   // ---------- "+ Add new supplier…" ----------
@@ -350,7 +380,7 @@
       $('aiRows').querySelectorAll('input[type=checkbox]:checked').forEach(function (cb) {
         var k = cb.dataset.k, v = card[k];
         if (k === 'spec') { String(v).split('\n').forEach(function (l) { var i = l.indexOf(':'); if (i < 1) return; var kk = l.slice(0, i).trim(), vv = l.slice(i + 1).trim(), hit = [].find.call(rows.querySelectorAll('.pe-sr'), function (r) { return r.children[0].value.trim().toLowerCase() === kk.toLowerCase(); }); if (hit) { hit.children[1].value = vv; hit.children[1].classList.add('aifilled'); } else addRow(kk, vv).classList.add('aifilled'); }); done++; return; }
-        var el = field(k); if (el) { el.value = v; el.classList.add('aifilled'); done++; }
+        var el = field(k); if (el) { el.value = v; el.classList.add('aifilled'); el.title = 'Filled by AI — not verified, please check'; done++; }
       });
       $('aiReview').hidden = true; msg(done ? done + ' field' + (done === 1 ? '' : 's') + ' filled in (highlighted). Check them, then press Save.' : 'Nothing selected.'); cbmState(); dirty();
     });
@@ -361,8 +391,19 @@
   // ---------- save workflow: unsaved-changes guard, checks, single submit ----------
   var stat = function (t) { $('peStat').textContent = t; };
   function snap() { var o = []; new FormData(form).forEach(function (v, k) { if (!(v instanceof File)) o.push(k + '=' + v); }); o.push('files=' + files.map(function (f) { return f.name + f.size; }).join('|')); return o.join('&'); }
-  var base = snap(), saving = false, isDirty = false;
-  function dirty() { isDirty = snap() !== base; if (!saving) stat(isDirty ? 'Unsaved changes' : 'No changes'); $('peStat').classList.toggle('on', isDirty); }
+  var HAS_ERR = <%- nErr ? 'true' : 'false' %>, IS_NEW = <%- isNew ? 'true' : 'false' %>;
+  var base = HAS_ERR ? '' : snap(), saving = false, isDirty = HAS_ERR;     // after a failed save the page is never "clean"
+  function dirty() {
+    isDirty = snap() !== base; if (!saving) stat(isDirty ? 'Unsaved changes' : 'No changes'); $('peStat').classList.toggle('on', isDirty);
+    var sv = $('peSave'); if (sv && !saving) sv.disabled = !IS_NEW && !isDirty;
+    heading();
+  }
+  // the page heading follows the name being typed; SKU, category and supplier sit under it
+  function heading() {
+    var n = $('nameIn').value.trim(); $('peTitle').textContent = n || (IS_NEW ? 'New Product' : 'Untitled product');
+    var sup = form.elements.supplier_id, so = sup && sup.selectedOptions[0], sn = so && so.value && so.value !== '__new' ? so.textContent : '';
+    $('peMeta').textContent = [$('skuIn').value.trim() ? 'SKU ' + $('skuIn').value.trim() : '', $('catIn').value.trim(), sn].filter(Boolean).join(' · ');
+  }
   form.addEventListener('input', dirty); form.addEventListener('change', dirty);
   window.addEventListener('beforeunload', function (e) { if (isDirty && !saving) { e.preventDefault(); e.returnValue = ''; } });
   $('peCancel').addEventListener('click', function (e) { if (isDirty && !confirm('Discard your changes?')) e.preventDefault(); else saving = true; });
@@ -371,6 +412,7 @@
     var bad = [];
     var name = form.elements.name; showErr(name, name.value.trim() ? '' : 'Enter the product name.'); if (!name.value.trim()) bad.push(name);
     [].forEach.call(form.querySelectorAll('input[type=number]'), function (i) { var t = i.value.trim(), m = ''; if (t && (!isFinite(Number(t)) || Number(t) < 0)) m = 'Enter a number, zero or more.'; showErr(i, m); if (m) bad.push(i); });
+    var cq = form.elements.carton_qty; if (cq && !nonPhysical()) { var q = cq.value.trim(); var m2 = q && (Number(q) < 1 || Math.floor(Number(q)) !== Number(q)) ? 'Pieces per carton must be a whole number, 1 or more.' : ''; showErr(cq, m2); if (m2) bad.push(cq); }
     var ks = window.__specRows().map(function (r) { return r[0].toLowerCase(); }), rowsBad = window.__specRows().some(function (r) { return !r[0] && r[1]; }) || ks.some(function (k) { return k.indexOf(':') >= 0; }) || ks.filter(Boolean).length !== new Set(ks.filter(Boolean)).size;
     if (rowsBad) { stat('Check the specification attributes: each needs a unique name without a colon.'); bad.push(rows); }
     return bad;
@@ -381,7 +423,33 @@
     var bad = check(); if (bad.length) { e.preventDefault(); if (bad[0].focus) bad[0].focus(); if (bad[0].scrollIntoView) bad[0].scrollIntoView({ block: 'center' }); return; }
     saving = true; var b = $('peSave'); b.disabled = true; b.textContent = 'Saving…'; stat('Saving…');
   });
-  window.addEventListener('pageshow', function () { saving = false; var b = $('peSave'); if (b) { b.disabled = false; b.textContent = <%- JSON.stringify(isNew ? 'Create product' : 'Save changes') %>; } });
+  window.addEventListener('pageshow', function () { saving = false; var b = $('peSave'); if (b) { b.disabled = !IS_NEW && !isDirty; b.textContent = <%- JSON.stringify(isNew ? 'Create product' : 'Save changes') %>; } });
+
+  // ---------- info tooltips (hover, focus or tap) ----------
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('.pe-i'); document.querySelectorAll('.pe-info.open').forEach(function (i) { if (!b || i !== b.parentNode) i.classList.remove('open'); });
+    if (b) { b.parentNode.classList.toggle('open'); e.preventDefault(); }
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') document.querySelectorAll('.pe-info.open').forEach(function (i) { i.classList.remove('open'); }); });
+
+  // ---------- section shortcuts: scroll there, highlight the section in view ----------
+  (function () {
+    var nav = $('peNav'), links = [].slice.call(nav.querySelectorAll('a')), secs = links.map(function (a) { return document.getElementById(a.getAttribute('href').slice(1)); });
+    var pin = null, pinAt = 0, calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function offset() { var t = document.querySelector('.topbar'); return (t ? t.offsetHeight : 0) + nav.offsetHeight + 12; }
+    links.forEach(function (a, i) {
+      a.addEventListener('click', function (e) {
+        e.preventDefault(); var sec = secs[i]; if (!sec) return;
+        window.scrollTo({ top: sec.getBoundingClientRect().top + window.pageYOffset - offset() + 2, behavior: calm ? 'auto' : 'smooth' });
+        sec.setAttribute('tabindex', '-1'); sec.focus({ preventScroll: true }); pin = i; pinAt = Date.now(); mark(i);
+      });
+    });
+    function mark(k) { links.forEach(function (a, i) { a.classList.toggle('on', i === k); if (i === k) { a.setAttribute('aria-current', 'true'); if (nav.scrollWidth > nav.clientWidth) { nav.scrollLeft = Math.max(0, a.offsetLeft - 24); } } else a.removeAttribute('aria-current'); }); }
+    var tick = false;
+    function spy() { tick = false; var y = offset() + 8, k = 0; secs.forEach(function (s, i) { if (s && s.getBoundingClientRect().top <= y) k = i; }); if (window.innerHeight + window.pageYOffset >= document.documentElement.scrollHeight - 4) k = secs.length - 1; if (pin != null && Date.now() - pinAt < 1500) k = pin; mark(k); }
+    window.addEventListener('scroll', function () { if (!tick) { tick = true; requestAnimationFrame(spy); } }, { passive: true }); window.addEventListener('resize', spy); spy();
+  })();
+  heading();
 
   // opened from a "missing data" link: #f=carton_qty jumps to that field
   var m = /^#f=([a-z_]+)$/.exec(location.hash);

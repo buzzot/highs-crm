@@ -13,9 +13,11 @@ const CANON = { incoterm: 'Incoterm', lead: 'Production lead time (days)', valid
 /** The stored specification split for the form: record type, three supplier terms (kept under their own key) and the other rows. Nothing is dropped. */
 export function specParts(spec) {
   const src = spec && typeof spec === 'object' && !Array.isArray(spec) ? spec : {};
-  const out = { type: '', typeKey: 'Type', incoterm: { key: CANON.incoterm, value: '' }, lead: { key: CANON.lead, value: '' }, valid: { key: CANON.valid, value: '' }, rows: [] };
+  const out = { type: '', typeKey: 'Type', incoterm: { key: CANON.incoterm, value: '' }, lead: { key: CANON.lead, value: '' }, valid: { key: CANON.valid, value: '' }, rows: [], cbm: { supplier: '', use: '' } };
   for (const [k, raw] of Object.entries(src)) {
     const key = String(k).trim(), v = String(raw ?? '');
+    if (/^supplier cbm$/i.test(key)) { out.cbm.supplier = v.trim(); continue; }
+    if (/^cbm used$/i.test(key)) { out.cbm.use = /^calc/i.test(v.trim()) ? 'calc' : 'entered'; continue; }
     const sk = Object.keys(RES).find(n => RES[n].test(key) && !out[n].value && out[n].key === CANON[n]);
     if (TYPE_KEY.test(key) && !out.type) { out.type = v.trim(); out.typeKey = key; }
     else if (sk) out[sk] = { key, value: v.trim() };
@@ -48,23 +50,42 @@ export function buildSpec(b, existing = {}) {
   if (type) spec[was.typeKey || 'Type'] = type;
   for (const n of ['incoterm', 'lead', 'valid']) { const v = String(b['src_' + n] ?? '').trim(); if (v) spec[was[n].key] = v; }
   for (const [k, v] of postedRows(b)) if (k) spec[k] = v;
+  const c = cbmPlan(b, !isNonPhysical(type));
+  if (!isNonPhysical(type) && c.supplier > 0 && c.calc != null) { spec['Supplier CBM'] = String(c.supplier); spec['CBM used'] = c.source === 'calc' ? 'Calculated from carton size' : 'Supplier-provided'; }
   return spec;
 }
 
 /** Carton volume from the three sides (m³, 4 decimals) or null. */
 export function cbmFromSize(l, w, h) { const [a, b, c] = [l, w, h].map(Number); return a > 0 && b > 0 && c > 0 ? Math.round(a * b * c / 1e6 * 10000) / 10000 : null; }
-/** Entered CBM that disagrees with the size-calculated one by more than 5%. */
-export function cbmDiffers(entered, calc) { const e = Number(entered), c = Number(calc); return e > 0 && c > 0 && Math.abs(e - c) / c > 0.05; }
+/** A supplier-entered CBM that disagrees with the size-calculated one: more than 5 % AND more than 0.001 m³ (ordinary rounding is not a discrepancy). */
+export function cbmDiffers(entered, calc) { const e = Number(entered), c = Number(calc); return e > 0 && c > 0 && Math.abs(e - c) / c > 0.05 && Math.abs(e - c) > 0.001; }
 
-/** Carton CBM to store: the size-calculated value, unless the person ticked "keep the entered CBM" (then their number stays) or the record is non-physical. */
-export function cartonCbmToStore(b, physical = true) {
-  const calc = cbmFromSize(b.carton_length_cm, b.carton_width_cm, b.carton_height_cm), entered = b.carton_cbm === '' || b.carton_cbm == null ? null : Number(b.carton_cbm);
-  if (!physical) return entered;
-  if (calc == null) return entered;
-  if (entered != null && (b.keep_cbm === 'on' || b.keep_cbm === true) && cbmDiffers(entered, calc)) return entered;
-  return calc;
+/**
+ * The three carton volumes: what the supplier gave (`supplier`), what the size gives (`calc`) and the one used for freight and
+ * costing (`value`, stored in carton_cbm) with where it came from (`source`). When both exist and differ, the person chooses
+ * (cbm_use = calc | entered); with no choice the supplier's number is kept — it is never silently replaced.
+ */
+export function cbmPlan(b, physical = true) {
+  const calc = cbmFromSize(b.carton_length_cm, b.carton_width_cm, b.carton_height_cm);
+  const raw = b.carton_cbm === '' || b.carton_cbm == null ? null : Number(b.carton_cbm), supplier = Number.isFinite(raw) ? raw : null;
+  if (!physical) return { supplier, calc, value: supplier, source: supplier != null ? 'entered' : null };
+  if (calc == null) return { supplier, calc, value: supplier, source: supplier != null ? 'entered' : null };
+  if (supplier == null || !(supplier > 0)) return { supplier: supplier == null ? null : supplier, calc, value: calc, source: 'calc' };
+  if (!cbmDiffers(supplier, calc)) return { supplier, calc, value: calc, source: 'calc' };
+  return b.cbm_use === 'calc' ? { supplier, calc, value: calc, source: 'calc' } : { supplier, calc, value: supplier, source: 'entered' };
 }
+/** Carton CBM to store (the effective one). */
+export function cartonCbmToStore(b, physical = true) { return cbmPlan(b, physical).value; }
 
+/** What the CBM fields show: the supplier-provided value and which one is used. After a failed save the posted values win. */
+export function cbmFormState(p, b = null) {
+  if (b) return { supplier: b.carton_cbm ?? '', use: b.cbm_use === 'calc' ? 'calc' : 'entered' };
+  const was = specParts(p.spec).cbm, calc = cbmFromSize(p.carton_length_cm, p.carton_width_cm, p.carton_height_cm), stored = p.carton_cbm;
+  const has = stored != null && stored !== '' && Number(stored) > 0;
+  // a stored volume that equals the size-calculated one is the calculated one (nothing is lost by not showing it as supplier-provided)
+  const supplier = was.supplier !== '' ? was.supplier : (has && !(calc != null && !cbmDiffers(stored, calc) ) ? String(stored) : '');
+  return { supplier, use: was.use === 'calc' ? 'calc' : 'entered' };
+}
 const NUMS = [['unit_cost', 'Unit cost', 1e9], ['moq', 'MOQ', 1e9, true], ['unit_weight_kg', 'Unit weight', 100000], ['unit_length_cm', 'Length', 100000], ['unit_width_cm', 'Width', 100000], ['unit_height_cm', 'Height', 100000],
   ['carton_qty', 'Pieces per carton', 1e7, true], ['carton_weight_kg', 'Gross weight', 100000], ['carton_length_cm', 'Length', 100000], ['carton_width_cm', 'Width', 100000], ['carton_height_cm', 'Height', 100000], ['carton_cbm', 'CBM', 1000]];
 /** Field-level errors ({ field: message }); an empty object means it can be saved. */
@@ -83,6 +104,7 @@ export function validateProduct(b = {}, existing = null) {
     else if (v > max) e[k] = `${label} is too large.`;
     else if (whole && !Number.isInteger(v)) e[k] = `${label} must be a whole number.`;
   }
+  if (s('carton_qty') && !e.carton_qty && !isNonPhysical(b.record_type) && Number(s('carton_qty')) < 1) e.carton_qty = 'Pieces per carton must be at least 1.';
   if (s('hs_code') && !/^[0-9][0-9 .\-]{3,18}$/.test(s('hs_code'))) e.hs_code = 'Use digits with dots or spaces, e.g. 9617.00 or 9617.00.10.';
   if (s('cost_currency') && !/^[A-Z]{3}$/.test(s('cost_currency'))) e.cost_currency = 'Choose a currency.';
   if (s('src_incoterm') && !same('src_incoterm', 'incoterm') && !/^[A-Za-z]{3}$/.test(s('src_incoterm'))) e.src_incoterm = 'Use a 3-letter price basis such as FOB or EXW.';
