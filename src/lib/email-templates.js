@@ -112,15 +112,16 @@ export function changeSubmittedEmail({ request, orgName, who, url }) {
   };
 }
 
-export function newRequestEmail({ request, orgName, who, products, url }) {
+export function newRequestEmail({ request, orgName, who, products, url, kind }) {
+  const order = kind === 'order';
   return {
-    subject: `New request ${request.ref} from ${orgName || 'a client'}`,
+    subject: `${order ? 'New order' : 'New request'} ${request.ref} from ${orgName || 'a client'}`,
     html: layout({
-      preheader: `${who} sent ${request.ref}`, eyebrow: 'New sourcing request', title: 'A client sent a request',
+      preheader: `${who} sent ${request.ref}`, eyebrow: order ? 'New order' : 'New sourcing request', title: order ? 'A client sent an order' : 'A client sent a request',
       introHtml: `<strong>${esc(who)}</strong> from <strong>${esc(orgName || 'a client')}</strong> sent <strong>${esc(request.ref)} · ${esc(request.title)}</strong>${products > 1 ? ` (${products} products)` : ''}. Open it to start sourcing.`,
-      buttonText: 'Open request', buttonUrl: url, fineHtml: 'You get this email because you handle this request or are an admin.',
+      buttonText: order ? 'Open order' : 'Open request', buttonUrl: url, fineHtml: 'You get this email because you handle this request or are an admin.',
     }),
-    text: `New request ${request.ref} from ${orgName || 'a client'} (${who}). Open: ${url}`,
+    text: `${order ? 'New order' : 'New request'} ${request.ref} from ${orgName || 'a client'} (${who}). Open: ${url}`,
   };
 }
 

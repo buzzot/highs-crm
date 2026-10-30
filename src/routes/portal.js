@@ -15,6 +15,7 @@ import { recalcOrder } from '../lib/payments-db.js';
 const appUrl = () => (process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
 import { uploadDocument, signedUrl } from '../lib/storage.js';
 import { parseItems, validateItems, requestTitle, splitFiles, UNITS } from '../lib/request-items.js';
+import { parseOrderInfo, validateOrder, orderInfoRows, orderInfoText, INCOTERMS, TRANSPORT } from '../lib/order-request.js';
 import { EDITABLE, DELIVERY, snapshot, buildRevision, diff } from '../lib/request-revisions.js';
 import { dropRevisionFiles, notifyStaffOfChange } from '../lib/request-changes.js';
 const deliveryOf = v => (DELIVERY[v] ? v : null);
@@ -190,10 +191,12 @@ r.get('/requests/:id', async (req, res) => {
   const shown = dropReplaced(quotes || []).map(q => ({ ...q, shown: shownOf(q) }));
   const bundles = bundlesFor(shown, items || []);
   const last = revs?.[0] || null;
+  let orderRows = [];
+  try { const { data: oi } = await admin.from('requests').select('kind, order_info').eq('id', request.id).eq('org_id', req.user.org_id).maybeSingle(); if (oi?.kind === 'order') orderRows = orderInfoRows(oi.order_info, request.delivery_mode); } catch { /* migration 0042 not run */ }
   const pending = last?.status === 'pending' ? last : null;
   const pendingDiff = pending ? diff(snapshot(request, items || []), pending.data) : null;
   res.render('portal/request_detail', {
-    title: request.ref, request, pos: pos || [], bundles, quotes: shown, docs: (docs || []).filter(d => !d.revision_id), events: events || [], items: items || [],
+    title: request.ref, request, orderRows, placed: !!req.query.placed, pos: pos || [], bundles, quotes: shown, docs: (docs || []).filter(d => !d.revision_id), events: events || [], items: items || [],
     pending, pendingDiff, lastDecision: last && ['approved', 'rejected'].includes(last.status) ? last : null, canEdit: EDITABLE.includes(request.status),
   });
 });
@@ -426,6 +429,66 @@ r.post('/po/:id', async (req, res) => {
   }
   await admin.from('purchase_orders').update(patch).eq('id', po.id);
   back_('Draft saved.');
+});
+
+// ---- New order: the client sends an order (products, delivery, their PO) that the team reviews ----
+// Stored as a sourcing request marked kind = 'order' (migration 0042); without the migration the details go into the description.
+async function previousItems(orgId) {
+  try {
+    const { data } = await admin.from('order_items').select('description, quantity, products(name, sku), orders!inner(org_id, created_at)').eq('orders.org_id', orgId).order('id', { ascending: false }).limit(120);
+    const seen = new Set(), out = [];
+    for (const x of data || []) {
+      const name = x.products?.name || x.description; const key = String(name || '').trim().toLowerCase();
+      if (!key || seen.has(key)) continue; seen.add(key);
+      out.push({ name, sku: x.products?.sku || '', quantity: x.quantity });
+    }
+    return out.slice(0, 30);
+  } catch { return []; }
+}
+const orderForm = async (req, res, extra = {}) => {
+  const { data: org } = await admin.from('organizations').select('name, country, city, delivery_address, default_currency').eq('id', req.user.org_id).maybeSingle();
+  const form = { destination_country: org?.country || '', destination_city: org?.city || '', delivery_address: org?.delivery_address || '', target_currency: org?.default_currency || 'USD',
+    contact: req.user.full_name || '', email: req.user.email || '', phone: req.user.phone || '', incoterm: 'CIF', delivery_mode: 'sea', ...(extra.form || {}) };
+  res.render('portal/order_new', { title: 'New order', error: null, items: [{}], units: UNITS, incoterms: INCOTERMS, transport: TRANSPORT, previous: await previousItems(req.user.org_id), ...extra, form });
+};
+r.get('/orders/new', (req, res) => orderForm(req, res));
+r.post('/orders', upload.any(), async (req, res) => {
+  const f = req.body, items = parseItems(f), info = parseOrderInfo(f);
+  const again = error => orderForm(req, res.status(400), { error, form: { ...f, ...info }, items: items.length ? items : [{}] }).catch(() => res.status(500).render('error', { title: 'Error', message: error }));
+  const bad = validateItems(items) || validateOrder(info, f);
+  if (bad) return again(bad);
+  if ((req.files || []).length > 20) return again('Too many files — up to 20 per order.');
+  const mode = deliveryOf(f.delivery_mode), single = items.length === 1 ? items[0] : null;
+  const head = {
+    org_id: req.user.org_id, created_by: req.user.id,
+    title: requestTitle(f.title, items), description: info.notes,
+    quantity: single?.quantity ?? null, target_unit_price: single?.target_unit_price ?? null,
+    target_currency: CURRENCY_OK.includes(f.target_currency) ? f.target_currency : 'USD',
+    destination_country: String(f.destination_country || '').trim(), destination_city: String(f.destination_city || '').trim() || null,
+    needed_by: f.needed_by || null, delivery_mode: mode,
+  };
+  let { data, error } = await admin.from('requests').insert({ ...head, kind: 'order', order_info: info }).select('id').single();
+  if (error && /kind|order_info/.test(error.message || '')) {   // migration 0042 not run yet: keep the details in the description
+    ({ data, error } = await admin.from('requests').insert({ ...head, title: `[Order] ${head.title}`.slice(0, 200), description: orderInfoText(info, mode) }).select('id').single());
+  }
+  if (error) return again(error.message);
+  const { data: saved, error: iErr } = await admin.from('request_items')
+    .insert(items.map((it, i) => ({ request_id: data.id, position: i, name: it.name, sku: it.sku, description: it.description, quantity: it.quantity, unit: it.unit, target_unit_price: it.target_unit_price })))
+    .select('id, position');
+  if (iErr) console.error(`[order] ${data.id}: products not saved: ${iErr.message}`);
+  const { general } = splitFiles(req.files);
+  for (const file of general) {
+    try { await uploadDocument({ file, entityType: 'request', entityId: data.id, kind: file.mimetype?.startsWith('image/') ? 'product_photo' : 'other', uploadedBy: req.user.id }); }
+    catch (e) { console.error(`[order] ${data.id}: upload ${file.originalname} failed: ${e.message}`); }
+  }
+  await log({ entityType: 'request', entityId: data.id, action: 'created', actorId: req.user.id, clientVisible: true, detail: { products: items.length, note: 'Order sent from the portal' } });
+  try {
+    const { data: rq } = await admin.from('requests').select('id, ref, title, assigned_to').eq('id', data.id).single();
+    const { data: org } = await admin.from('organizations').select('name').eq('id', req.user.org_id).maybeSingle();
+    const to = await staffEmails(rq || {});
+    if (to.length && rq) await sendEmail({ to, ...newRequestEmail({ request: rq, orgName: org?.name, who: req.user.full_name || req.user.email, products: items.length, kind: 'order', url: `${appUrl()}/admin/sourcing/${rq.id}` }) });
+  } catch (e) { console.error(`[order] email to staff failed: ${e.message}`); }
+  res.redirect(`/portal/requests/${data.id}?placed=1`);
 });
 
 // ---- orders ----

@@ -1,0 +1,2 @@
+<%# order details of an order request. locals: rows = [[label, value], …] %>
+<% if (rows && rows.length) { %><dl class="dl orderinfo"><% rows.forEach(([k, v]) => { %><dt><%= k %></dt><dd><%= v %></dd><% }) %></dl><% } %>

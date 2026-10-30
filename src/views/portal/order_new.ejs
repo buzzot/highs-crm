@@ -1,0 +1,174 @@
+<%- include('../partials/head') %>
+<%
+  const itemList = (typeof items !== 'undefined' && items.length) ? items : [{}];
+  const unitList = typeof units !== 'undefined' ? units : ['pcs'];
+  const prev = typeof previous !== 'undefined' && previous ? previous : [];
+  const cur = form.target_currency || 'USD';
+  const inc = form.incoterm || 'CIF', dm = form.delivery_mode || 'sea';
+%>
+<div class="phead">
+  <div><span class="eyebrow">Orders</span><h1>New order</h1><p class="sub">You already know what you need? Send us your order details. We confirm prices, availability and timing, then start production.</p></div>
+</div>
+<% if (error) { %><div class="alert err"><%= error %></div><% if (itemList.length) { %><p class="muted small">Files are not kept after an error — please add them again.</p><% } } %>
+<form method="post" action="/portal/orders" enctype="multipart/form-data" id="orderForm" novalidate>
+<div class="no-wrap">
+<div>
+  <div class="no-card">
+    <div class="no-h"><span class="n">1</span><h2>Products</h2>
+      <label class="no-cur">Currency <select name="target_currency" id="noCur"><% ['USD','EUR','GBP','CNY'].forEach(c => { %><option <%= cur === c ? 'selected' : '' %>><%= c %></option><% }) %></select></label></div>
+    <p class="no-sub">What you want to order and in which quantity. Target price is optional.</p>
+    <div class="no-tablewrap"><table class="no-lines" id="noLines">
+      <thead><tr><th class="c-name">Product</th><th class="c-qty">Quantity</th><th class="c-unit">Unit</th><th class="c-price">Target price</th><th class="c-tot">Total</th><th class="c-x"></th></tr></thead>
+      <tbody id="noBody">
+        <% itemList.forEach((it, i) => { %>
+        <tr class="noline" data-k="<%= i %>">
+          <td class="name"><input name="items[<%= i %>][name]" value="<%= it.name || '' %>" placeholder="Product name" aria-label="Product name" autocomplete="off"><input class="sku" name="items[<%= i %>][sku]" value="<%= it.sku || '' %>" placeholder="SKU / reference (optional)" aria-label="SKU" autocomplete="off"></td>
+          <td><input name="items[<%= i %>][quantity]" value="<%= it.quantity ?? '' %>" inputmode="numeric" placeholder="0" aria-label="Quantity" data-qty></td>
+          <td><select name="items[<%= i %>][unit]" aria-label="Unit"><% unitList.forEach(u => { %><option <%= (it.unit || 'pcs') === u ? 'selected' : '' %>><%= u %></option><% }) %></select></td>
+          <td><input name="items[<%= i %>][target_unit_price]" value="<%= it.target_unit_price ?? '' %>" inputmode="decimal" placeholder="—" aria-label="Target price" data-price></td>
+          <td class="tot" data-tot>—</td>
+          <td><button type="button" class="x" aria-label="Remove this product" data-rm>×</button></td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table></div>
+    <div class="no-add">
+      <button type="button" class="btn" id="noAdd">＋ Add product</button>
+      <% if (prev.length) { %><button type="button" class="btn" id="noPrevBtn">Add from my previous orders</button><% } %>
+    </div>
+    <% if (prev.length) { %><div class="no-chips"><span class="lbl">Order again:</span><% prev.slice(0, 5).forEach((p, i) => { %><button type="button" class="no-chip" data-prev="<%= i %>"><b>＋</b><%= p.name.length > 34 ? p.name.slice(0, 33) + '…' : p.name %></button><% }) %></div><% } %>
+  </div>
+
+  <div class="no-card">
+    <div class="no-h"><span class="n">2</span><h2>Delivery</h2></div>
+    <p class="no-sub">Where and how you want to receive the goods.</p>
+    <div class="no-g2">
+      <label>Destination country <input name="destination_country" id="noCountry" value="<%= form.destination_country || '' %>" required></label>
+      <label>City / port <input name="destination_city" id="noCity" value="<%= form.destination_city || '' %>"></label>
+    </div>
+    <label class="no-block">Delivery address <textarea name="delivery_address" rows="2"><%= form.delivery_address || '' %></textarea></label>
+    <div class="no-g3 no-deliv no-block">
+      <div><span class="no-lab">Incoterm</span><div class="no-seg" role="radiogroup" aria-label="Incoterm"><% (typeof incoterms !== 'undefined' ? incoterms : ['EXW','FOB','CIF','DAP']).forEach(v => { %><label><input type="radio" name="incoterm" value="<%= v %>" <%= inc === v ? 'checked' : '' %>><span><%= v %></span></label><% }) %></div></div>
+      <div><span class="no-lab">Transport</span><div class="no-seg" role="radiogroup" aria-label="Transport"><% Object.entries(typeof transport !== 'undefined' ? transport : { sea: 'Sea', air: 'Air', land: 'Rail / truck', any: 'Advise me' }).forEach(([v, l]) => { %><label><input type="radio" name="delivery_mode" value="<%= v %>" <%= dm === v ? 'checked' : '' %>><span><%= l %></span></label><% }) %></div></div>
+      <label>Needed by <input type="date" name="needed_by" id="noNeeded" value="<%= form.needed_by || '' %>"></label>
+    </div>
+  </div>
+
+  <div class="no-card">
+    <div class="no-h"><span class="n">3</span><h2>Your purchase order &amp; documents</h2><span class="opt">Optional</span></div>
+    <p class="no-sub">Attach your PO, contract, drawings or specifications.</p>
+    <div class="dropwrap"><div class="filedrop compact" data-dropzone data-max="10" data-max-mb="20" tabindex="0"><input type="file" name="files" multiple aria-label="PO and documents"><span class="dicon"><%- icon('upload') %></span><strong data-drop-count>Drop files here, paste a screenshot, or <span class="dlink">browse</span></strong><span class="muted small dsub">PDF, Excel, Word or photos · up to 10 files, 20 MB each</span></div><div class="fgrid" data-drop-list></div></div>
+    <label class="no-block">Your PO number <input name="po_number" value="<%= form.po_number || '' %>" maxlength="80"></label>
+  </div>
+
+  <div class="no-card">
+    <div class="no-h"><span class="n">4</span><h2>Contact &amp; notes</h2></div>
+    <p class="no-sub">Who we should talk to about this order.</p>
+    <div class="no-g3">
+      <label>Contact person <input name="contact" id="noContact" value="<%= form.contact || '' %>" required></label>
+      <label>Email <input type="email" name="email" id="noEmail" value="<%= form.email || '' %>" required></label>
+      <label>Phone <input name="phone" value="<%= form.phone || '' %>"></label>
+    </div>
+    <label class="no-block">Notes for Lumi Trade <span class="muted small">optional</span><textarea name="notes" rows="3" placeholder="Packaging requirements, preferred supplier, special conditions…"><%= form.notes || '' %></textarea></label>
+  </div>
+</div>
+
+<aside class="no-side">
+  <div class="no-card no-sum">
+    <div class="no-h"><h2>Order summary</h2></div>
+    <dl>
+      <div><dt>Products</dt><dd id="sumLines">—</dd></div>
+      <div><dt>Delivery</dt><dd id="sumDeliv">—</dd></div>
+      <div><dt>Needed by</dt><dd id="sumNeeded">—</dd></div>
+      <div class="big"><dt>Estimated goods</dt><dd id="sumTotal">—</dd></div>
+    </dl>
+    <p class="no-note" id="sumNote">Estimate from your target prices. Final prices, freight and lead time are confirmed by Lumi Trade before anything is charged.</p>
+    <ul class="no-check"><li id="ckP"><span class="d">·</span>Products</li><li id="ckD"><span class="d">·</span>Delivery details</li><li id="ckC"><span class="d">·</span>Contact person</li><li id="ckF"><span class="d">·</span>Documents (optional)</li></ul>
+    <div class="no-btns"><button class="btn primary" id="noSubmit">Submit order</button></div>
+  </div>
+  <div class="no-card">
+    <div class="no-h"><h2>What happens next</h2></div>
+    <ol class="no-next">
+      <li><i>1</i><span><b>We review</b>Within one business day, a manager checks your order.</span></li>
+      <li><i>2</i><span><b>You get a confirmation</b>Final prices, freight and a proforma invoice — you approve online.</span></li>
+      <li><i>3</i><span><b>Production starts</b>After your deposit. You follow every step in My orders.</span></li>
+    </ol>
+  </div>
+</aside>
+</div>
+</form>
+
+<% if (prev.length) { %>
+<dialog class="modaldlg" id="noPrevDlg" aria-labelledby="noPrevT">
+  <div class="modalform">
+    <h2 id="noPrevT">My previous orders</h2>
+    <p class="muted small">Products from your earlier orders — choose one to add it to this order.</p>
+    <div class="no-prevlist"><% prev.forEach((p, i) => { %><button type="button" class="no-prevrow" data-prev="<%= i %>"><span><strong><%= p.name %></strong><% if (p.sku) { %><small><%= p.sku %></small><% } %></span><em><%= p.quantity != null ? '× ' + p.quantity : '' %></em></button><% }) %></div>
+    <div class="actions"><button type="button" class="btn" data-close>Close</button></div>
+  </div>
+</dialog>
+<% } %>
+
+<script>
+(function () {
+  const form = document.getElementById('orderForm'), body = document.getElementById('noBody'), $ = id => document.getElementById(id);
+  const PREV = <%- JSON.stringify(prev.slice(0, 30)) %>, UNITS = <%- JSON.stringify(unitList) %>;
+  let next = <%= itemList.length %>;
+  const num = v => { const n = Number(String(v || '').replace(',', '.')); return Number.isFinite(n) && String(v || '').trim() !== '' ? n : null; };
+  const money = n => { try { return new Intl.NumberFormat('en-US', { style: 'currency', currency: $('noCur').value, maximumFractionDigits: 2 }).format(n); } catch { return n.toFixed(2); } };
+  const rows = () => [...body.querySelectorAll('.noline')];
+  function addRow(d = {}) {
+    const k = next++, tr = document.createElement('tr'); tr.className = 'noline'; tr.dataset.k = k;
+    tr.innerHTML = '<td class="name"><input name="items[' + k + '][name]" placeholder="Product name" aria-label="Product name" autocomplete="off"><input class="sku" name="items[' + k + '][sku]" placeholder="SKU / reference (optional)" aria-label="SKU" autocomplete="off"></td>'
+      + '<td><input name="items[' + k + '][quantity]" inputmode="numeric" placeholder="0" aria-label="Quantity" data-qty></td>'
+      + '<td><select name="items[' + k + '][unit]" aria-label="Unit">' + UNITS.map(u => '<option>' + u + '</option>').join('') + '</select></td>'
+      + '<td><input name="items[' + k + '][target_unit_price]" inputmode="decimal" placeholder="—" aria-label="Target price" data-price></td>'
+      + '<td class="tot" data-tot>—</td><td><button type="button" class="x" aria-label="Remove this product" data-rm>×</button></td>';
+    body.appendChild(tr);
+    tr.querySelector('[name$="[name]"]').value = d.name || ''; tr.querySelector('[name$="[sku]"]').value = d.sku || '';
+    if (d.quantity != null) tr.querySelector('[data-qty]').value = d.quantity;
+    refresh(); if (!d.name) tr.querySelector('input').focus();
+  }
+  function refresh() {
+    let sum = 0, priced = 0, named = 0;
+    rows().forEach(tr => {
+      const q = num(tr.querySelector('[data-qty]').value), p = num(tr.querySelector('[data-price]').value), t = tr.querySelector('[data-tot]');
+      if (tr.querySelector('[name$="[name]"]').value.trim()) named++;
+      if (q != null && p != null) { sum += q * p; priced++; t.textContent = money(q * p); t.classList.remove('na'); } else { t.textContent = '—'; t.classList.add('na'); }
+    });
+    const n = rows().length, city = $('noCity').value.trim(), cty = $('noCountry').value.trim();
+    const inc = (form.querySelector('[name=incoterm]:checked') || {}).value, mode = form.querySelector('[name=delivery_mode]:checked');
+    $('sumLines').textContent = n + (n === 1 ? ' line' : ' lines');
+    $('sumDeliv').textContent = [[city, cty].filter(Boolean).join(', '), inc, mode ? mode.nextElementSibling.textContent : ''].filter(Boolean).join(' · ') || '—';
+    const nd = $('noNeeded').value; $('sumNeeded').textContent = nd ? new Date(nd + 'T00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+    $('sumTotal').textContent = priced ? money(sum) : '—';
+    $('sumNote').textContent = priced ? 'Estimate from your target prices (' + priced + ' of ' + n + ' line' + (n === 1 ? '' : 's') + '). Final prices, freight and lead time are confirmed by Lumi Trade before anything is charged.' : 'Add target prices to see an estimate. Final prices, freight and lead time are confirmed by Lumi Trade before anything is charged.';
+    const ck = (id, ok) => { const li = $(id); li.classList.toggle('ok', ok); li.querySelector('.d').textContent = ok ? '✓' : '·'; };
+    ck('ckP', named > 0); ck('ckD', !!cty); ck('ckC', !!$('noContact').value.trim() && /\S+@\S+\.\S+/.test($('noEmail').value)); ck('ckF', !!form.querySelector('.fitem'));
+  }
+  form.addEventListener('input', refresh); form.addEventListener('change', refresh);
+  new MutationObserver(refresh).observe(form.querySelector('[data-drop-list]'), { childList: true });
+  $('noAdd').addEventListener('click', () => addRow());
+  body.addEventListener('click', e => { const b = e.target.closest('[data-rm]'); if (!b) return; const tr = b.closest('tr'); if (rows().length > 1) tr.remove(); else tr.querySelectorAll('input').forEach(i => { i.value = ''; }); refresh(); });
+  const dlg = $('noPrevDlg');
+  if ($('noPrevBtn')) $('noPrevBtn').addEventListener('click', () => dlg.showModal());
+  if (dlg) { dlg.addEventListener('click', e => { if (e.target === dlg || e.target.closest('[data-close]')) dlg.close(); }); }
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-prev]'); if (!b) return;
+    const d = PREV[Number(b.dataset.prev)]; if (!d) return;
+    const first = rows().find(tr => !tr.querySelector('[name$="[name]"]').value.trim()), empty = !!first;
+    if (empty) { first.querySelector('[name$="[name]"]').value = d.name; first.querySelector('[name$="[sku]"]').value = d.sku || ''; if (d.quantity != null) first.querySelector('[data-qty]').value = d.quantity; refresh(); } else addRow(d);
+    if (dlg && dlg.open) dlg.close();
+  });
+  form.addEventListener('submit', e => {
+    const bad = rows().findIndex(tr => !tr.querySelector('[name$="[name]"]').value.trim());
+    const empty = rows().every(tr => !tr.querySelector('[name$="[name]"]').value.trim());
+    if (empty) { e.preventDefault(); rows()[0].querySelector('input').focus(); return; }
+    rows().forEach(tr => { if (!tr.querySelector('[name$="[name]"]').value.trim() && !tr.querySelector('[data-qty]').value.trim()) tr.remove(); });
+    const first = [...form.querySelectorAll('[required]')].find(x => !x.value.trim() || !x.checkValidity());
+    if (first) { e.preventDefault(); first.focus(); first.reportValidity(); }
+  });
+  refresh();
+})();
+</script>
+<%- include('../partials/foot') %>

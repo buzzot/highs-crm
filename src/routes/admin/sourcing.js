@@ -1,3 +1,4 @@
+import { orderInfoRows } from '../../lib/order-request.js';
 import { listView, viewCounts } from '../../lib/list-view.js';
 import multer from '../../lib/multer-utf8.js';
 import { Router } from '../../lib/router.js';
@@ -136,8 +137,9 @@ r.get('/:id', async (req, res) => {
   const { data: pos } = await admin.from('purchase_orders').select('id, po_no, status, submitted_at, lines, currency, order_id').eq('request_id', id).order('created_at', { ascending: false });
   const { data: rfqs } = await admin.from('rfqs').select('id, ref, title, status, rfq_suppliers(status)').eq('request_id', id).order('created_at', { ascending: false }); // empty before migration 0029
   const allDocs = docs || [];
+  const orderRows = request.kind === 'order' ? orderInfoRows(request.order_info, request.delivery_mode) : [];
   res.render('admin/sourcing/detail', {
-    rfqs: rfqs || [], pos: pos || [], title: request.ref, request, quotes: quotes || [], docs: allDocs.filter(d => !d.revision_id), items: items || [],
+    orderRows, rfqs: rfqs || [], pos: pos || [], title: request.ref, request, quotes: quotes || [], docs: allDocs.filter(d => !d.revision_id), items: items || [],
     pending: pending || null, briefUsage: briefUse ? { model: briefUse.model, input: briefUse.input_tokens, output: briefUse.output_tokens, cacheRead: briefUse.cache_read_tokens, cacheWrite: briefUse.cache_write_tokens, total: briefUse.input_tokens + briefUse.output_tokens + briefUse.cache_read_tokens + briefUse.cache_write_tokens, at: briefUse.created_at } : null, pendingDiff: pending ? diff(snapshot(request, items || []), pending.data) : null,
     pendingDocs: pending ? allDocs.filter(d => d.revision_id === pending.id) : [], events: events || [], staff: staff || [],
     orders: orders || [], statuses: REQUEST_STATUSES, msg: req.query.msg, err: req.query.err,

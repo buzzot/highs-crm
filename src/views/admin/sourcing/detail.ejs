@@ -58,6 +58,7 @@
 <% } %>
 <div class="grid2">
   <div>
+    <% if (typeof orderRows !== 'undefined' && orderRows.length) { %><div class="card orderbox"><h2>Order from the client portal <span class="tag">Order</span></h2><%- include('../../partials/order_details', { rows: orderRows }) %></div><% } %>
     <div class="card">
       <h2>Client request · <%= items.length || 1 %> product<%= items.length > 1 ? 's' : '' %></h2>
       <dl class="dl">

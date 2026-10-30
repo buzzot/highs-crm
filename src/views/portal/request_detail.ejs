@@ -20,8 +20,10 @@
 <% } else if (decided && decided.status === 'rejected') { %>
   <div class="alert warn"><strong>Your last changes were not accepted</strong><%= decided.admin_note ? ' — ' + decided.admin_note : '.' %></div>
 <% } %>
+<% if (typeof placed !== 'undefined' && placed) { %><div class="alert ok"><strong>Order sent to Lumi Trade.</strong> We will review it and come back with final prices, freight and a proforma invoice — usually within one business day.</div><% } %>
 <div class="grid2">
   <div>
+    <% if (typeof orderRows !== 'undefined' && orderRows.length) { %><div class="card"><h2>Order details</h2><%- include('../partials/order_details', { rows: orderRows }) %></div><% } %>
     <div class="card">
       <h2>Products <span class="muted small"><%= items.length || 1 %></span></h2>
       <dl class="dl">

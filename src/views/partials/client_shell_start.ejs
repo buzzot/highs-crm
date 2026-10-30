@@ -16,7 +16,8 @@
     ['/portal', 'Overview', 'home', p => p === '/portal'],
     ['/portal/requests', 'My requests', 'inbox', p => p.startsWith('/portal/requests') && p !== '/portal/requests/new'],
     ['/portal/requests/new', 'New request', 'plus', p => p === '/portal/requests/new'],
-    ['/portal/orders', 'My orders', 'package', p => p.startsWith('/portal/orders')],
+    ['/portal/orders/new', 'New order', 'bag', p => p === '/portal/orders/new'],
+    ['/portal/orders', 'My orders', 'package', p => p.startsWith('/portal/orders') && p !== '/portal/orders/new'],
     ['/portal/company', 'Company', 'building', p => p.startsWith('/portal/company')],
     ['/account', 'Account', 'user', p => p.startsWith('/account')],
   ];
