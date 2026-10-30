@@ -146,7 +146,7 @@ pi.post('/order/:oid', async (req, res) => {
 });
 
 async function loadPi(id) {
-  const { data } = await admin.from('proforma_invoices').select('*, orders(id, order_no, org_id, request_id, freight_total, organizations(name))').eq('id', id).maybeSingle();
+  const { data } = await admin.from('proforma_invoices').select('*, orders(id, order_no, org_id, request_id, freight_total, payment_status, organizations(name))').eq('id', id).maybeSingle();
   return data;
 }
 const piData = (b, old) => ({

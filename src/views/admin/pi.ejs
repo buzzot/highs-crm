@@ -1,91 +1,258 @@
 <%- include('../partials/head') %>
-<% const d = p.data, b = d.buyer || {}; const sent = p.status === 'sent'; %>
+<% const d = p.data, b = d.buyer || {}; const sent = p.status === 'sent'; const cur = d.currency;
+   const paid = order.payment_status === 'paid'; const stepNow = paid ? 2 : sent ? 1 : 0;
+   const fr = d.freight || { amount: '', mode: 'none' }; const shipCost = Number(order.freight_total || 0);
+   const INC = ['EXW', 'FOB', 'CIF', 'DAP']; const incs = d.incoterm && !INC.includes(d.incoterm) ? [...INC, d.incoterm] : INC;
+   const lines = d.lines && d.lines.length ? d.lines : [{ description: '', sku: '', quantity: '', unit: 'pcs', unit_price: '' }];
+   const sch = (d.schedule && d.schedule.length ? d.schedule : []).map(x => ({ label: x.label || '', percent: x.percent || '', due: x.due || '' }));
+   const billRows = [['Company', b.company], ['Email', b.email], ['Phone', b.phone], ['Contact', b.contact]];
+   const planKey = JSON.stringify(sch.map(x => Number(x.percent))); %>
 <div class="pagehead">
-  <div><a class="back" href="/admin/orders/<%= order.id %>">← <%= order.order_no %></a><h1>Proforma invoice <%= p.pi_no %></h1>
-    <p class="muted"><%= order.organizations?.name %> · <%= sent ? 'sent ' + fmt.datetime(p.sent_at) : 'draft — not sent' %></p></div>
+  <div><a class="back" href="/admin/orders/<%= order.id %>">← Order <%= order.order_no %></a><h1>Proforma invoice <%= p.pi_no %></h1>
+    <p class="muted"><%= order.organizations?.name %><%= sent ? ' · sent ' + fmt.datetime(p.sent_at) : '' %></p></div>
   <div class="headactions">
-    <a class="btn" href="/admin/pi/<%= p.id %>/print" target="_blank"><%- icon('file') %> Print / PDF</a>
-    <span class="pill lg <%= sent ? 'ok' : '' %>"><%= sent ? 'Sent' : 'Draft' %></span>
+    <ol class="pi-steps"><% ['Draft', 'Sent', 'Paid'].forEach((t, i) => { %><li class="<%= i < stepNow ? 'done' : i === stepNow ? 'now' : '' %>"><%= t %></li><% }) %></ol>
+    <a class="btn" href="/admin/pi/<%= p.id %>/print" target="_blank"><%- icon('file') %> Preview as client</a>
   </div>
 </div>
 <% if (msg) { %><div class="alert ok"><%= msg %></div><% } %>
 <% if (err) { %><div class="alert err"><%= err %></div><% } %>
 <% if (sent) { %><div class="alert info">Already sent. You can change it and send it again — the client receives the new PDF.</div><% } %>
-<form method="post" action="/admin/pi/<%= p.id %>" class="poform">
-  <div class="card">
-    <h2>Bill to</h2>
-    <div class="row">
-      <label>Company <input name="company" value="<%= b.company || '' %>"></label>
-      <label>Contact person <input name="contact" value="<%= b.contact || '' %>"></label>
-      <label>Email <input name="email" value="<%= b.email || '' %>"></label>
-      <label>Phone <input name="phone" value="<%= b.phone || '' %>"></label>
+<form method="post" action="/admin/pi/<%= p.id %>" class="poform pi" id="piForm" data-cur="<%= cur %>" data-ship="<%= shipCost > 0 ? shipCost : '' %>">
+<button type="submit" class="pi-default" tabindex="-1" aria-hidden="true">Save</button><%# first submit button = what Enter does: it saves, never sends %>
+<div class="pi-layout">
+<div class="pi-main">
+
+  <section class="card">
+    <div class="pi-ch"><span class="n">1</span><h2>Bill to</h2><button type="button" class="link" id="billBtn">Edit</button></div>
+    <div class="pi-bill" id="billView">
+      <dl><% billRows.forEach(([k, v]) => { %><dt><%= k %></dt><dd class="<%= v ? '' : 'none' %>"><%= v || '— not set' %></dd><% }) %></dl>
+      <dl><dt>Address</dt><dd class="<%= b.address ? 'pre' : 'none' %>"><%= b.address || '— not set' %></dd><dt>Delivery</dt><dd class="<%= b.delivery_address ? 'pre' : 'none' %>"><%= b.delivery_address || '— not set' %></dd></dl>
     </div>
-    <div class="row">
-      <label>Address <textarea name="address" rows="2"><%= b.address || '' %></textarea></label>
-      <label>Delivery address <textarea name="delivery_address" rows="2"><%= b.delivery_address || '' %></textarea></label>
+    <div id="billEdit" hidden>
+      <div class="pi-g4">
+        <label>Company <input name="company" value="<%= b.company || '' %>"></label>
+        <label>Contact person <input name="contact" value="<%= b.contact || '' %>"></label>
+        <label>Email <input name="email" value="<%= b.email || '' %>"></label>
+        <label>Phone <input name="phone" value="<%= b.phone || '' %>"></label>
+      </div>
+      <div class="pi-g2 pi-mt">
+        <label>Address <textarea name="address" rows="3"><%= b.address || '' %></textarea></label>
+        <label>Delivery address <textarea name="delivery_address" rows="3"><%= b.delivery_address || '' %></textarea></label>
+      </div>
     </div>
+  </section>
+
+  <section class="card">
+    <div class="pi-ch"><span class="n">2</span><h2>Items</h2><span class="hint">Prices come from the order — <a href="/admin/orders/<%= order.id %>">open order items</a></span></div>
+    <div class="pi-items">
+      <div class="pi-ih"><span>Description</span><span>SKU / part no.</span><span class="r">Qty</span><span>Unit</span><span class="r">Unit price</span><span class="r">Amount</span><span></span></div>
+      <div id="piRows">
+      <% lines.forEach((l, i) => { %>
+        <div class="pi-ir" data-row>
+          <input name="lines[<%= i %>][description]" value="<%= l.description %>" placeholder="Description" aria-label="Description">
+          <input name="lines[<%= i %>][sku]" value="<%= l.sku || '' %>" placeholder="SKU" aria-label="SKU">
+          <input name="lines[<%= i %>][quantity]" value="<%= l.quantity %>" class="r num" inputmode="decimal" aria-label="Quantity">
+          <input name="lines[<%= i %>][unit]" value="<%= l.unit || 'pcs' %>" aria-label="Unit" list="piUnits">
+          <div class="pi-suf"><input name="lines[<%= i %>][unit_price]" value="<%= l.unit_price === 0 ? '' : l.unit_price %>" class="r num" inputmode="decimal" placeholder="0.00" aria-label="Unit price"><em><%= cur %></em></div>
+          <div class="r amt num" data-amt>0.00</div>
+          <button type="button" class="pi-rm" title="Remove line" aria-label="Remove line" data-rm>×</button>
+          <% if (l.product_id) { %><input type="hidden" name="lines[<%= i %>][product_id]" value="<%= l.product_id %>"><% } %>
+        </div>
+      <% }) %>
+      </div>
+    </div>
+    <datalist id="piUnits"><option>pcs</option><option>sets</option><option>pairs</option><option>m</option><option>kg</option><option>boxes</option></datalist>
+    <div class="pi-add"><button type="button" class="btn small" id="addLine">+ Add line</button><span class="muted small">Currency: <strong><%= cur %></strong></span></div>
+  </section>
+
+  <section class="card">
+    <div class="pi-ch"><span class="n">3</span><h2>Freight &amp; total</h2></div>
+    <div class="pi-g3">
+      <label>Freight <span class="pi-suf"><input type="number" step="0.01" min="0" name="freight_amount" id="fr_amt" value="<%= fr.amount || '' %>" placeholder="0.00" class="r"><em><%= cur %></em></span></label>
+      <label>Buffer <span class="pi-suf"><input type="number" step="0.1" min="0" max="100" name="freight_buffer" id="fr_buf" value="<%= fr.buffer_pct || '' %>" placeholder="0" class="r"><em>%</em></span></label>
+      <div><span class="pi-lab">How the client sees it</span>
+        <div class="pi-seg" role="radiogroup" aria-label="How the client sees freight">
+          <% [['none', 'None'], ['separate', 'Separate line'], ['included', 'Included']].forEach(([v, t]) => { %><label><input type="radio" name="freight_mode" value="<%= v %>" <%= (fr.mode || 'none') === v ? 'checked' : '' %>><span><%= t %></span></label><% }) %>
+        </div></div>
+    </div>
+    <div class="pi-note">
+      <% if (shipCost > 0) { %><span>Shipment cost on the order: <strong><%= fmt.money(shipCost, order.currency || cur) %></strong></span> <button type="button" class="link" id="fr_use">Use it as freight</button>
+      <% } else { %><span>No shipment cost on the order yet — type the freight, or add it on the shipment page.</span><% } %>
+      <span id="fr_calc" class="muted"></span>
+    </div>
+    <div class="pi-tot">
+      <div><span>Goods</span><b class="r num" id="tGoods">0.00</b></div>
+      <div id="tFrRow" hidden><span id="tFrLbl">Freight</span><b class="r num" id="tFr">0.00</b></div>
+      <div class="grand"><span>Total (<%= cur %>)</span><b class="r num" id="tTot">0.00</b></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="pi-ch"><span class="n">4</span><h2>Terms</h2></div>
+    <div class="pi-g2">
+      <div><span class="pi-lab">Incoterm</span>
+        <div class="pi-seg" role="radiogroup" aria-label="Incoterm">
+          <% incs.forEach(v => { %><label><input type="radio" name="incoterm" value="<%= v %>" <%= d.incoterm === v ? 'checked' : '' %>><span><%= v %></span></label><% }) %>
+        </div></div>
+      <label>Client PO number <input name="po_ref" value="<%= d.po_ref || '' %>" placeholder="optional"></label>
+    </div>
+    <div class="pi-g2 pi-mt">
+      <div><label>Lead time <span class="pi-suf"><input type="number" min="0" name="lead_time_days" id="lead" value="<%= d.lead_time_days || '' %>" placeholder="e.g. 30"><em>days</em></span></label>
+        <div class="pi-chips"><% [15, 30, 45, 60].forEach(n => { %><button type="button" class="pc" data-lead="<%= n %>"><%= n %></button><% }) %></div></div>
+      <div><label>Valid until <input type="date" name="valid_until" id="vu" value="<%= d.valid_until || '' %>"></label>
+        <div class="pi-chips"><% [14, 30, 60].forEach(n => { %><button type="button" class="pc" data-vu="<%= n %>">+<%= n %> days</button><% }) %></div></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="pi-ch"><span class="n">5</span><h2>Payment</h2><span class="chip ok" id="pctBadge">100% ✓</span></div>
+    <span class="pi-lab">Payment plan</span>
+    <div class="pi-chips" id="presets">
+      <button type="button" class="pc" data-p="30,70">30 / 70</button><button type="button" class="pc" data-p="50,50">50 / 50</button><button type="button" class="pc" data-p="100">100% before shipment</button><button type="button" class="pc" data-p="custom">Custom</button>
+    </div>
+    <div class="pi-sh"><span>Instalment</span><span>Share</span><span class="r">Amount</span><span>Due date</span><span></span></div>
+    <div id="sched">
+      <% sch.forEach((x, i) => { %>
+      <div class="pi-sr" data-inst>
+        <input name="sched[<%= i %>][label]" value="<%= x.label %>" placeholder="e.g. Deposit" aria-label="Instalment">
+        <div class="pi-suf"><input name="sched[<%= i %>][percent]" value="<%= x.percent %>" class="r num" inputmode="decimal" aria-label="Share"><em>%</em></div>
+        <div class="r amt num" data-iamt>0.00</div>
+        <input type="date" name="sched[<%= i %>][due]" value="<%= x.due %>" aria-label="Due date">
+        <button type="button" class="pi-rm" title="Remove" aria-label="Remove instalment" data-irm>×</button>
+      </div>
+      <% }) %>
+    </div>
+    <div class="pi-add"><button type="button" class="btn small" id="addInst">+ Add instalment</button></div>
+    <details class="pi-more" <%= d.payment_terms ? '' : 'open' %>>
+      <summary>Payment terms wording</summary>
+      <textarea name="payment_terms" id="terms" rows="2"><%= d.payment_terms || '' %></textarea>
+      <button type="button" class="link" id="matchTerms">Write it from the plan above</button>
+    </details>
+    <hr class="pi-hr">
+    <div class="pi-ch tight"><h3>Bank details</h3><button type="button" class="link" id="bankBtn">Edit</button></div>
+    <div class="pi-bank" id="bankView"><%= d.bank || 'No bank details — add them in Settings or press Edit.' %></div>
+    <textarea name="bank" id="bank" rows="5" hidden><%= d.bank || '' %></textarea>
+    <details class="pi-more" <%= d.notes ? 'open' : '' %>><summary><%= d.notes ? 'Note for the client' : '+ Add a note for the client' %></summary><textarea name="notes" rows="2" placeholder="Shown at the bottom of the invoice"><%= d.notes || '' %></textarea></details>
+  </section>
+
+  <section class="card">
+    <div class="pi-ch"><span class="n">6</span><h2>Send to the client</h2></div>
+    <div class="pi-g2">
+      <label>Send to (email) <input name="send_to" id="sendTo" value="<%= b.email || '' %>"></label>
+      <label>Message <span class="muted small">optional, added to the email</span><input name="message" placeholder="Added to the email"></label>
+    </div>
+    <p class="muted small pi-mt0">The PDF is emailed and also kept in the order's documents, where the client can download it.</p>
+  </section>
+</div>
+
+<aside class="pi-side">
+  <div class="card pi-sum">
+    <div class="pi-slbl">Total to pay</div>
+    <div class="pi-big num" id="sTot"><%= cur %> 0.00</div>
+    <div class="muted small" id="sLines"></div>
+    <hr class="pi-hr">
+    <div id="sInst"></div>
+    <hr class="pi-hr">
+    <ul class="pi-ck" id="ck"></ul>
+    <div class="pi-stack">
+      <button class="btn primary full" id="sendBtn" formaction="/admin/pi/<%= p.id %>/send" disabled><%= sent ? 'Send again' : 'Send to client' %></button>
+      <button type="button" class="link center" id="sendAny" hidden>Send anyway…</button>
+      <div class="pi-two"><button class="btn full">Save draft</button><a class="btn full" href="/admin/pi/<%= p.id %>/print" target="_blank">Print / PDF</a></div>
+    </div>
+    <p class="muted small" id="saved">Saved.</p>
   </div>
-  <div class="card">
-    <h2>Lines</h2>
-    <%- include('../partials/po_lines', { lines: d.lines, currency: d.currency, edit: true }) %>
-    <% const fr = d.freight || { amount: '', mode: 'none' }; const shipCost = Number(order.freight_total || 0); %>
-    <div class="row freightrow">
-      <label>Freight (<%= d.currency %>) <input type="number" step="0.01" min="0" name="freight_amount" id="fr_amt" value="<%= fr.amount || '' %>" placeholder="0.00"></label>
-      <label>+ Buffer % <input type="number" step="0.1" min="0" max="100" name="freight_buffer" id="fr_buf" value="<%= fr.buffer_pct || '' %>" placeholder="0"></label>
-      <label>How the client sees it
-        <select name="freight_mode">
-          <option value="none" <%= fr.mode === 'none' || !fr.mode ? 'selected' : '' %>>No freight on this invoice</option>
-          <option value="separate" <%= fr.mode === 'separate' ? 'selected' : '' %>>Show as a separate line</option>
-          <option value="included" <%= fr.mode === 'included' ? 'selected' : '' %>>Include in the unit prices (not shown)</option>
-        </select></label>
-    </div>
-    <p class="muted small" id="fr_note">
-      <% if (shipCost > 0) { %><button type="button" class="btn small" id="fr_use" data-cost="<%= shipCost %>">Use shipment cost <%= fmt.money(shipCost, order.currency || d.currency) %></button> from the order's shipments, then add a % buffer for surprises if you want. <% } else { %>No shipment cost on the order yet — type the freight, or add it on the shipment page. <% } %>
-      <span id="fr_calc"></span>
-    </p>
-    <% if (fr.amount > 0 && fr.mode !== 'none') { %><p class="muted small">Client sees <%= shown.length %> line<%= shown.length === 1 ? '' : 's' %>, total <strong><%= fmt.money(total, d.currency) %></strong><%= fr.mode === 'included' ? ' — freight is spread over the unit prices in proportion to line value' : ' — with a “Freight & logistics” line' %>. Save to update the preview.</p><% } %>
-    <script>
-      (function () {
-        const amt = document.getElementById('fr_amt'), buf = document.getElementById('fr_buf'), out = document.getElementById('fr_calc'), use = document.getElementById('fr_use');
-        const show = () => { const a = Number(amt.value) || 0, b = Number(buf.value) || 0; out.textContent = a > 0 && b > 0 ? 'Freight charged: ' + (a * (1 + b / 100)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' <%= d.currency %>' : ''; };
-        if (use) use.addEventListener('click', () => { amt.value = use.dataset.cost; show(); });
-        amt.addEventListener('input', show); buf.addEventListener('input', show); show();
-      })();
-    </script>
-    <div class="row">
-      <label>Client PO number <input name="po_ref" value="<%= d.po_ref || '' %>"></label>
-      <label>Incoterm <input name="incoterm" value="<%= d.incoterm || '' %>"></label>
-      <label>Lead time (days) <input type="number" name="lead_time_days" value="<%= d.lead_time_days || '' %>"></label>
-      <label>Valid until <input type="date" name="valid_until" value="<%= d.valid_until || '' %>"></label>
-    </div>
-  </div>
-  <div class="card">
-    <h2>Payment</h2>
-    <label>Payment terms <textarea name="payment_terms" rows="2"><%= d.payment_terms || '' %></textarea></label>
-    <p class="muted small">Payment schedule — what the client sees as amounts to pay and due dates. Percentages should add up to 100. Leave a row empty to remove it.</p>
-    <table class="tbl compact sched"><thead><tr><th>Instalment</th><th>%</th><th class="right">Amount (<%= d.currency %>)</th><th>Due date</th></tr></thead><tbody>
-    <% const sch = (d.schedule && d.schedule.length ? d.schedule : []).slice(0, 4); while (sch.length < 4) sch.push({ label: '', percent: '', due: '' }); %>
-    <% sch.forEach((x, i) => { %><tr>
-      <td><input name="sched[<%= i %>][label]" value="<%= x.label || '' %>" placeholder="e.g. Deposit"></td>
-      <td><input name="sched[<%= i %>][percent]" type="number" step="0.01" min="0" max="100" value="<%= x.percent || '' %>"></td>
-      <td class="right num"><%= x.percent ? fmt.money(total * x.percent / 100, d.currency) : '' %></td>
-      <td><input name="sched[<%= i %>][due]" type="date" value="<%= x.due || '' %>"></td>
-    </tr><% }) %>
-    </tbody></table>
-    <label>Bank details <textarea name="bank" rows="4"><%= d.bank || '' %></textarea></label>
-    <label>Notes <textarea name="notes" rows="2"><%= d.notes || '' %></textarea></label>
-  </div>
-  <div class="card">
-    <h2>Send to the client</h2>
-    <div class="row">
-      <label>Send to (email) <input name="send_to" value="<%= b.email || '' %>"></label>
-    </div>
-    <label>Message <span class="muted small">optional, added to the email</span><textarea name="message" rows="2"></textarea></label>
-    <div class="actions">
-      <button class="btn">Save</button>
-      <button class="btn primary" formaction="/admin/pi/<%= p.id %>/send" onclick="return confirm('Send the proforma invoice to the client now?')"><%= sent ? 'Send again' : 'Send to client' %></button>
-    </div>
-    <p class="muted small">The PDF is emailed and also kept in the order's documents, where the client can download it.</p>
-  </div>
+</aside>
+</div>
 </form>
+<script>
+(function () {
+  const F = document.getElementById('piForm'), $ = id => document.getElementById(id);
+  const CUR = F.dataset.cur, SHIP = Number(F.dataset.ship) || 0;
+  const num = v => { const x = parseFloat(String(v == null ? '' : v).replace(',', '.')); return Number.isFinite(x) ? x : 0; };
+  const fmt = n => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const TODAY = new Date().toISOString().slice(0, 10);
+  let dirty = false, sending = false;
+  const q = (s, r) => Array.from((r || F).querySelectorAll(s));
+  const renumber = () => {
+    q('[data-row]').forEach((row, i) => q('[name^="lines["]', row).forEach(el => { el.name = el.name.replace(/^lines\[\d+\]/, 'lines[' + i + ']'); }));
+    q('[data-inst]').forEach((row, i) => q('[name^="sched["]', row).forEach(el => { el.name = el.name.replace(/^sched\[\d+\]/, 'sched[' + i + ']'); }));
+  };
+  function calc() {
+    let goods = 0, unpriced = 0, lines = 0;
+    q('[data-row]').forEach(row => {
+      const [, , qty, , price] = q('input:not([type=hidden])', row);
+      const a = num(qty.value) * num(price.value);
+      if (num(qty.value) > 0 || (row.querySelector('input').value || '').trim()) { lines++; goods += a; if (!(num(price.value) > 0)) unpriced++; }
+      row.querySelector('[data-amt]').textContent = fmt(a);
+    });
+    const mode = (F.querySelector('[name=freight_mode]:checked') || {}).value || 'none';
+    const base = num($('fr_amt').value), buf = num($('fr_buf').value);
+    const fr = mode === 'none' ? 0 : Math.round(base * (1 + Math.max(0, buf) / 100) * 100) / 100;
+    $('fr_calc').textContent = base > 0 && buf > 0 ? 'Freight charged: ' + fmt(base * (1 + buf / 100)) + ' ' + CUR : '';
+    const total = Math.round((goods + fr) * 100) / 100;
+    $('tGoods').textContent = fmt(mode === 'included' ? goods + fr : goods);
+    $('tFrRow').hidden = !(mode === 'separate' && fr > 0); $('tFr').textContent = fmt(fr);
+    $('tTot').textContent = fmt(total); $('sTot').textContent = CUR + ' ' + fmt(total);
+    $('sLines').textContent = lines + ' line' + (lines === 1 ? '' : 's') + (mode === 'separate' && fr > 0 ? ' · freight as a separate line' : mode === 'included' && fr > 0 ? ' · freight included in the prices' : ' · goods only');
+    let sum = 0; const inst = q('[data-inst]');
+    inst.forEach(row => { const pc = num(q('input', row)[1].value); sum += pc; row.querySelector('[data-iamt]').textContent = fmt(total * pc / 100); });
+    sum = Math.round(sum * 100) / 100;
+    const bd = $('pctBadge'); bd.className = 'chip ' + (sum === 100 ? 'ok' : 'bad'); bd.textContent = sum === 100 ? '100% ✓' : sum + '% — must be 100%';
+    const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+    $('sInst').innerHTML = inst.map(row => { const ins = q('input', row), pc = num(ins[1].value); return pc > 0 ? '<div class="kv"><span>' + esc(ins[0].value || 'Instalment') + ' · ' + pc + '%</span><b>' + fmt(total * pc / 100) + '</b></div>' : ''; }).join('');
+    const key = inst.map(r => num(q('input', r)[1].value)).join(',');
+    q('#presets .pc').forEach(b => b.classList.toggle('on', b.dataset.p === key || (b.dataset.p === 'custom' && !['30,70', '50,50', '100'].includes(key))));
+    const to = ($('sendTo').value || '').split(/[,;\s]+/).filter(x => /@/.test(x));
+    const mailOk = to.length > 0 && to.every(x => /^\S+@\S+\.\S+$/.test(x)), vu = $('vu').value, dateOk = !!vu && vu >= TODAY;
+    const checks = [
+      [unpriced === 0 && lines > 0, lines === 0 ? 'Add at least one item' : unpriced ? unpriced + ' item' + (unpriced > 1 ? 's have' : ' has') + ' no price — <a href="/admin/orders/<%= order.id %>">check the order</a>' : 'All items have a price'],
+      [total > 0, total > 0 ? 'Total is above zero' : 'Total is zero'],
+      [inst.length > 0 && sum === 100, !inst.length ? 'Add a payment plan' : sum === 100 ? 'Payment plan adds up to 100%' : 'Payment plan must add up to 100%'],
+      [mailOk, mailOk ? 'Client email is set' : 'Enter a valid client email'],
+      [dateOk, dateOk ? 'Valid until is in the future' : 'Set a “valid until” date in the future'],
+    ];
+    $('ck').innerHTML = checks.map(([ok, t]) => '<li class="' + (ok ? 'ok' : 'no') + '"><span class="d">' + (ok ? '✓' : '!') + '</span><span>' + t + '</span></li>').join('');
+    const all = checks.every(c => c[0]); $('sendBtn').disabled = !all; $('sendAny').hidden = all;
+  }
+  const mark = () => { dirty = true; $('saved').textContent = 'Unsaved changes — Print / Preview use the last saved version.'; };
+  F.addEventListener('input', () => { mark(); calc(); }); F.addEventListener('change', () => { mark(); calc(); });
+  // lines
+  $('addLine').onclick = () => {
+    const rows = $('piRows'), last = rows.lastElementChild, n = rows.children.length, row = last.cloneNode(true);
+    q('input', row).forEach(i => { if (i.type === 'hidden') i.remove(); else i.value = i.name.endsWith('[unit]') ? 'pcs' : ''; });
+    rows.appendChild(row); renumber(); row.querySelector('input').focus(); mark(); calc();
+  };
+  $('piRows').addEventListener('click', e => { const b = e.target.closest('[data-rm]'); if (!b) return; const rows = $('piRows'); if (rows.children.length > 1) b.closest('[data-row]').remove(); else q('input:not([type=hidden])', rows.firstElementChild).forEach(i => { i.value = i.name.endsWith('[unit]') ? 'pcs' : ''; }); renumber(); mark(); calc(); });
+  // schedule
+  const instRow = (l, p) => { const w = document.createElement('div'); w.className = 'pi-sr'; w.setAttribute('data-inst', ''); w.innerHTML = '<input name="sched[0][label]" placeholder="e.g. Deposit" aria-label="Instalment"><div class="pi-suf"><input name="sched[0][percent]" class="r num" inputmode="decimal" aria-label="Share"><em>%</em></div><div class="r amt num" data-iamt>0.00</div><input type="date" name="sched[0][due]" aria-label="Due date"><button type="button" class="pi-rm" title="Remove" aria-label="Remove instalment" data-irm>×</button>'; const ins = q('input', w); ins[0].value = l || ''; ins[1].value = p || ''; return w; };
+  $('addInst').onclick = () => { $('sched').appendChild(instRow('', '')); renumber(); mark(); calc(); };
+  $('sched').addEventListener('click', e => { const b = e.target.closest('[data-irm]'); if (!b) return; b.closest('[data-inst]').remove(); renumber(); mark(); calc(); });
+  q('#presets .pc').forEach(b => b.onclick = () => {
+    const p = b.dataset.p; if (p === 'custom') return;
+    const plan = p === '100' ? [['Full payment before shipment', 100]] : p.split(',').map((v, i) => [i ? 'Balance' : 'Deposit', +v]);
+    $('sched').innerHTML = ''; plan.forEach(([l, v]) => $('sched').appendChild(instRow(l, v))); renumber(); mark(); calc();
+  });
+  $('matchTerms').onclick = () => {
+    const rows = q('[data-inst]').map(r => q('input', r)).filter(i => num(i[1].value) > 0);
+    $('terms').value = rows.length === 1 ? num(rows[0][1].value) + '% ' + (num(rows[0][1].value) === 100 ? 'before shipment' : (rows[0][0].value || 'payment').toLowerCase()) : rows.map((i, k) => num(i[1].value) + '% ' + (k === 0 ? (i[0].value || 'deposit').toLowerCase() + ' with the order' : (i[0].value || 'balance').toLowerCase() + (k === rows.length - 1 ? ' before shipment' : ''))).join(', ');
+    mark();
+  };
+  // quick choices
+  q('[data-lead]').forEach(b => b.onclick = () => { $('lead').value = b.dataset.lead; mark(); });
+  q('[data-vu]').forEach(b => b.onclick = () => { const d = new Date(); d.setDate(d.getDate() + Number(b.dataset.vu)); $('vu').value = d.toISOString().slice(0, 10); mark(); calc(); });
+  if ($('fr_use')) $('fr_use').onclick = () => { $('fr_amt').value = SHIP; mark(); calc(); };
+  // bill to / bank details
+  $('billBtn').onclick = () => { const on = !$('billEdit').hidden; $('billEdit').hidden = on; $('billView').hidden = !on; $('billBtn').textContent = on ? 'Edit' : 'Done'; };
+  $('bankBtn').onclick = () => { const on = !$('bank').hidden; $('bank').hidden = on; $('bankView').hidden = !on; if (on) $('bankView').textContent = $('bank').value || 'No bank details — add them in Settings or press Edit.'; $('bankBtn').textContent = on ? 'Edit' : 'Done'; };
+  // sending
+  const confirmSend = (extra) => confirm((extra ? 'Some checks are not met:\n' + q('#ck li.no span:last-child').map(s => '• ' + s.textContent).join('\n') + '\n\n' : '') + 'Send the proforma invoice to the client now?');
+  let skip = false;
+  $('sendBtn').addEventListener('click', e => { if (skip) { skip = false; sending = true; return; } if (!confirmSend(false)) e.preventDefault(); else sending = true; });
+  $('sendAny').onclick = () => { if (!confirmSend(true)) return; skip = true; $('sendBtn').disabled = false; $('sendBtn').click(); };
+  F.addEventListener('submit', () => { sending = true; });
+  window.addEventListener('beforeunload', e => { if (dirty && !sending) { e.preventDefault(); e.returnValue = ''; } });
+  renumber(); calc();
+})();
+</script>
 <%- include('../partials/foot') %>
