@@ -2757,3 +2757,34 @@ dialog.fqdlg::backdrop { background: rgba(15,30,50,.45); }
 .dropform .dropwrap { margin-bottom: 10px; }
 .fld .dropwrap, .modalform .dropwrap { margin: 0; }
 .fld .filedrop, .modalform .filedrop { margin-bottom: 8px; }
+
+/* quick "new client" popup */
+.qcdlg { width: min(520px, calc(100vw - 32px)); }
+.qcdlg .qc2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.qcdlg .fld { margin-bottom: 10px; }
+.qcdlg .qcerr { margin: 0 0 6px; }
+@media (max-width: 480px) { .qcdlg .qc2 { grid-template-columns: 1fr; } }
+
+/* list views: Active / Closed / All */
+.vtabs { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.vtabs .seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--bg); border: 1px solid var(--line); border-radius: 999px; }
+.vtabs .seg a { padding: 5px 14px; border-radius: 999px; color: var(--ink-2); font-size: 13px; border: 1px solid transparent; white-space: nowrap; }
+.vtabs .seg a:hover { text-decoration: none; color: var(--ink); }
+.vtabs .seg a.on { background: var(--surface); border-color: var(--line); color: var(--ink); font-weight: 600; box-shadow: var(--shadow); }
+.vtabs .seg a span { color: var(--muted); font-size: 11px; margin-left: 3px; font-weight: 400; }
+.vtabs .vstat { margin: 0; }
+.vtabs .vstat select, .vtabs .vstat .sx-btn { margin: 0; width: auto; min-width: 150px; padding: 6px 10px; font-size: 13px; border-radius: 999px; }
+.vtabs .vstat.on select, .vtabs .vstat.on .sx-btn { border-color: var(--accent); background: var(--accent-soft); }
+.vtabs .vclear { font-size: 12px; color: var(--ink-2); padding: 3px 9px; border-radius: 999px; background: var(--line-2); }
+.vtabs .vclear:hover { background: var(--line); text-decoration: none; }
+.vtabs + .card { margin-top: 12px; }
+.toolbar .vtabs { margin: 0; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.vhint { padding: 10px 16px; font-size: 13px; color: var(--ink-2); background: var(--bg); border-top: 1px solid var(--line); }
+.vhint a { font-weight: 600; }
+
+.vtabs .needtab { display: inline-flex; align-items: center; padding: 6px 14px; border-radius: 999px; background: #fdecea; color: #b3261e; font-size: 13px; font-weight: 600; border: 1px solid #f3c9c5; white-space: nowrap; }
+.vtabs .needtab:hover { background: #fbdcd8; text-decoration: none; }
+.vtabs .needtab .navball { margin-left: 7px; background: #b3261e; color: #fff; }
+.vtabs .needtab.on { background: #b3261e; color: #fff; border-color: #b3261e; }
+.vtabs .needtab.on .navball { background: #fff; color: #b3261e; }

@@ -1,0 +1,22 @@
+<%# Active / Closed / All + a status menu. locals: base, view, counts, statuses, byStatus, label(fn), keep (extra query, no leading ?) %>
+<%
+  const _k = typeof keep !== 'undefined' && keep ? '&' + keep : '';
+  const _u = v => base + '?status=' + v + _k;
+  const _single = !['open', 'closed', 'all', 'none'].includes(view);
+  const _lab = typeof label === 'function' ? label : s => s;
+%>
+<div class="vtabs">
+  <% if (typeof need !== 'undefined' && need) { %><a class="needtab <%= need.on ? 'on' : '' %>" href="<%= need.href %>" title="<%= need.title || '' %>">⚠ Needs your action <span class="navball"><%= need.count %></span></a><% } %>
+  <div class="seg" role="tablist">
+    <a href="<%= _u('open') %>" class="<%= view === 'open' ? 'on' : '' %>">Active <span><%= counts.open %></span></a>
+    <a href="<%= _u('closed') %>" class="<%= view === 'closed' ? 'on' : '' %>">Closed <span><%= counts.closed %></span></a>
+    <a href="<%= _u('all') %>" class="<%= view === 'all' ? 'on' : '' %>">All <span><%= counts.all %></span></a>
+  </div>
+  <label class="vstat <%= _single ? 'on' : '' %>"><span class="sr">Filter by status</span>
+    <select aria-label="Filter by status" onchange="location.href=this.value">
+      <option value="<%= _u('open') %>">By status…</option>
+      <% statuses.filter(s => (byStatus[s] || 0) > 0 || view === s).forEach(s => { %><option value="<%= _u(s) %>" <%= view === s ? 'selected' : '' %>><%= _lab(s) %> (<%= byStatus[s] || 0 %>)</option><% }) %>
+    </select>
+  </label>
+  <% if (_single) { %><a class="vclear" href="<%= _u('open') %>" title="Back to Active">✕ <%= _lab(view) %></a><% } %>
+</div>
