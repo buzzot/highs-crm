@@ -650,7 +650,8 @@ label.haserr input, label.haserr textarea { border-color: var(--bad); background
 .tbl.big td { padding-top: 14px; padding-bottom: 14px; font-size: 15px; }
 .tbl tr.rowlink { cursor: pointer; }
 .tbl tr.rowlink:hover td { background: #f7fbfa; }
-.tabs2 { display: flex; gap: 4px; padding: 0 16px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tabs2 { display: flex; gap: 4px; padding: 0 16px; border-bottom: 1px solid var(--line); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.tabs2::-webkit-scrollbar { display: none; }
 .tabs2 a { display: inline-flex; align-items: center; padding: 16px 12px 14px; color: var(--ink-2); font-size: 15px; font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; text-decoration: none !important; }
 .tabs2 a span { font-size: 12px; background: var(--line-2); color: var(--muted); border-radius: 999px; padding: 1px 8px; }
 .tabs2 a.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 650; }
@@ -2906,3 +2907,16 @@ label.no-block{display:block}
 .no-deliv{grid-template-columns:auto auto minmax(150px,1fr)}
 .no-seg span{white-space:nowrap}
 @media(max-width:900px){.no-deliv{grid-template-columns:1fr}}
+/* delivery row: segments size to their content, date field narrower */
+.no-deliv{grid-template-columns:max-content max-content minmax(150px,170px);justify-content:start;gap:14px 22px}
+.no-deliv .no-seg{display:flex;flex-wrap:nowrap;width:max-content}
+.no-deliv .no-seg label{display:block;flex:0 0 auto;width:auto}
+.no-deliv .no-seg span{padding:6px 14px;text-align:center}
+@media(max-width:1100px){.no-deliv{grid-template-columns:1fr 1fr}.no-deliv .no-seg{flex-wrap:wrap;width:auto}}
+@media(max-width:700px){.no-deliv{grid-template-columns:1fr}}
+.no-deliv{grid-template-columns:max-content max-content minmax(130px,1fr);gap:14px 18px}
+.no-deliv .no-seg span{padding:6px 11px}
+.no-deliv input[type=date]{min-width:0;width:100%}
+.no-deliv{display:flex;flex-wrap:wrap;align-items:flex-start;gap:14px 18px}
+.no-deliv > label{flex:1 1 150px;max-width:200px}
+@media(max-width:700px){.no-deliv > label{max-width:none}}

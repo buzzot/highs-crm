@@ -49,7 +49,7 @@
     <label class="no-block">Delivery address <textarea name="delivery_address" rows="2"><%= form.delivery_address || '' %></textarea></label>
     <div class="no-g3 no-deliv no-block">
       <div><span class="no-lab">Incoterm</span><div class="no-seg" role="radiogroup" aria-label="Incoterm"><% (typeof incoterms !== 'undefined' ? incoterms : ['EXW','FOB','CIF','DAP']).forEach(v => { %><label><input type="radio" name="incoterm" value="<%= v %>" <%= inc === v ? 'checked' : '' %>><span><%= v %></span></label><% }) %></div></div>
-      <div><span class="no-lab">Transport</span><div class="no-seg" role="radiogroup" aria-label="Transport"><% Object.entries(typeof transport !== 'undefined' ? transport : { sea: 'Sea', air: 'Air', land: 'Rail / truck', any: 'Advise me' }).forEach(([v, l]) => { %><label><input type="radio" name="delivery_mode" value="<%= v %>" <%= dm === v ? 'checked' : '' %>><span><%= l %></span></label><% }) %></div></div>
+      <div><span class="no-lab">Transport</span><div class="no-seg" role="radiogroup" aria-label="Transport"><% Object.entries(typeof transport !== 'undefined' ? transport : { sea: 'Sea', air: 'Air', land: 'Rail / truck', any: 'None' }).forEach(([v, l]) => { %><label><input type="radio" name="delivery_mode" value="<%= v %>" <%= dm === v ? 'checked' : '' %>><span><%= l %></span></label><% }) %></div></div>
       <label>Needed by <input type="date" name="needed_by" id="noNeeded" value="<%= form.needed_by || '' %>"></label>
     </div>
   </div>

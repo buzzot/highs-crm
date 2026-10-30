@@ -1,6 +1,6 @@
 // "New order" from the client portal: the order details that go with the product lines.
 export const INCOTERMS = ['EXW', 'FOB', 'CIF', 'DAP'];
-export const TRANSPORT = { sea: 'Sea', air: 'Air', land: 'Rail / truck', any: 'Advise me' };
+export const TRANSPORT = { sea: 'Sea', air: 'Air', land: 'Rail / truck', any: 'None' };
 const s = (v, n) => String(v ?? '').trim().slice(0, n);
 
 /** Clean the posted form into the order details stored with the request. */
