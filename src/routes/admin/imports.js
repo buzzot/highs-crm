@@ -173,7 +173,7 @@ r.get('/:iid', async (req, res) => {
       const m = matchProduct(p, bySupplier[sid] || []);
       if (m.status !== 'none') { match = { ...m, supplier_id: sid, supplier_name: suppliers.find(x => x.id === sid)?.name }; break; }
     }
-    return { ...p, i, match, checks: checkRow(p), cbm: cartonCbm(p) };
+    return { ...p, i, match, checks: checkRow(p), cbm: cartonCbm(p), photos: galleryOf(p).length };
   });
   res.render('admin/products/import_review', {
     title: `Import · ${imp.file_name}`, imp, rows, suppliers, decision, currencies: CURRENCIES,
@@ -181,13 +181,60 @@ r.get('/:iid', async (req, res) => {
   });
 });
 
+// a row's photos: the one read from the file first, then any the admin added in the review
+const galleryOf = p => [p?.image_path, ...(p?.extra_images || [])].filter(Boolean);
+const PHOTO_EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' };
+const MAX_PHOTOS = 6;
+
 r.get('/:iid/image/:n', async (req, res) => {
   const imp = await loadImport(req.params.iid);
   const p = imp?.rows?.[Number(req.params.n)];
-  if (!p?.image_path) return res.status(404).send('No image');
-  const { data } = await admin.storage.from(BUCKET).createSignedUrl(p.image_path, 600);
+  const path = galleryOf(p)[Number(req.query.k) || 0];
+  if (!path) return res.status(404).send('No image');
+  const { data } = await admin.storage.from(BUCKET).createSignedUrl(path, 600);
   if (!data) return res.status(404).send('No image');
   res.redirect(data.signedUrl);
+});
+
+// add photos to a product row while reviewing (drag & drop, paste or choose) — JSON back: how many photos the row has now
+r.post('/:iid/photo/:n', upload.array('files', 6), async (req, res) => {
+  const imp = await loadImport(req.params.iid), n = Number(req.params.n);
+  if (!imp || !imp.rows?.[n]) return res.status(404).json({ error: 'Product not found.' });
+  if (imp.status !== 'review') return res.status(400).json({ error: `This import is already ${imp.status}.` });
+  const rows = imp.rows.map(x => ({ ...x }));
+  const p = rows[n], have = galleryOf(p);
+  const added = [], skipped = [];
+  for (const f of req.files || []) {
+    const ext = PHOTO_EXT[f.mimetype];
+    if (!ext) { skipped.push(`${f.originalname || 'file'}: only JPG, PNG, WebP or GIF pictures`); continue; }
+    if (f.size > 10 * 1024 * 1024) { skipped.push(`${f.originalname || 'picture'}: over 10 MB`); continue; }
+    if (have.length + added.length >= MAX_PHOTOS) { skipped.push(`up to ${MAX_PHOTOS} photos per product`); break; }
+    const path = `imports/${imp.id}/row-${n}-${randomUUID()}.${ext}`;
+    const { error } = await admin.storage.from(BUCKET).upload(path, f.buffer, { contentType: f.mimetype, upsert: true });
+    if (error) { skipped.push(`${f.originalname || 'picture'}: ${error.message}`); continue; }
+    added.push(path);
+  }
+  const all = [...have, ...added];
+  p.image_path = all[0] || null; p.extra_images = all.slice(1);
+  if (added.length) {
+    const { error } = await admin.from('product_imports').update({ rows }).eq('id', imp.id);
+    if (error) return res.status(500).json({ error: error.message });
+  }
+  res.json({ count: all.length, added: added.length, skipped });
+});
+
+r.post('/:iid/photo/:n/remove', async (req, res) => {
+  const imp = await loadImport(req.params.iid), n = Number(req.params.n), k = Number(req.body?.k);
+  if (!imp || !imp.rows?.[n]) return res.status(404).json({ error: 'Product not found.' });
+  if (imp.status !== 'review') return res.status(400).json({ error: `This import is already ${imp.status}.` });
+  const rows = imp.rows.map(x => ({ ...x })), p = rows[n], all = galleryOf(p);
+  if (!Number.isInteger(k) || k < 0 || k >= all.length) return res.status(400).json({ error: 'No such photo.' });
+  const [gone] = all.splice(k, 1);
+  p.image_path = all[0] || null; p.extra_images = all.slice(1);
+  const { error } = await admin.from('product_imports').update({ rows }).eq('id', imp.id);
+  if (error) return res.status(500).json({ error: error.message });
+  admin.storage.from(BUCKET).remove([gone]).catch(() => {});
+  res.json({ count: all.length });
 });
 
 /** Apply the review form to the stored import (keeps edits even if the admin leaves and comes back). */
@@ -280,12 +327,12 @@ r.post('/:iid', async (req, res) => {
       (existing || []).push({ id: pid, name: rec.name, supplier_sku: rec.supplier_sku });   // later duplicate rows in the same file update it
     }
     result.product_ids.push(pid);
-    if (p.image_path) {
-      const ext = p.image_path.split('.').pop();
+    for (const [gi, src] of galleryOf(p).entries()) {
+      const ext = src.split('.').pop();
       const dest = `product/${pid}/${randomUUID()}.${ext}`;
-      const { error } = await admin.storage.from(BUCKET).copy(p.image_path, dest);
+      const { error } = await admin.storage.from(BUCKET).copy(src, dest);
       if (!error) {
-        await admin.from('documents').insert({ entity_type: 'product', entity_id: pid, kind: 'product_photo', title: `${p.supplier_sku || p.name}.${ext}`,
+        await admin.from('documents').insert({ entity_type: 'product', entity_id: pid, kind: 'product_photo', title: `${p.supplier_sku || p.name}${gi ? '-' + (gi + 1) : ''}.${ext}`,
           storage_path: dest, mime_type: IMG_TYPES[ext] || 'image/png', client_visible: true, uploaded_by: req.user.id });
         result.photos++;
       }

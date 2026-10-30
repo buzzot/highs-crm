@@ -110,7 +110,7 @@
     %>
       <tr class="main <%= hasErr ? 'err' : issues.length ? 'warnrow' : '' %>" data-flag="<%= issues.length ? 1 : 0 %>">
         <td><input type="checkbox" class="inc" name="rows[<%= i %>][include]" <%= p.include !== false ? 'checked' : '' %>></td>
-        <td><% if (p.image_path) { %><img class="thumb lg" src="/admin/products/import/<%= imp.id %>/image/<%= i %>" alt=""><% } else { %><span class="thumb lg empty" title="No photo"></span><% } %></td>
+        <td class="phcell"><div class="phz" data-ph data-n="<%= i %>" data-count="<%= p.photos || 0 %>" tabindex="0" role="button" aria-label="Product photo: click to choose, or drop or paste a picture"><% if (p.photos) { %><img class="phimg" src="/admin/products/import/<%= imp.id %>/image/<%= i %>" alt=""><% } else { %><span class="phempty"><%- icon('plus') %></span><% } %></div></td>
         <td class="pcell">
           <input class="pname <%= badField('name') %>" name="rows[<%= i %>][name]" value="<%= v(p.name) %>" placeholder="Product name">
           <div class="sub2">
@@ -178,6 +178,77 @@
 </fieldset>
 </form>
 <script>
+  // product photos: the frame shows the first photo (read from the file or added here); click, drop or paste to add more
+  (function () {
+    const IMP = <%- JSON.stringify(imp.id) %>, zones = [...document.querySelectorAll('[data-ph]')]; if (!zones.length) return;
+    const input = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif', multiple: true, hidden: true });
+    document.body.appendChild(input);
+    let target = null, hover = null;
+    const url = (z, k) => `/admin/products/import/${IMP}/image/${z.dataset.n}?k=${k}&v=${z.dataset.v || 0}`;
+    const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt) e.textContent = txt; return e; };
+    function render(z) {
+      const n = Number(z.dataset.count), cell = z.parentElement;
+      z.querySelectorAll('.phimg, .phempty, .phx, .phbadge').forEach(x => x.remove());
+      if (n) {
+        const img = el('img', 'phimg'); img.alt = ''; img.src = url(z, 0); z.appendChild(img);
+        z.appendChild(rm(z, 0));
+        if (n > 1) z.appendChild(el('span', 'phbadge', n + ' photos'));
+      } else { const e = el('span', 'phempty'); e.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>'; z.appendChild(e); }
+      z.title = n ? 'Click, drop or paste a picture to add another photo' : 'No photo — click, drop or paste a picture';
+      cell.querySelectorAll('.phmore').forEach(x => x.remove());
+      if (n > 1) {
+        const more = el('div', 'phmore');
+        for (let k = 1; k < n; k++) { const t = el('span', 'phthumb'); const im = el('img'); im.alt = ''; im.src = url(z, k); t.appendChild(im); t.appendChild(rm(z, k)); more.appendChild(t); }
+        cell.appendChild(more);
+      }
+    }
+    function rm(z, k) {
+      const b = el('button', 'phx', '×'); b.type = 'button'; b.setAttribute('aria-label', 'Remove this photo');
+      b.addEventListener('click', async e => {
+        e.stopPropagation(); e.preventDefault();
+        const r = await fetch(`/admin/products/import/${IMP}/photo/${z.dataset.n}/remove`, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ k }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) return say(z, j.error || 'Could not remove the photo.');
+        z.dataset.count = j.count; z.dataset.v = Date.now(); render(z);
+      });
+      return b;
+    }
+    function say(z, msg) {
+      const cell = z.parentElement; cell.querySelectorAll('.pherr').forEach(x => x.remove());
+      if (!msg) return; const e = el('div', 'pherr', msg); cell.appendChild(e); setTimeout(() => e.remove(), 6000);
+    }
+    async function send(z, files) {
+      const list = [...files].filter(f => /^image\//.test(f.type));
+      if (!list.length) return say(z, 'Only pictures can be added here (JPG, PNG, WebP or GIF).');
+      const fd = new FormData(); list.forEach(f => fd.append('files', f, f.name || 'pasted.png'));
+      z.classList.add('busy'); say(z, '');
+      try {
+        const r = await fetch(`/admin/products/import/${IMP}/photo/${z.dataset.n}`, { method: 'POST', body: fd, headers: { Accept: 'application/json' } });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.error || 'Could not add the photo.');
+        z.dataset.count = j.count; z.dataset.v = Date.now(); render(z);
+        if (j.skipped && j.skipped.length) say(z, j.skipped[0]);
+      } catch (e) { say(z, e.message); } finally { z.classList.remove('busy'); }
+    }
+    zones.forEach(z => {
+      render(z);
+      z.addEventListener('click', e => { if (e.target.closest('.phx')) return; target = z; input.value = ''; input.click(); });
+      z.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); target = z; input.click(); } });
+      z.addEventListener('mouseenter', () => { hover = z; });
+      z.addEventListener('mouseleave', () => { if (hover === z) hover = null; });
+      ['dragenter', 'dragover'].forEach(t => z.addEventListener(t, e => { e.preventDefault(); z.classList.add('over'); }));
+      ['dragleave', 'drop'].forEach(t => z.addEventListener(t, () => z.classList.remove('over')));
+      z.addEventListener('drop', e => { e.preventDefault(); send(z, e.dataTransfer.files); });
+    });
+    input.addEventListener('change', () => { if (target && input.files.length) send(target, input.files); });
+    // paste a screenshot or copied picture: it goes to the frame under the mouse (or the one you clicked last), never while typing text
+    document.addEventListener('paste', e => {
+      const files = [...(e.clipboardData?.files || [])].filter(f => /^image\//.test(f.type)); if (!files.length) return;
+      if (e.target.closest && e.target.closest('input, textarea') && e.clipboardData.getData('text/plain')) return;
+      const z = hover || (document.activeElement && document.activeElement.closest && document.activeElement.closest('[data-ph]')) || target;
+      if (!z) return; e.preventDefault(); send(z, files);
+    });
+  })();
   (function () {
     const f = document.getElementById('reviewForm'); if (!f) return;
     const incs = [...f.querySelectorAll('input.inc')];
