@@ -125,11 +125,14 @@
     <div class="pe-col pe-right">
   <%# ---------------- 2. Photos, documents & AI ---------------- %>
   <section class="pe-card" id="sec-photos">
-    <h2>Photos, documents &amp; AI</h2>
+    <div class="pe-h"><h2>Photos, documents &amp; AI</h2>
+      <div class="pe-tools"><button type="button" class="btn small" id="fileAdd">+ Add files</button></div></div>
+    <input type="file" id="fileInput" multiple hidden accept=".jpg,.jpeg,.png,.webp,.gif,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.dwg,.dxf">
+    <p class="pe-empty" id="attEmpty" <%= PH.length || DOCS.length ? 'hidden' : '' %>>No files yet. Use <strong>+ Add files</strong> — or drop files here, or paste an image — for product photos, specification sheets and datasheets.</p>
     <div class="pe-attach">
-      <div class="pe-attcol">
+      <div class="pe-attcol" id="phBlock" <%= PH.length ? '' : 'hidden' %>>
         <div class="pe-h"><h3>Product photos <span class="cnt" id="phCount"><%= PH.length %></span> <%- tip('JPG, PNG, WebP or GIF, up to 12 at a time, 10 MB each. Drop images on the gallery or paste one from the clipboard.' + (HASP ? '' : ' The first photo uploaded is the main one.') + ' Removing a stored photo only takes effect when you press Save changes.') %></h3>
-          <div class="pe-tools"><button type="button" class="btn small" id="phAdd">+ Add photos</button></div></div>
+</div>
         <input type="file" name="photos" id="photoInput" multiple hidden accept="image/jpeg,image/png,image/webp,image/gif">
     <div class="pe-gal" id="photoDrop" tabindex="0" aria-label="Product photos. Drop images here or paste from the clipboard.">
       <% PH.forEach((ph) => { %>
@@ -143,13 +146,12 @@
         </figure>
       <% }) %>
       <div id="photoPreview" class="pe-newwrap" style="display:contents"></div>
-      <div class="pe-empty" id="phEmpty" <%= PH.length ? 'hidden' : '' %>>No photos yet. <button type="button" class="linkbtn" id="phAdd2">Add photos</button>, drag them here, or paste an image (Ctrl/⌘ V).</div>
     </div>
       </div>
 
-      <div class="pe-attcol" id="docPanel">
-        <div class="pe-h"><h3>Documents <span class="cnt" id="docCount"><%= DOCS.length %></span> <%- tip('Specification sheets, datasheets, catalogue pages, drawings and certificates (PDF, Word, Excel, CSV, text, DWG/DXF; 10 MB each). They are saved with the product, kept internal (not shown to clients) and are never deleted by the AI. To replace one, add the new file and remove the old one, then save.') %></h3>
-          <div class="pe-tools"><select name="doc_kind" id="docKind" class="pe-mini" aria-label="Save new documents as"><option value="other">Save as: Document</option><option value="certificate">Save as: Certificate</option></select><button type="button" class="btn small" id="docAdd">+ Add documents</button></div></div>
+      <div class="pe-attcol" id="docPanel" <%= DOCS.length ? '' : 'hidden' %>>
+        <div class="pe-h"><h3>Documents <span class="cnt" id="docCount"><%= DOCS.length %></span> <%- tip('Specification sheets, datasheets, catalogue pages, drawings and certificates (PDF, Word, Excel, CSV, text, DWG/DXF; 10 MB each, up to 10 at a time). They are saved with the product, kept internal (not shown to clients) and are never deleted by the AI. To replace one, add the new file and remove the old one, then save.') %></h3>
+          </div>
         <input type="file" name="docs" id="docInput" multiple hidden accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.dwg,.dxf">
         <ul class="pe-docs" id="docList" aria-label="Product documents">
           <% DOCS.forEach(d => { %>
@@ -164,7 +166,6 @@
           <% }) %>
         </ul>
         <div id="docNew"></div>
-        <div class="pe-empty" id="docEmpty" <%= DOCS.length ? 'hidden' : '' %>>No documents yet. <button type="button" class="linkbtn" id="docAdd2">Add a specification sheet or datasheet</button>, or drop files here.</div>
       </div>
     </div>
     <% if (AI) { %>
@@ -242,9 +243,9 @@
   var MAX = 10 * 1048576, files = [], docFiles = [], PRODUCT_ID = <%- JSON.stringify(p.id || '') %>;
 
   // ---------- photos: gallery, add / drop / paste, preview, remove ----------
-  var input = $('photoInput'), drop = $('photoDrop'), prev = $('photoPreview'), empty = $('phEmpty');
+  var input = $('photoInput'), drop = $('photoDrop'), prev = $('photoPreview');
   var OK = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-  function count() { var n = drop.querySelectorAll('.pe-ph:not(.rm)').length; $('phCount').textContent = n; empty.hidden = n > 0; }
+  function count() { var n = drop.querySelectorAll('.pe-ph:not(.rm)').length; $('phCount').textContent = n; attState(); }
   function sync() {
     var dt = new DataTransfer(); files.forEach(function (f) { dt.items.add(f); }); input.files = dt.files;
     prev.innerHTML = '';
@@ -264,11 +265,6 @@
   }
   window.__photoFiles = function () { return files; };
   function add(list) { var skipped = 0; [].forEach.call(list, function (f) { if (OK.indexOf(f.type) >= 0 && files.length < 12) files.push(f); else skipped++; }); if (skipped) stat(skipped + ' file' + (skipped === 1 ? ' was' : 's were') + ' skipped (wrong type, or more than 12).'); sync(); }
-  $('phAdd').addEventListener('click', function () { input.click(); }); $('phAdd2').addEventListener('click', function () { input.click(); });
-  input.addEventListener('change', function () { var picked = [].slice.call(input.files); files = files.filter(function (f) { return picked.indexOf(f) < 0; }); add(picked); });
-  ['dragenter', 'dragover'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('over'); }); });
-  ['dragleave', 'drop'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('over'); }); });
-  drop.addEventListener('drop', function (e) { add(e.dataTransfer.files); });
   document.addEventListener('paste', function (e) { var imgs = [].filter.call((e.clipboardData && e.clipboardData.files) || [], function (f) { return OK.indexOf(f.type) >= 0; }); if (imgs.length) { e.preventDefault(); add(imgs); } });
   // a stored photo that cannot be loaded shows a neutral tile instead of a broken image
   document.querySelectorAll('img[data-pimg]').forEach(function (img) { img.addEventListener('error', function () { var b = img.parentNode; b.classList.add('broken'); b.title = 'This photo could not be loaded'; img.remove(); }, { once: true }); });
@@ -297,9 +293,11 @@
   count();
 
   // ---------- documents: specification sheets, datasheets, drawings, certificates (saved with the product, internal) ----------
-  var dIn = $('docInput'), dNew = $('docNew'), dList = $('docList'), dEmpty = $('docEmpty'), dPanel = $('docPanel'), DOC_RE = /\.(pdf|docx?|xlsx?|csv|txt|dwg|dxf)$/i;
+  var dIn = $('docInput'), dNew = $('docNew'), dList = $('docList'), dPanel = $('docPanel'), DOC_RE = /\.(pdf|docx?|xlsx?|csv|txt|dwg|dxf)$/i;
   var DT = { pdf: 'PDF', doc: 'Word', docx: 'Word', xls: 'Excel', xlsx: 'Excel', csv: 'CSV', txt: 'Text', dwg: 'Drawing', dxf: 'Drawing' };
-  function dcount() { var n = dList.querySelectorAll('.pe-doc:not(.rm)').length + docFiles.length; $('docCount').textContent = n; dEmpty.hidden = n > 0; }
+  function dcount() { var n = dList.querySelectorAll('.pe-doc:not(.rm)').length + docFiles.length; $('docCount').textContent = n; attState(); }
+  // photos and documents are two blocks of one card: a block shows only when it has something (a removed item stays until saved, so Undo remains)
+  function attState() { if (!dList) return; var np = drop.querySelectorAll('.pe-ph').length, nd = dList.querySelectorAll('.pe-doc').length + docFiles.length; $('phBlock').hidden = !np; dPanel.hidden = !nd; $('attEmpty').hidden = !!(np || nd); }
   function dsync() {
     var dt = new DataTransfer(); docFiles.forEach(function (f) { dt.items.add(f); }); dIn.files = dt.files; dNew.innerHTML = '';
     docFiles.forEach(function (f, i) {
@@ -313,11 +311,18 @@
     dcount(); document.dispatchEvent(new CustomEvent('photofiles')); dirty();
   }
   function dadd(list) { var skipped = 0; [].forEach.call(list, function (f) { if (DOC_RE.test(f.name) && docFiles.length < 10) docFiles.push(f); else skipped++; }); if (skipped) stat(skipped + ' file' + (skipped === 1 ? ' was' : 's were') + ' skipped (not a supported document type, or more than 10).'); dsync(); }
-  $('docAdd').addEventListener('click', function () { dIn.click(); }); $('docAdd2').addEventListener('click', function () { dIn.click(); });
-  dIn.addEventListener('change', function () { var picked = [].slice.call(dIn.files); docFiles = docFiles.filter(function (f) { return picked.indexOf(f) < 0; }); dadd(picked); });
-  ['dragenter', 'dragover'].forEach(function (ev) { dPanel.addEventListener(ev, function (e) { e.preventDefault(); dPanel.classList.add('over'); }); });
-  ['dragleave', 'drop'].forEach(function (ev) { dPanel.addEventListener(ev, function (e) { e.preventDefault(); dPanel.classList.remove('over'); }); });
-  dPanel.addEventListener('drop', function (e) { dadd(e.dataTransfer.files); });
+  // one entry point for photos and documents: images go to Photos, everything else to Documents
+  var fileIn = $('fileInput'), card = $('sec-photos');
+  function addAny(list) {
+    var all = [].slice.call(list), imgs = all.filter(function (f) { return OK.indexOf(f.type) >= 0; }), docs = all.filter(function (f) { return OK.indexOf(f.type) < 0 && DOC_RE.test(f.name); }), bad = all.length - imgs.length - docs.length;
+    if (imgs.length) add(imgs); if (docs.length) dadd(docs);
+    if (bad) stat(bad + ' file' + (bad === 1 ? ' was' : 's were') + ' skipped (not a photo or a supported document).');
+  }
+  $('fileAdd').addEventListener('click', function () { fileIn.click(); });
+  fileIn.addEventListener('change', function () { var picked = [].slice.call(fileIn.files); fileIn.value = ''; addAny(picked); });
+  ['dragenter', 'dragover'].forEach(function (ev) { card.addEventListener(ev, function (e) { if (e.dataTransfer && [].indexOf.call(e.dataTransfer.types || [], 'Files') >= 0) { e.preventDefault(); card.classList.add('over'); } }); });
+  card.addEventListener('dragleave', function (e) { if (!card.contains(e.relatedTarget)) card.classList.remove('over'); });
+  card.addEventListener('drop', function (e) { e.preventDefault(); card.classList.remove('over'); addAny(e.dataTransfer.files); });
   // a stored document is only marked here; the file is deleted when the whole form is saved (Undo until then)
   function markDoc(li, on) { li.querySelector('input[name=remove_doc]').checked = on; li.classList.toggle('rm', on); li.querySelector('.pe-rmnote2').hidden = !on; li.querySelector('.pe-dact').hidden = on; dcount(); document.dispatchEvent(new CustomEvent('photofiles')); dirty(); }
   dList.addEventListener('click', function (e) {

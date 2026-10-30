@@ -169,7 +169,7 @@ test('documents: listed with type, date, size, View / Download; internal by defa
   assert.match(docs, /2026-10-02 · 471 KB/); assert.match(docs, />View</); assert.match(docs, />Download</); assert.match(docs, /\/admin\/documents\/d1\/download/);
   assert.match(docs, /name="remove_doc" value="d1" hidden/); assert.match(docs, /Removed when you save/);
   assert.match(docs, /· visible to client/); assert.equal((docs.match(/visible to client/g) || []).length, 1, 'only the one that really is client-visible is flagged');
-  assert.match(h, /name="docs"/); assert.match(h, /name="doc_kind"/);
+  assert.match(h, /name="docs"/); assert.doesNotMatch(h, /name="doc_kind"/);
   assert.match(html('admin/products/form#nophotos').replace(/\s+/g, ' '), /id="docCount">3</);
 });
 test('documents: the AI can read saved PDFs, not spreadsheets', () => {
@@ -191,4 +191,18 @@ test('routes: documents are saved internal, removal is limited to this product, 
   assert.match(r, /clientVisible: false/); assert.match(r, /neq\('kind', 'product_photo'\)\.in\('id', rmDocs\)/);
   assert.match(r, /req\.body\.stored/); assert.match(r, /entity_id', String\(req\.body\.product_id\)/); assert.match(r, /extractProductCard/);
   assert.match(r, /name: 'docs', maxCount/);
+});
+
+test('one upload entry point: a single "+ Add files" button; photos and documents are sorted by type', () => {
+  const h = html('admin/products/form#edit');
+  assert.equal((h.match(/<button[^>]*>\+ Add (files|photos|documents)</g) || []).length, 1); assert.match(h, /id="fileAdd">\+ Add files</);
+  for (const gone of ['id="phAdd"', 'id="docAdd"', 'id="phAdd2"', 'id="docAdd2"', 'Save as:']) assert.ok(!h.includes(gone), gone);
+  assert.match(h, /id="fileInput"[^>]*accept="[^"]*\.pdf[^"]*\.jpg|id="fileInput"[^>]*accept="\.jpg[^"]*\.pdf/);
+  assert.match(h, /name="photos"/); assert.match(h, /name="docs"/, 'the two form fields still carry the files to the same server fields');
+});
+test('empty attachments: one short line, no empty blocks', () => {
+  const h = html('admin/products/form#nofiles');
+  assert.match(h, /id="attEmpty" >|id="attEmpty">/); assert.doesNotMatch(h, /id="attEmpty" hidden/);
+  assert.match(h, /id="phBlock" hidden/); assert.match(h, /id="docPanel" hidden/);
+  const full = html('admin/products/form#edit'); assert.match(full, /id="attEmpty" hidden/); assert.doesNotMatch(full, /id="phBlock" hidden/);
 });

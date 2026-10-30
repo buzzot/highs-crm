@@ -2606,7 +2606,7 @@ html:has(.pe){scroll-padding-bottom:110px}
 .pe-cols .pe-group{margin-top:14px;padding-top:0;border-top:0}
 .pe-cols .pe-spec{grid-template-columns:minmax(0,1fr)!important}
 .pe-cols .pe-attach{grid-template-columns:minmax(0,1fr);gap:18px}
-.pe-cols .pe-attcol+.pe-attcol{padding-top:14px;border-top:1px solid var(--line-2)}
+.pe-cols #phBlock:not([hidden])+.pe-attcol{padding-top:14px;border-top:1px solid var(--line-2)}
 .pe-cols .pe-ai{margin-top:14px;padding-top:14px}
 .pe-cols .pe-empty{padding:6px 2px;font-size:13px}
 .pe-cols .pe-gal{min-height:0}
@@ -2632,3 +2632,6 @@ html:has(.pe){scroll-padding-bottom:110px}
   .pe-cbmrow{display:flex;flex-wrap:wrap}.pe-cbmrow .field--compact{width:120px;flex:0 0 120px}
 }
 .pe-dims .pe-row{gap:12px}.pe-dims .pe-row .field--compact{flex-basis:100px;width:100px}
+.pe-card.over{outline:2px dashed var(--accent);outline-offset:-6px;background:var(--accent-soft)}
+.pe-cols .pe-attach>.pe-attcol:first-child{padding-top:0;border-top:0}
+.pe-attcol[hidden],#attEmpty[hidden]{display:none}
