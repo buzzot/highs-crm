@@ -79,21 +79,18 @@
 
   <section class="card">
     <div class="pi-ch"><span class="n">3</span><h2>Freight &amp; total</h2></div>
-    <div class="pi-fr">
-      <label>Freight <span class="pi-suf"><input type="number" step="0.01" min="0" max="99999999.99" name="freight_amount" id="fr_amt" value="<%= fr.amount || '' %>" placeholder="0.00" class="r"><em><%= cur %></em></span></label>
-      <label>Buffer <span class="pi-suf"><input type="number" step="0.1" min="0" max="100" name="freight_buffer" id="fr_buf" value="<%= fr.buffer_pct || '' %>" placeholder="0" class="r"><em>%</em></span></label>
-      <div><span class="pi-lab">How the client sees it</span>
+    <div class="pi-g2">
+      <div><label>Freight <span class="pi-suf"><input type="number" step="0.01" min="0" max="99999999.99" name="freight_amount" id="fr_amt" value="<%= fr.amount || '' %>" placeholder="0.00"><em><%= cur %></em></span></label>
+        <div class="pi-chips"><% if (shipCost > 0) { %><button type="button" class="pc" id="fr_use">Order shipment cost <%= fmt.money(shipCost, order.currency || cur) %></button><% } else { %><span class="pi-hint">No shipment cost on the order yet</span><% } %></div></div>
+      <div><label>Buffer <span class="pi-suf"><input type="number" step="0.1" min="0" max="100" name="freight_buffer" id="fr_buf" value="<%= fr.buffer_pct || '' %>" placeholder="0"><em>%</em></span></label>
+        <div class="pi-chips"><% [0, 3, 5, 10].forEach(n => { %><button type="button" class="pc" data-buf="<%= n %>"><%= n %>%</button><% }) %><span id="fr_calc" class="pi-hint" hidden></span></div></div>
+    </div>
+    <div class="pi-g2 pi-mt">
+      <div><span class="pi-lab">How the client sees freight</span>
         <div class="pi-seg" role="radiogroup" aria-label="How the client sees freight">
           <% [['none', 'None'], ['separate', 'Separate line'], ['included', 'Included']].forEach(([v, t]) => { %><label><input type="radio" name="freight_mode" value="<%= v %>" <%= (fr.mode || 'none') === v ? 'checked' : '' %>><span><%= t %></span></label><% }) %>
-        </div></div>
-    </div>
-    <div class="pi-chips">
-      <% if (shipCost > 0) { %><span class="pi-note">Shipment cost on the order: <strong><%= fmt.money(shipCost, order.currency || cur) %></strong> <button type="button" class="link" id="fr_use">Use it as freight</button></span>
-      <% } else { %><span class="pi-note">No shipment cost on the order yet — type the freight, or add it on the shipment page.</span><% } %>
-      <span id="fr_calc" class="pi-note" hidden></span>
-    </div>
-    <div class="pi-sum2">
-      <div class="pi-see" id="fr_see"></div>
+        </div>
+        <div class="pi-hint pi-hint-b" id="fr_see"></div></div>
       <div class="pi-tot">
         <div><span>Goods</span><b class="r num" id="tGoods">0.00</b></div>
         <div id="tFrRow" hidden><span id="tFrLbl">Freight</span><b class="r num" id="tFr">0.00</b></div>
@@ -218,8 +215,8 @@
     const mode = (F.querySelector('[name=freight_mode]:checked') || {}).value || 'none';
     const base = num($('fr_amt').value), buf = num($('fr_buf').value);
     const fr = mode === 'none' ? 0 : Math.round(base * (1 + Math.max(0, buf) / 100) * 100) / 100;
-    const fc = $('fr_calc'); fc.hidden = !(mode !== 'none' && base > 0 && buf > 0); fc.textContent = 'Buffer adds ' + fmt(base * buf / 100) + ' ' + CUR + ' → ' + fmt(base * (1 + buf / 100)) + ' ' + CUR;
-    $('tFrLbl').textContent = buf > 0 ? 'Freight (incl. ' + buf + '% buffer)' : 'Freight';
+    const fc = $('fr_calc'); fc.hidden = !(mode !== 'none' && base > 0 && buf > 0); fc.textContent = '+' + fmt(base * buf / 100) + ' ' + CUR;
+    $('tFrLbl').textContent = buf > 0 ? 'Freight (incl. ' + buf + '% buffer)' : 'Freight'; q('[data-buf]').forEach(b => b.classList.toggle('on', num(b.dataset.buf) === buf));
     $('fr_see').innerHTML = mode === 'none' || !(fr > 0) ? '<b>Client sees goods only.</b> No freight on the invoice.' : mode === 'separate' ? '<b>Client sees a separate Freight line</b> of ' + fmt(fr) + ' ' + CUR + '. The buffer is not shown.' : '<b>Freight is spread into the unit prices.</b> Prices rise by about ' + (goods > 0 ? (fr / goods * 100).toFixed(1) : '0') + '% and no freight line appears.';
     const total = Math.round((goods + fr) * 100) / 100;
     $('tGoods').textContent = fmt(mode === 'included' ? goods + fr : goods);
@@ -279,6 +276,7 @@
   // quick choices
   q('[data-lead]').forEach(b => b.onclick = () => { $('lead').value = b.dataset.lead; mark(); });
   q('[data-vu]').forEach(b => b.onclick = () => { const d = new Date(); d.setDate(d.getDate() + Number(b.dataset.vu)); $('vu').value = d.toISOString().slice(0, 10); mark(); calc(); });
+  q('[data-buf]').forEach(b => { b.onclick = () => { $('fr_buf').value = b.dataset.buf === '0' ? '' : b.dataset.buf; mark(); calc(); }; });
   if ($('fr_use')) $('fr_use').onclick = () => { $('fr_amt').value = SHIP; mark(); calc(); };
   // bill to / bank details
   const syncBill = () => q('[data-bill]').forEach(dd => { const el = F.querySelector('[name="' + dd.dataset.bill + '"]'), v = el ? el.value.trim() : ''; dd.textContent = v || '— not set'; dd.className = v ? (/address/.test(dd.dataset.bill) ? 'pre' : '') : 'none'; });
@@ -310,7 +308,7 @@
   }
   const fmtD = d => { const t = new Date(d + 'T00:00:00'); return t.getTime() !== t.getTime() ? d : t.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }); };
   const srcs = i => [i.quote && { k: 'Quotation', ...i.quote, label: 'Quotation · ' + fmtD(i.quote.date) }, i.po && { k: 'Client PO', ...i.po, label: 'Client PO ' + i.po.ref + ' · ' + fmtD(i.po.date) }, ...(i.hist || []).slice(0, 1).map(x => ({ k: 'Last order', ...x, ref: x.order_no, label: 'Last order ' + x.order_no + ' · ' + fmtD(x.date) }))].filter(Boolean);
-  const showClock = row => { const i = row._info; row.querySelector('[data-clock]').hidden = !(i && (srcs(i).length || i.cost != null)); };
+  const showClock = row => { const i = row._info; row.querySelector('[data-clock]').hidden = !i; };
   function renderWarns(row, flags) {
     row.querySelector('[data-warns]').innerHTML = flags.map(f => '<div class="pi-w ' + f.kind + '"><span>' + h(f.text) + '</span>' + (f.use != null ? '<button type="button" data-use="' + PF.trim4(f.use) + '">Use ' + PF.money(f.use) + '</button>' : '') + '</div>').join('');
   }
@@ -367,12 +365,12 @@
     const i = row._info; if (!i) return ''; const price = num(priceEl(row).value);
     const pill = pr => { const m = PF.marginAt(pr, i.cost); if (m == null) return ''; return '<span class="pill ' + (pr < i.cost ? 'b' : m < MINM ? 'a' : 'g') + '" title="Margin over supplier price">' + m.toFixed(0) + '%</span>'; };
     let t = '<h4>Price sources · this client</h4>';
-    const list = srcs(i);
-    t += list.length ? list.map(x => '<div class="pi-l" data-use="' + PF.trim4(x.price) + '"><span><b>' + h(x.k) + '</b> <small>' + h(x.k === 'Last order' ? x.order_no + ' · ' + fmtD(x.date) : x.k === 'Client PO' ? x.ref + ' · ' + fmtD(x.date) : fmtD(x.date)) + '</small></span><span class="p">' + M(x.price) + (x.cur_orig !== CUR ? '<small> ≈ ' + M(x.price_orig) + ' ' + h(x.cur_orig) + '</small>' : '') + '</span>' + pill(x.price) + '</div>').join('') : '<div class="pi-mut">No quotation, PO or earlier order for this client.</div>';
+    const have = srcs(i), line = x => '<div class="pi-l" data-use="' + PF.trim4(x.price) + '"><span><b>' + h(x.k) + '</b> <small>' + h(x.k === 'Last order' ? x.order_no + ' · ' + fmtD(x.date) : x.k === 'Client PO' ? x.ref + ' · ' + fmtD(x.date) : fmtD(x.date)) + '</small></span><span class="p">' + M(x.price) + (x.cur_orig !== CUR ? '<small> ≈ ' + M(x.price_orig) + ' ' + h(x.cur_orig) + '</small>' : '') + '</span>' + pill(x.price) + '</div>';
+    t += ['Quotation', 'Client PO', 'Last order'].map(k => { const x = have.find(y => y.k === k); return x ? line(x) : '<div class="pi-l none"><span><b>' + k + '</b></span><span class="p">none</span><span></span></div>'; }).join('');
     if (i.cost != null) { const m = PF.marginAt(price, i.cost); t += '<div class="pi-cost"><span>Supplier price</span><b>' + M(i.cost) + ' ' + CUR + '</b></div>' + (m != null ? '<div class="pi-cost"><span>Margin at ' + M(price) + '</span><b>' + m.toFixed(0) + '%</b></div>' : ''); }
     return t + '<div class="pi-tip">Click a line to use that price. Staff only — never on the PDF.</div>';
   }
-  function showPop(row, on) { const pop = row.querySelector('[data-pop]'), i = row._info; if (on && PF && i && (srcs(i).length || i.cost != null)) { pop.innerHTML = popHtml(row); pop.hidden = false; } else pop.hidden = true; }
+  function showPop(row, on) { const pop = row.querySelector('[data-pop]'), i = row._info; if (on && PF && i) { pop.innerHTML = popHtml(row); pop.hidden = false; } else pop.hidden = true; }
   rowsEl.addEventListener('mouseover', e => { const pc = e.target.closest('.pi-pc'); if (pc) showPop(pc.closest('[data-row]'), true); });
   rowsEl.addEventListener('mouseout', e => { const pc = e.target.closest('.pi-pc'); if (pc && !pc.contains(e.relatedTarget)) showPop(pc.closest('[data-row]'), false); });
   rowsEl.addEventListener('focusin', e => { if (e.target.name && /\[unit_price\]$/.test(e.target.name)) showPop(e.target.closest('[data-row]'), true); });
