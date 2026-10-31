@@ -5,7 +5,7 @@
    const INC = ['EXW', 'FOB', 'CIF', 'DAP']; const incs = d.incoterm && !INC.includes(d.incoterm) ? [...INC, d.incoterm] : INC;
    const lines = d.lines && d.lines.length ? d.lines : [{ description: '', sku: '', quantity: '', unit: 'pcs', unit_price: '' }];
    const sch = (d.schedule && d.schedule.length ? d.schedule : []).map(x => ({ label: x.label || '', percent: x.percent || '', due: x.due || '' }));
-   const billRows = [['Company', b.company], ['Email', b.email], ['Phone', b.phone], ['Contact', b.contact]];
+   const billRows = [['Company', 'company', b.company], ['Email', 'email', b.email], ['Phone', 'phone', b.phone], ['Contact', 'contact', b.contact]];
    const planKey = JSON.stringify(sch.map(x => Number(x.percent))); %>
 <div class="pagehead">
   <div><a class="back" href="/admin/orders/<%= order.id %>">← Order <%= order.order_no %></a><h1>Proforma invoice <%= p.pi_no %></h1>
@@ -26,8 +26,8 @@
   <section class="card">
     <div class="pi-ch"><span class="n">1</span><h2>Bill to</h2><button type="button" class="link" id="billBtn">Edit</button></div>
     <div class="pi-bill" id="billView">
-      <dl><% billRows.forEach(([k, v]) => { %><dt><%= k %></dt><dd class="<%= v ? '' : 'none' %>"><%= v || '— not set' %></dd><% }) %></dl>
-      <dl><dt>Address</dt><dd class="<%= b.address ? 'pre' : 'none' %>"><%= b.address || '— not set' %></dd><dt>Delivery</dt><dd class="<%= b.delivery_address ? 'pre' : 'none' %>"><%= b.delivery_address || '— not set' %></dd></dl>
+      <dl><% billRows.forEach(([k, f, v]) => { %><dt><%= k %></dt><dd data-bill="<%= f %>" class="<%= v ? '' : 'none' %>"><%= v || '— not set' %></dd><% }) %></dl>
+      <dl><dt>Address</dt><dd data-bill="address" class="<%= b.address ? 'pre' : 'none' %>"><%= b.address || '— not set' %></dd><dt>Delivery</dt><dd data-bill="delivery_address" class="<%= b.delivery_address ? 'pre' : 'none' %>"><%= b.delivery_address || '— not set' %></dd></dl>
     </div>
     <div id="billEdit" hidden>
       <div class="pi-g4">
@@ -243,7 +243,9 @@
   q('[data-vu]').forEach(b => b.onclick = () => { const d = new Date(); d.setDate(d.getDate() + Number(b.dataset.vu)); $('vu').value = d.toISOString().slice(0, 10); mark(); calc(); });
   if ($('fr_use')) $('fr_use').onclick = () => { $('fr_amt').value = SHIP; mark(); calc(); };
   // bill to / bank details
-  $('billBtn').onclick = () => { const on = !$('billEdit').hidden; $('billEdit').hidden = on; $('billView').hidden = !on; $('billBtn').textContent = on ? 'Edit' : 'Done'; };
+  const syncBill = () => q('[data-bill]').forEach(dd => { const el = F.querySelector('[name="' + dd.dataset.bill + '"]'), v = el ? el.value.trim() : ''; dd.textContent = v || '— not set'; dd.className = v ? (/address/.test(dd.dataset.bill) ? 'pre' : '') : 'none'; });
+  $('billEdit').addEventListener('input', syncBill);
+  $('billBtn').onclick = () => { syncBill(); const on = !$('billEdit').hidden; $('billEdit').hidden = on; $('billView').hidden = !on; $('billBtn').textContent = on ? 'Edit' : 'Done'; };
   $('bankBtn').onclick = () => { const on = !$('bank').hidden; $('bank').hidden = on; $('bankView').hidden = !on; if (on) $('bankView').textContent = $('bank').value || 'No bank details — add them in Settings or press Edit.'; $('bankBtn').textContent = on ? 'Edit' : 'Done'; };
   // sending
   const confirmSend = (extra) => confirm((extra ? 'Some checks are not met:\n' + q('#ck li.no span:last-child').map(s => '• ' + s.textContent).join('\n') + '\n\n' : '') + 'Send the proforma invoice to the client now?');
