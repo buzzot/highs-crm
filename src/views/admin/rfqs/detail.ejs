@@ -141,21 +141,22 @@
     </div>
   </div>
   <label>Message to suppliers<textarea name="message" rows="3"><%= rfq.message || '' %></textarea></label>
-  <table class="tbl" id="rfqItems">
-    <thead><tr><th>Product</th><th>SKU</th><th class="right">Qty</th><th>Unit</th><th>Notes</th><th></th></tr></thead>
+  <table class="tbl rfq-tbl" id="rfqItems">
+    <colgroup><col><col class="c-sku"><col class="c-qty"><col class="c-notes"><col class="c-rm"></colgroup>
+    <thead><tr><th>Product</th><th>SKU</th><th>Quantity</th><th>Notes</th><th></th></tr></thead>
     <tbody>
     <% rfq.items.forEach((it, i) => { %>
       <tr>
         <td><input type="hidden" name="item[<%= i %>][id]" value="<%= it.id %>"><input type="hidden" name="item[<%= i %>][request_item_id]" value="<%= it.request_item_id || '' %>"><input type="hidden" name="item[<%= i %>][spec]" value="<%= JSON.stringify(it.spec || {}) %>"><input name="item[<%= i %>][description]" value="<%= it.description %>" <%= draft ? '' : 'readonly' %>></td>
-        <td><input name="item[<%= i %>][sku]" value="<%= it.sku || '' %>" size="10" <%= draft ? '' : 'readonly' %>></td>
-        <td><input name="item[<%= i %>][quantity]" value="<%= it.quantity ?? '' %>" size="7" class="right" inputmode="decimal"></td>
-        <td><input name="item[<%= i %>][unit]" value="<%= it.unit || 'pcs' %>" size="5"></td>
+        <td><input name="item[<%= i %>][sku]" value="<%= it.sku || '' %>" <%= draft ? '' : 'readonly' %>></td>
+        <td><div class="qtyunit"><input name="item[<%= i %>][quantity]" value="<%= it.quantity ?? '' %>" inputmode="decimal" class="right" aria-label="Quantity"><input name="item[<%= i %>][unit]" value="<%= it.unit || 'pcs' %>" list="rfqUnits" aria-label="Unit"></div></td>
         <td><input name="item[<%= i %>][notes]" value="<%= it.notes || '' %>" <%= draft ? '' : 'readonly' %>></td>
         <td><% if (draft) { %><button type="button" class="link small danger" data-rm>Remove</button><% } %></td>
       </tr>
     <% }) %>
     </tbody>
   </table>
+    <datalist id="rfqUnits"><option>pcs</option><option>sets</option><option>pairs</option><option>m</option><option>kg</option><option>tons</option><option>boxes</option></datalist>
   <% if (draft) { %><p><button type="button" class="btn small" id="addItem">+ Add product</button></p><% } else { %><p class="muted small">After sending you can still change the quantity and unit; the products themselves stay the same so every supplier answers the same list. Suppliers see a new quantity straight away, but prices they already gave are not changed — let them know.</p><% } %>
   <div class="actions"><button class="btn primary">Save</button></div>
 </div>

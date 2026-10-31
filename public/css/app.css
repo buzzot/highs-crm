@@ -3063,3 +3063,18 @@ label>.pi-suf{margin-top:5px}
 .pi-g2>.pi-tot{margin:0;padding:0;border:0;align-self:end;justify-self:end;min-width:260px}
 .pi-g2>.pi-tot div{grid-template-columns:1fr auto;gap:30px}
 @media(max-width:1000px){.pi-g2>.pi-tot{justify-self:stretch}}
+
+/* RFQ product rows: short fields stay short; quantity and unit are one joined control */
+.rfq-tbl{table-layout:fixed}
+.rfq-tbl col.c-sku{width:130px}.rfq-tbl col.c-qty{width:170px}.rfq-tbl col.c-notes{width:36%}.rfq-tbl col.c-rm{width:84px}
+.rfq-tbl td input{width:100%;box-sizing:border-box;margin:0;text-overflow:ellipsis}
+.rfq-tbl td input[readonly]{background:var(--bg);color:var(--ink-2)}
+.qtyunit{display:flex;border:1px solid var(--line);border-radius:7px;background:#fff;overflow:hidden}
+.qtyunit:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px rgba(15,118,110,.18)}
+.qtyunit input{border:0!important;border-radius:0;box-shadow:none!important;background:transparent!important;min-width:0}
+.qtyunit input:first-child{flex:1 1 auto;text-align:right;padding-right:10px}
+.qtyunit input:last-child{flex:0 0 58px;width:58px;border-left:1px solid var(--line)!important;background:var(--bg)!important;color:var(--ink-2);padding:0 8px;text-align:left}
+.rfq-tbl td:last-child{text-align:right;white-space:nowrap}
+@media(max-width:900px){.rfq-tbl col.c-notes{width:30%}}
+.qtyunit input:last-child{flex:0 0 66px;width:66px;padding:0 6px 0 10px;text-overflow:clip}
+.rfq-tbl col.c-qty{width:180px}

@@ -17,21 +17,22 @@
   </div>
   <div class="card">
     <h2>Products</h2>
-    <table class="tbl" id="rfqItems">
-      <thead><tr><th>Product</th><th>SKU</th><th class="right">Qty</th><th>Unit</th><th>Notes for the supplier</th><th></th></tr></thead>
+    <table class="tbl rfq-tbl" id="rfqItems">
+      <colgroup><col><col class="c-sku"><col class="c-qty"><col class="c-notes"><col class="c-rm"></colgroup>
+    <thead><tr><th>Product</th><th>SKU</th><th>Quantity</th><th>Notes for the supplier</th><th></th></tr></thead>
       <tbody>
       <% items.forEach((it, i) => { %>
         <tr>
           <td><input type="hidden" name="item[<%= i %>][id]" value="<%= it.id %>"><input type="hidden" name="item[<%= i %>][request_item_id]" value="<%= it.request_item_id || '' %>"><input type="hidden" name="item[<%= i %>][spec]" value="<%= JSON.stringify(it.spec || {}) %>"><input name="item[<%= i %>][description]" value="<%= it.description %>" placeholder="Product name"></td>
-          <td><input name="item[<%= i %>][sku]" value="<%= it.sku %>" size="10"></td>
-          <td><input name="item[<%= i %>][quantity]" value="<%= it.quantity ?? '' %>" inputmode="numeric" size="7" class="right"></td>
-          <td><input name="item[<%= i %>][unit]" value="<%= it.unit || 'pcs' %>" size="5"></td>
+          <td><input name="item[<%= i %>][sku]" value="<%= it.sku %>"></td>
+          <td><div class="qtyunit"><input name="item[<%= i %>][quantity]" value="<%= it.quantity ?? '' %>" inputmode="decimal" class="right" aria-label="Quantity"><input name="item[<%= i %>][unit]" value="<%= it.unit || 'pcs' %>" list="rfqUnits" aria-label="Unit"></div></td>
           <td><input name="item[<%= i %>][notes]" value="<%= it.notes || '' %>"></td>
           <td><button type="button" class="link small danger" data-rm>Remove</button></td>
         </tr>
       <% }) %>
       </tbody>
     </table>
+    <datalist id="rfqUnits"><option>pcs</option><option>sets</option><option>pairs</option><option>m</option><option>kg</option><option>tons</option><option>boxes</option></datalist>
     <p><button type="button" class="btn small" id="addItem">+ Add product</button></p>
   </div>
   <div class="card" id="rfqFiles" data-ai="<%= aiOn ? '1' : '' %>">
