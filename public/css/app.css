@@ -3068,7 +3068,6 @@ label>.pi-suf{margin-top:5px}
 .rfq-tbl{table-layout:fixed}
 .rfq-tbl col.c-sku{width:130px}.rfq-tbl col.c-qty{width:170px}.rfq-tbl col.c-notes{width:36%}.rfq-tbl col.c-rm{width:84px}
 .rfq-tbl td input{width:100%;box-sizing:border-box;margin:0;text-overflow:ellipsis}
-.rfq-tbl td input[readonly]{background:var(--bg);color:var(--ink-2)}
 .qtyunit{display:flex;border:1px solid var(--line);border-radius:7px;background:#fff;overflow:hidden}
 .qtyunit:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px rgba(15,118,110,.18)}
 .qtyunit input{border:0!important;border-radius:0;box-shadow:none!important;background:transparent!important;min-width:0}
