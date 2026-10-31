@@ -21,21 +21,41 @@ export function buildHistory(rows, cur, rate, limit = 5) {
       };
     });
 }
-export function buildInfo({ product, rows, cur, rate }) {
+const day = d => String(d).slice(0, 10);
+/** The client's quotation for this product: the one behind this order when known, else the newest live one. rows: quotes (+ requests.org_id), newest first not required. */
+export function buildQuote(rows, cur, rate, preferId) {
+  const live = (rows || []).filter(r => !['rejected', 'expired'].includes(r.status) && Number(r.unit_price) > 0).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  const q = live.find(r => r.id === preferId) || live[0]; if (!q) return null;
+  const from = q.sell_currency || cur;
+  return { price: r4(Number(q.unit_price) * rate(from, cur)), price_orig: Number(q.unit_price), cur_orig: from, qty: Number(q.quantity) || 0, date: day(q.created_at), ref: 'Quotation' };
+}
+/** The price on the client's purchase order: this order's PO when known, else the newest live one that has the product. */
+export function buildPo(rows, product, cur, rate, preferOrderId) {
+  const key = d => String(d || '').trim().toLowerCase(), sku = key(product && product.sku), name = key(product && product.name);
+  const hit = po => (po.lines || []).find(l => Number(l.unit_price) > 0 && ((l.product_id && l.product_id === product.id) || (sku && key(l.sku) === sku) || (name && key(l.description) === name)));
+  const live = (rows || []).filter(r => r.status !== 'rejected' && hit(r)).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  const po = live.find(r => r.order_id && r.order_id === preferOrderId) || live[0]; if (!po) return null;
+  const l = hit(po), from = po.currency || cur;
+  return { price: r4(Number(l.unit_price) * rate(from, cur)), price_orig: Number(l.unit_price), cur_orig: from, qty: Number(l.quantity) || 0, date: day(po.created_at), ref: po.po_no };
+}
+export function buildInfo({ product, rows, cur, rate, quotes, pos, orderId, quoteId }) {
   const cost = product && num(product.unit_cost) != null && Number(product.unit_cost) > 0 ? r4(Number(product.unit_cost) * rate(product.cost_currency || 'CNY', cur)) : null;
-  return { product: product ? { id: product.id, name: product.name, sku: product.sku || '', hs_code: product.hs_code || '' } : null, cur, cost, cost_orig: cost != null ? { v: Number(product.unit_cost), cur: product.cost_currency || 'CNY' } : null, hist: buildHistory(rows, cur, rate) };
+  return { product: product ? { id: product.id, name: product.name, sku: product.sku || '', hs_code: product.hs_code || '' } : null, cur, cost, cost_orig: cost != null ? { v: Number(product.unit_cost), cur: product.cost_currency || 'CNY' } : null, hist: buildHistory(rows, cur, rate), quote: product ? buildQuote(quotes, cur, rate, quoteId) : null, po: product ? buildPo(pos, product, cur, rate, orderId) : null };
 }
 
 const ITEM_COLS = 'product_id, quantity, unit_price, unit_cost, orders!inner(id, order_no, org_id, currency, status, created_at)';
 async function rater() { const s = await getSettings(admin); return (a, b) => fxRate(s, a, b); }
 
-export async function loadInfo(productId, orgId, cur) {
-  const [{ data: product }, { data: rows }, rate] = await Promise.all([
+export async function loadInfo(productId, orgId, cur, orderId) {
+  const [{ data: product }, { data: rows }, rate, { data: quotes }, { data: pos }, { data: ord }] = await Promise.all([
     admin.from('products').select('id, name, sku, hs_code, unit_cost, cost_currency').eq('id', productId).maybeSingle(),
     admin.from('order_items').select(ITEM_COLS).eq('product_id', productId).eq('orders.org_id', orgId).gt('unit_price', 0).limit(60),
     rater(),
+    admin.from('quotes').select('id, unit_price, sell_currency, quantity, status, created_at, requests!inner(org_id)').eq('product_id', productId).eq('requests.org_id', orgId).limit(30),
+    admin.from('purchase_orders').select('po_no, order_id, currency, status, created_at, lines').eq('org_id', orgId).order('created_at', { ascending: false }).limit(30),
+    orderId ? admin.from('orders').select('quote_id').eq('id', orderId).maybeSingle() : Promise.resolve({ data: null }),
   ]);
-  return product ? buildInfo({ product, rows, cur, rate }) : null;
+  return product ? buildInfo({ product, rows, cur, rate, quotes, pos, orderId, quoteId: ord && ord.quote_id }) : null;
 }
 
 /** Product search for the picker: matches name / SKU; without a search, the products this client ordered before come first. Each with the last price to this client. */

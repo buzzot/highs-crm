@@ -20,22 +20,26 @@ export function priceFlags({ price, info, tol = TOLERANCE, minMargin = 20 }) {
   const p = Number(price) || 0, out = [];
   if (!info) return out;
   const last = (info.hist || [])[0] || null, cost = info.cost != null ? Number(info.cost) : null, cur = info.cur || '';
-  if (!(p > 0)) { out.push({ code: 'no_price', kind: 'info', text: last || cost != null ? 'No price yet — hover the clock to see earlier prices.' : 'No earlier price and no supplier price — enter the price.' }); return out; }
+  if (!(p > 0)) { out.push({ code: 'no_price', kind: 'info', text: last || info.quote || info.po ? 'No price yet — hover the clock for earlier prices.' : 'No earlier price — enter the price.' }); return out; }
   if (cost != null && cost > 0) {
-    if (p < cost) out.push({ code: 'below_cost', kind: 'bad', text: `Below the supplier price (${money(cost)} ${cur}) — a loss of ${money(cost - p)} per unit.` });
+    if (p < cost) out.push({ code: 'below_cost', kind: 'bad', text: `Below supplier price (${money(cost)} ${cur}) — loss of ${money(cost - p)} per unit.` });
     else { const m = ((p - cost) / p) * 100; if (m < minMargin) out.push({ code: 'low_margin', kind: 'warn', text: `Margin ${m.toFixed(0)}% is below the minimum ${minMargin}%.` }); }
+  }
+  for (const [label, src] of [['Quotation', info.quote], ['Client PO', info.po]]) {
+    if (!src || !(Number(src.price) > 0)) continue;
+    const d = pct(p, src.price);
+    if (Math.abs(d) > tol * 100) out.push({ code: label === 'Quotation' ? 'quote_diff' : 'po_diff', kind: 'warn', use: Number(src.price), text: `${label} price is ${money(src.price)} — ${Math.abs(d).toFixed(1)}% ${d > 0 ? 'lower' : 'higher'} than this price.` });
   }
   if (last && Number(last.price) > 0) {
     const d = pct(p, last.price);
-    if (Math.abs(d) > tol * 100) {
+    if (!info.quote && !info.po && Math.abs(d) > tol * 100) {
       const other = last.cur_orig && last.cur_orig !== cur;
       out.push({ code: 'last_diff', kind: other ? 'info' : 'warn', use: Number(last.price),
-        text: other ? `Last order ${last.order_no} was in ${last.cur_orig} (${money(last.price_orig)} ≈ ${money(last.price)} ${cur}): ${sg(d)} vs that price.`
-          : `Differs from the last order ${last.order_no} (${last.qty} @ ${money(last.price)}): ${sg(d)}.` });
+        text: other ? `Last order ${last.order_no} was ${money(last.price_orig)} ${last.cur_orig} (≈ ${money(last.price)} ${cur}): ${sg(d)}.` : `Last order ${last.order_no} was ${money(last.price)}: ${sg(d)}.` });
     }
     if (last.cost_then != null && cost != null && Number(last.cost_then) > 0 && Math.abs(pct(cost, last.cost_then)) > tol * 100) {
       const mNow = p > 0 ? ((p - cost) / p) * 100 : 0;
-      out.push({ code: 'cost_changed', kind: 'warn', text: `Supplier price changed since the last order: ${money(last.cost_then)} → ${money(cost)} ${cur} (${sg(pct(cost, last.cost_then))}). Margin at this price: ${mNow.toFixed(0)}%.` });
+      out.push({ code: 'cost_changed', kind: 'warn', text: `Supplier price changed since last order: ${money(last.cost_then)} → ${money(cost)} ${cur}. Margin now ${mNow.toFixed(0)}%.` });
     }
   }
   return out;

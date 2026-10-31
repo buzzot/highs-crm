@@ -18,7 +18,7 @@
 <% if (msg) { %><div class="alert ok"><%= msg %></div><% } %>
 <% if (err) { %><div class="alert err"><%= err %></div><% } %>
 <% if (sent) { %><div class="alert info">Already sent. You can change it and send it again — the client receives the new PDF.</div><% } %>
-<form method="post" action="/admin/pi/<%= p.id %>" class="poform pi" id="piForm" data-cur="<%= cur %>" data-org="<%= order.org_id %>" data-minmargin="<%= minMargin %>" data-ship="<%= shipCost > 0 ? shipCost : '' %>">
+<form method="post" action="/admin/pi/<%= p.id %>" class="poform pi" id="piForm" data-cur="<%= cur %>" data-org="<%= order.org_id %>" data-order="<%= order.id %>" data-minmargin="<%= minMargin %>" data-ship="<%= shipCost > 0 ? shipCost : '' %>">
 <button type="submit" class="pi-default" tabindex="-1" aria-hidden="true">Save</button><%# first submit button = what Enter does: it saves, never sends %>
 <div class="pi-layout">
 <div class="pi-main">
@@ -293,17 +293,19 @@
   const h = t => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
   const M = n => (PF ? PF.money(n) : Number(n).toFixed(2));
   const infoCache = new Map();
-  const getInfo = (pid, fresh) => { if (fresh) infoCache.delete(pid); if (!infoCache.has(pid)) infoCache.set(pid, fetch('/admin/pi/price-info?product=' + pid + '&org=' + ORG + '&cur=' + CUR, { headers: { Accept: 'application/json' } }).then(r => (r.ok ? r.json() : null)).catch(() => null)); return infoCache.get(pid); };
+  const getInfo = (pid, fresh) => { if (fresh) infoCache.delete(pid); if (!infoCache.has(pid)) infoCache.set(pid, fetch('/admin/pi/price-info?product=' + pid + '&org=' + ORG + '&order=' + F.dataset.order + '&cur=' + CUR, { headers: { Accept: 'application/json' } }).then(r => (r.ok ? r.json() : null)).catch(() => null)); return infoCache.get(pid); };
   const priceEl = row => row.querySelector('[name$="[unit_price]"]'), qtyEl = row => row.querySelector('[name$="[quantity]"]');
   function setMeta(row) {
     const pid = row.querySelector('[data-pid]').value, sku = row.querySelector('[data-sku]').value, desc = row.querySelector('[data-desc]').value.trim(), parts = [];
     if (sku) parts.push('<span>' + h(sku) + '</span>');
     if (pid) parts.push(row.dataset.isnew ? '<span class="pi-badge new">New product · details incomplete</span>' : '<span class="pi-badge prod">Product</span>');
     else if (desc) parts.push('<span class="pi-badge">Custom line</span>');
-    if (row.dataset.src) parts.push('<span>price from ' + h(row.dataset.src) + '</span>');
+    if (row.dataset.src) parts.push('<span>price from <b>' + h(row.dataset.src) + '</b></span>');
     row.querySelector('[data-meta]').innerHTML = parts.join('');
   }
-  const showClock = row => { const i = row._info; row.querySelector('[data-clock]').hidden = !(i && ((i.hist || []).length || i.cost != null)); };
+  const fmtD = d => { const t = new Date(d + 'T00:00:00'); return t.getTime() !== t.getTime() ? d : t.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }); };
+  const srcs = i => [i.quote && { k: 'Quotation', ...i.quote, label: 'Quotation · ' + fmtD(i.quote.date) }, i.po && { k: 'Client PO', ...i.po, label: 'Client PO ' + i.po.ref + ' · ' + fmtD(i.po.date) }, ...(i.hist || []).slice(0, 1).map(x => ({ k: 'Last order', ...x, ref: x.order_no, label: 'Last order ' + x.order_no + ' · ' + fmtD(x.date) }))].filter(Boolean);
+  const showClock = row => { const i = row._info; row.querySelector('[data-clock]').hidden = !(i && (srcs(i).length || i.cost != null)); };
   function renderWarns(row, flags) {
     row.querySelector('[data-warns]').innerHTML = flags.map(f => '<div class="pi-w ' + f.kind + '"><span>' + h(f.text) + '</span>' + (f.use != null ? '<button type="button" data-use="' + PF.trim4(f.use) + '">Use ' + PF.money(f.use) + '</button>' : '') + '</div>').join('');
   }
@@ -314,10 +316,11 @@
     if (!p) { pid.value = ''; row._info = null; showClock(row); setMeta(row); mark(); calc(); return; }
     row.querySelector('[data-desc]').value = p.name; pid.value = p.id; sku.value = p.sku || ''; if (isNew) row.dataset.isnew = '1';
     const info = await getInfo(p.id, !!isNew); row._info = info; showClock(row);
-    const last = info && info.hist && info.hist[0];
-    if (last && (!num(priceEl(row).value) || row.dataset.auto)) { priceEl(row).value = PF.trim4(last.price); row.dataset.auto = '1'; row.dataset.src = 'last order ' + last.order_no + ' · ' + last.date + (last.cur_orig !== CUR ? ' (converted from ' + last.cur_orig + ')' : ''); }
-    else if (!last && row.dataset.auto) { priceEl(row).value = ''; delete row.dataset.auto; }
-    if (last && !num(qtyEl(row).value)) qtyEl(row).value = last.qty;
+    const first = info && srcs(info)[0];
+    if (first && (!num(priceEl(row).value) || row.dataset.auto)) { priceEl(row).value = PF.trim4(first.price); row.dataset.auto = '1'; row.dataset.src = first.k === 'Quotation' ? 'quotation, ' + fmtD(first.date) : first.k === 'Client PO' ? 'client PO ' + first.ref : 'last order ' + first.ref + (first.cur_orig !== CUR ? ' (converted from ' + first.cur_orig + ')' : ''); }
+    else if (!first && row.dataset.auto) { priceEl(row).value = ''; delete row.dataset.auto; }
+    const lq = info && info.hist && info.hist[0];
+    if (lq && !num(qtyEl(row).value)) qtyEl(row).value = lq.qty;
     setMeta(row); mark(); calc();
   }
   async function search(row, q) {
@@ -325,7 +328,7 @@
     try { const r = await fetch('/admin/pi/products?q=' + encodeURIComponent(q) + '&org=' + ORG + '&cur=' + CUR, { headers: { Accept: 'application/json' } }); list = r.ok ? await r.json() : []; } catch (e) { list = []; }
     row._opts = list; row._hi = -1;
     dd.innerHTML = list.map((p, k) => '<div class="pi-opt" data-k="' + k + '"><b>' + h(p.name) + '</b><small>' + h(p.sku || 'no SKU') + (p.last ? ' · last order ' + h(p.last.date) : ' · not ordered by this client') + '</small><span class="p">'
-      + (p.last ? M(p.last.price) + ' ' + CUR + '<small>last price</small>' : p.cost != null ? M(p.cost) + ' ' + CUR + '<small>supplier price</small>' : '<small>no price yet</small>') + '</span></div>').join('')
+      + (p.last ? M(p.last.price) + ' ' + CUR + '<small>last price</small>' : '<small>no price yet</small>') + '</span></div>').join('')
       + (list.length ? '<hr>' : '') + '<div class="pi-opt act" data-act="new">+ Create new product' + (q ? ' “' + h(q) + '”' : '') + '</div><div class="pi-opt act plain" data-act="custom">Use as a custom line (no product)</div>';
     dd.hidden = false;
   }
@@ -357,12 +360,14 @@
   // hover the price: earlier orders to this client, the supplier price and the margin (staff only)
   function popHtml(row) {
     const i = row._info; if (!i) return ''; const price = num(priceEl(row).value);
-    let t = '<h4>Previous orders · this client</h4>';
-    t += (i.hist || []).length ? '<table><tr><th>Date</th><th>Order</th><th class="r">Qty</th><th class="r">Price</th></tr>' + i.hist.map(x => '<tr class="use" data-use="' + PF.trim4(x.price) + '"><td>' + h(x.date) + '</td><td>' + h(x.order_no) + '</td><td class="r">' + x.qty + '</td><td class="r">' + M(x.price_orig) + ' ' + h(x.cur_orig) + (x.cur_orig !== CUR ? '<small> ≈ ' + M(x.price) + ' ' + CUR + '</small>' : '') + '</td></tr>').join('') + '</table>' : '<div class="pi-mut">No earlier orders of this product for this client.</div>';
-    if (i.cost != null) { const m = PF.marginAt(price, i.cost); t += '<div class="pi-staff">Staff only · supplier price ' + M(i.cost) + ' ' + CUR + (i.cost_orig && i.cost_orig.cur !== CUR ? ' (' + M(i.cost_orig.v) + ' ' + h(i.cost_orig.cur) + ')' : '') + (m != null ? ' · margin at this price <b>' + m.toFixed(0) + '%</b>' : '') + '</div>'; }
-    return t + '<div class="pi-tip">Click a row to use that price. Prices of other clients are never shown.</div>';
+    const pill = pr => { const m = PF.marginAt(pr, i.cost); if (m == null) return ''; return '<span class="pill ' + (pr < i.cost ? 'b' : m < MINM ? 'a' : 'g') + '" title="Margin over supplier price">' + m.toFixed(0) + '%</span>'; };
+    let t = '<h4>Price sources · this client</h4>';
+    const list = srcs(i);
+    t += list.length ? list.map(x => '<div class="pi-l" data-use="' + PF.trim4(x.price) + '"><span><b>' + h(x.k) + '</b> <small>' + h(x.k === 'Last order' ? x.order_no + ' · ' + fmtD(x.date) : x.k === 'Client PO' ? x.ref + ' · ' + fmtD(x.date) : fmtD(x.date)) + '</small></span><span class="p">' + M(x.price) + (x.cur_orig !== CUR ? '<small> ≈ ' + M(x.price_orig) + ' ' + h(x.cur_orig) + '</small>' : '') + '</span>' + pill(x.price) + '</div>').join('') : '<div class="pi-mut">No quotation, PO or earlier order for this client.</div>';
+    if (i.cost != null) { const m = PF.marginAt(price, i.cost); t += '<div class="pi-cost"><span>Supplier price</span><b>' + M(i.cost) + ' ' + CUR + '</b></div>' + (m != null ? '<div class="pi-cost"><span>Margin at ' + M(price) + '</span><b>' + m.toFixed(0) + '%</b></div>' : ''); }
+    return t + '<div class="pi-tip">Click a line to use that price. Staff only — never on the PDF.</div>';
   }
-  function showPop(row, on) { const pop = row.querySelector('[data-pop]'), i = row._info; if (on && PF && i && ((i.hist || []).length || i.cost != null)) { pop.innerHTML = popHtml(row); pop.hidden = false; } else pop.hidden = true; }
+  function showPop(row, on) { const pop = row.querySelector('[data-pop]'), i = row._info; if (on && PF && i && (srcs(i).length || i.cost != null)) { pop.innerHTML = popHtml(row); pop.hidden = false; } else pop.hidden = true; }
   rowsEl.addEventListener('mouseover', e => { const pc = e.target.closest('.pi-pc'); if (pc) showPop(pc.closest('[data-row]'), true); });
   rowsEl.addEventListener('mouseout', e => { const pc = e.target.closest('.pi-pc'); if (pc && !pc.contains(e.relatedTarget)) showPop(pc.closest('[data-row]'), false); });
   rowsEl.addEventListener('focusin', e => { if (e.target.name && /\[unit_price\]$/.test(e.target.name)) showPop(e.target.closest('[data-row]'), true); });

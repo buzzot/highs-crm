@@ -32,3 +32,19 @@ test('buildHistory skips cancelled and zero-price rows, newest first', { skip: !
   const i = buildInfo({ product: { id: 'p', unit_cost: 4, cost_currency: 'USD' }, rows, cur: 'USD', rate: 1 });
   assert.equal(i.cost, 4);
 });
+
+test('priceFlags: client PO / quotation differences warn with a use value; last order only when neither exists', () => {
+  const base = { cur: 'USD', cost: 2.6, hist: [{ price: 4.35, qty: 5, date: '2026-05-02', order_no: 'A', cur_orig: 'USD', price_orig: 4.35, cost_then: 2.6 }] };
+  const f = priceFlags({ price: 4.2, info: { ...base, quote: { price: 4.2 }, po: { price: 4.1 } }, minMargin: 20 });
+  assert.deepEqual(f.map(x => x.code), ['po_diff']);
+  assert.equal(f[0].use, 4.1);
+  assert.deepEqual(priceFlags({ price: 4.2, info: base, minMargin: 20 }).map(x => x.code), ['last_diff']);
+});
+test('buildQuote / buildPo pick the right source', { skip: !pinfo }, () => {
+  const rate = () => 1;
+  const q = pinfo.buildQuote([{ id: 'a', unit_price: 5, status: 'sent', created_at: '2026-01-01' }, { id: 'b', unit_price: 4, status: 'rejected', created_at: '2026-03-01' }, { id: 'c', unit_price: 6, status: 'accepted', created_at: '2026-02-01' }], 'USD', rate, 'a');
+  assert.equal(q.price, 5);
+  assert.equal(pinfo.buildQuote([{ id: 'b', unit_price: 4, status: 'rejected', created_at: '2026-03-01' }], 'USD', rate), null);
+  const po = pinfo.buildPo([{ po_no: 'PO-1', order_id: 'o1', currency: 'USD', status: 'approved', created_at: '2026-02-01', lines: [{ sku: 'X1', quantity: 3, unit_price: 4.1 }] }], { id: 'p', sku: 'x1', name: 'T' }, 'USD', rate, 'o1');
+  assert.equal(po.price, 4.1); assert.equal(po.ref, 'PO-1');
+});

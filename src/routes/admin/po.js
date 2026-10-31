@@ -168,7 +168,7 @@ pi.get('/products', async (req, res) => {   // ?q=&org=&cur=
 pi.get('/price-info', async (req, res) => {   // ?product=&org=&cur=  → earlier prices to this client + the supplier price now
   const id = uuid(req.query.product), org = uuid(req.query.org);
   if (!id || !org) return res.json(null);
-  res.json(await loadInfo(id, org, curOf(req.query.cur)));
+  res.json(await loadInfo(id, org, curOf(req.query.cur), uuid(req.query.order)));
 });
 pi.post('/product-new', async (req, res) => {   // create a product from the invoice; an existing one with the same name / SKU is offered instead
   const name = s(req.body.name, 200), sku = s(req.body.sku, 80);
