@@ -42,6 +42,7 @@ const PUBLIC = path.join(__dirname, '..', 'public');
 app.use(staticGzip(PUBLIC));
 app.use(express.static(PUBLIC, { maxAge: '10m' }));
 // the quote calculator in the browser uses the exact same pricing module as the server
+app.get('/js/price-flags.js', (req, res) => res.type('application/javascript').sendFile(path.join(__dirname, 'lib', 'price-flags.js')));   // same price checks in the browser as on the server
 app.get('/js/pricing.js', (req, res) => res.type('application/javascript').sendFile(path.join(__dirname, 'lib', 'pricing.js')));
 // counts behind the red balls in the menu: a few queries run together and are reused for 20 s
 let navCache = { at: 0, value: { sourcing: 0, orders: 0, ordersNew: 0, purchasing: 0, products: 0 }, pending: null };

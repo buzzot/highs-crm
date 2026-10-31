@@ -2945,7 +2945,7 @@ label.no-block{display:block}
 .pi-bill{display:grid;grid-template-columns:1fr 1fr;gap:6px 28px}
 .pi-bill dl{margin:0;display:grid;grid-template-columns:78px 1fr;gap:5px 10px}.pi-bill dt{color:var(--muted);font-size:13px}.pi-bill dd{margin:0}.pi-bill dd.none{color:var(--muted)}.pi-bill dd.pre{white-space:pre-line}
 #billEdit{border-top:1px solid var(--line-2);padding-top:14px}
-.pi-items{--cols:minmax(120px,1fr) 96px 64px 72px 128px 92px 24px}
+.pi-items{--cols:minmax(160px,1fr) 70px 70px 132px 96px 24px}
 .pi-ih,.pi-ir{display:grid;grid-template-columns:var(--cols);gap:8px;align-items:center}
 .pi-ih{font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding:0 0 8px;border-bottom:1px solid var(--line)}
 .pi-ir{padding:10px 0;border-bottom:1px solid var(--line-2)}
@@ -2996,3 +2996,38 @@ label>.pi-suf{margin-top:5px}
 .pi-ch .chip.ok{background:var(--ok-soft);color:var(--ok)}.pi-ch .chip.bad{background:var(--bad-soft);color:var(--bad)}
 .pi-suf input{text-align:left}.pi-suf input.r{text-align:right}
 .pi-chips{margin:7px 0 4px}
+
+/* proforma items: picker, earlier prices, warnings, new-product modal */
+.pi-line{padding:6px 0;border-bottom:1px solid var(--line,#e5e7eb)}
+.pi-pb,.pi-pc{position:relative;min-width:0}
+.pi-meta{display:flex;flex-wrap:wrap;gap:6px;font-size:11px;color:#6b7280;margin-top:3px;min-height:0}
+.pi-meta:empty{display:none}
+.pi-badge{padding:0 6px;border-radius:8px;background:#f3f4f6;color:#4b5563}
+.pi-badge.prod{background:#e8f1ff;color:#1d4ed8}.pi-badge.new{background:#fff4e0;color:#b45309}
+.pi-dd{position:absolute;z-index:30;left:0;right:0;top:100%;margin-top:2px;background:#fff;border:1px solid #d1d5db;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.14);max-height:300px;overflow:auto}
+.pi-dd[hidden],.pi-pop[hidden],.pi-ov[hidden],.pi-clock[hidden]{display:none!important}
+.pi-dd hr{border:0;border-top:1px solid #e5e7eb;margin:2px 0}
+.pi-opt{display:grid;grid-template-columns:1fr auto;gap:0 10px;padding:7px 10px;cursor:pointer;font-size:13px}
+.pi-opt small{color:#6b7280;font-size:11px;display:block}.pi-opt b{font-weight:600}
+.pi-opt .p{grid-row:1/3;grid-column:2;text-align:right;font-variant-numeric:tabular-nums}
+.pi-opt:hover,.pi-opt.hi{background:#f3f6fb}
+.pi-opt.act{display:block;color:#1d4ed8;font-weight:600}.pi-opt.act.plain{color:#4b5563;font-weight:400}
+.pi-clock{position:absolute;right:46px;top:50%;transform:translateY(-50%);border:0;background:none;font-size:12px;cursor:pointer;padding:0;opacity:.7}
+.pi-pc .pi-suf input{padding-right:62px}
+.pi-pop{position:absolute;z-index:40;right:0;top:100%;margin-top:4px;width:330px;max-width:80vw;background:#fff;border:1px solid #d1d5db;border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.18);padding:10px 12px;font-size:12px}
+.pi-pop h4{margin:0 0 6px;font-size:12px;text-transform:none;letter-spacing:0}
+.pi-pop table{width:100%;border-collapse:collapse}.pi-pop th{font-weight:600;color:#6b7280;text-align:left;padding:2px 4px}
+.pi-pop td{padding:3px 4px}.pi-pop .r{text-align:right}.pi-pop small{color:#6b7280}
+.pi-pop tr.use{cursor:pointer}.pi-pop tr.use:hover td{background:#f3f6fb}
+.pi-mut{color:#6b7280}.pi-staff{margin-top:8px;padding-top:6px;border-top:1px dashed #d1d5db}.pi-tip{margin-top:6px;color:#9ca3af;font-size:11px}
+.pi-warns{display:flex;flex-direction:column;gap:4px;margin-top:4px}.pi-warns:empty{display:none}
+.pi-w{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12px;padding:4px 8px;border-radius:6px}
+.pi-w.warn{background:#fff7e6;color:#92400e}.pi-w.bad{background:#fdecec;color:#b91c1c}.pi-w.info{background:#f3f4f6;color:#4b5563}
+.pi-w button{border:1px solid currentColor;background:#fff;color:inherit;border-radius:6px;font-size:11px;padding:1px 8px;cursor:pointer;white-space:nowrap}
+.pi-ck li.bad .d{color:#b91c1c}
+.pi-ov{position:fixed;inset:0;background:rgba(17,24,39,.45);z-index:100;display:flex;align-items:center;justify-content:center;padding:16px}
+.pi-modal{background:#fff;border-radius:12px;padding:20px;width:100%;max-width:460px;box-shadow:0 20px 50px rgba(0,0,0,.3)}
+.pi-modal h3{margin:0 0 4px;text-transform:none;letter-spacing:0;font-size:16px}
+.pi-modal label{display:block;margin-bottom:10px}
+.pi-modal-acts{display:flex;justify-content:flex-end;gap:8px;margin-top:6px}
+@media(max-width:1000px){.pi-line{padding:10px 0}.pi-ir>.pi-pb{grid-column:1/-1}}

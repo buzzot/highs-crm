@@ -2,7 +2,7 @@
 import { Router } from '../../lib/router.js';
 import { admin } from '../../lib/supabase.js';
 import { log } from '../../lib/activity.js';
-import { back, notFound } from '../../lib/util.js';
+import { back, notFound, getSettings } from '../../lib/util.js';
 import { uploadDocument } from '../../lib/storage.js';
 import { sendEmail } from '../../lib/mailer.js';
 import { poRejectedEmail, piEmail } from '../../lib/email-templates.js';
@@ -11,6 +11,7 @@ import { recalcOrder } from '../../lib/payments-db.js';
 import { piLines, PI_FREIGHT_MODES } from '../../lib/freight-mode.js';
 import { getCompany, poPdf, piPdf, piDocument, totalOf, parseLines, text } from '../../lib/purchase.js';
 import { localizeEmail } from '../../lib/i18n.js';
+import { loadInfo, searchProducts, findDuplicate } from '../../lib/price-info.js';
 import { orderLang, requestLang } from '../../lib/lang.js';
 
 const appUrl = () => (process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
@@ -118,7 +119,7 @@ po.post('/:id/reject', async (req, res) => {
 // ============================ proforma invoices ============================
 export const pi = Router();
 
-const lineFromItem = it => ({ description: it.description, sku: '', quantity: Number(it.quantity), unit: 'pcs', unit_price: Number(it.unit_price) });
+const lineFromItem = it => ({ description: it.description, sku: it.sku || '', quantity: Number(it.quantity), unit: it.unit || 'pcs', unit_price: Number(it.unit_price), ...(it.product_id ? { product_id: it.product_id } : {}) });
 
 // create (or open) the proforma invoice of an order
 pi.post('/order/:oid', async (req, res) => {
@@ -156,10 +157,35 @@ const piData = (b, old) => ({
   schedule: parseSchedule(b), payment_terms: s(b.payment_terms, 600), bank: s(b.bank, 1000), notes: s(b.notes, 2000), valid_until: dayOnly(b.valid_until) || old.valid_until,
 });
 
+// ---- product picker for the invoice lines (JSON, staff only) ----
+const CURS = ['CNY', 'USD', 'EUR', 'GBP'];
+const curOf = v => (CURS.includes(v) ? v : 'CNY');
+const uuid = v => (/^[0-9a-f-]{36}$/i.test(String(v || '')) ? String(v) : null);
+pi.get('/products', async (req, res) => {   // ?q=&org=&cur=
+  const org = uuid(req.query.org); if (!org) return res.json([]);
+  res.json(await searchProducts({ q: req.query.q, orgId: org, cur: curOf(req.query.cur) }));
+});
+pi.get('/price-info', async (req, res) => {   // ?product=&org=&cur=  → earlier prices to this client + the supplier price now
+  const id = uuid(req.query.product), org = uuid(req.query.org);
+  if (!id || !org) return res.json(null);
+  res.json(await loadInfo(id, org, curOf(req.query.cur)));
+});
+pi.post('/product-new', async (req, res) => {   // create a product from the invoice; an existing one with the same name / SKU is offered instead
+  const name = s(req.body.name, 200), sku = s(req.body.sku, 80);
+  if (!name) return res.status(400).json({ error: 'Enter the product name.' });
+  const dup = await findDuplicate(name, sku);
+  if (dup) return res.json({ duplicate: dup });
+  const cost = Number(String(req.body.unit_cost ?? '').replace(',', '.'));
+  const { data, error } = await admin.from('products').insert({ name, sku: sku || null, hs_code: s(req.body.hs_code, 40) || null,
+    unit_cost: Number.isFinite(cost) && cost > 0 ? cost : null, cost_currency: ['CNY', 'USD', 'EUR'].includes(req.body.cost_currency) ? req.body.cost_currency : 'CNY' }).select('id, name, sku').single();
+  if (error) return res.status(400).json({ error: error.message });
+  res.json({ product: data });
+});
+
 pi.get('/:id', async (req, res) => {
   const p = await loadPi(req.params.id);
   if (!p) return notFound(res, 'Proforma invoice');
-  res.render('admin/pi', { title: p.pi_no, p, order: p.orders, total: totalOf(piLines(p.data)), shown: piLines(p.data), msg: req.query.msg, err: req.query.err });
+  res.render('admin/pi', { minMargin: Number((await getSettings(admin)).pricing.min_margin_pct) || 20, title: p.pi_no, p, order: p.orders, total: totalOf(piLines(p.data)), shown: piLines(p.data), msg: req.query.msg, err: req.query.err });
 });
 pi.get('/:id/print', async (req, res) => {
   const p = await loadPi(req.params.id);

@@ -18,7 +18,7 @@
 <% if (msg) { %><div class="alert ok"><%= msg %></div><% } %>
 <% if (err) { %><div class="alert err"><%= err %></div><% } %>
 <% if (sent) { %><div class="alert info">Already sent. You can change it and send it again — the client receives the new PDF.</div><% } %>
-<form method="post" action="/admin/pi/<%= p.id %>" class="poform pi" id="piForm" data-cur="<%= cur %>" data-ship="<%= shipCost > 0 ? shipCost : '' %>">
+<form method="post" action="/admin/pi/<%= p.id %>" class="poform pi" id="piForm" data-cur="<%= cur %>" data-org="<%= order.org_id %>" data-minmargin="<%= minMargin %>" data-ship="<%= shipCost > 0 ? shipCost : '' %>">
 <button type="submit" class="pi-default" tabindex="-1" aria-hidden="true">Save</button><%# first submit button = what Enter does: it saves, never sends %>
 <div class="pi-layout">
 <div class="pi-main">
@@ -44,20 +44,31 @@
   </section>
 
   <section class="card">
-    <div class="pi-ch"><span class="n">2</span><h2>Items</h2><span class="hint">Prices come from the order — <a href="/admin/orders/<%= order.id %>">open order items</a></span></div>
+    <div class="pi-ch"><span class="n">2</span><h2>Items</h2><span class="hint">Pick a product, create a new one, or type a custom line</span></div>
     <div class="pi-items">
-      <div class="pi-ih"><span>Description</span><span>SKU / part no.</span><span class="r">Qty</span><span>Unit</span><span class="r">Unit price</span><span class="r">Amount</span><span></span></div>
+      <div class="pi-ih"><span>Product / description</span><span class="r">Qty</span><span>Unit</span><span class="r">Unit price</span><span class="r">Amount</span><span></span></div>
       <div id="piRows">
       <% lines.forEach((l, i) => { %>
-        <div class="pi-ir" data-row>
-          <input name="lines[<%= i %>][description]" value="<%= l.description %>" placeholder="Description" aria-label="Description">
-          <input name="lines[<%= i %>][sku]" value="<%= l.sku || '' %>" placeholder="SKU" aria-label="SKU">
-          <input name="lines[<%= i %>][quantity]" value="<%= l.quantity %>" class="r num" inputmode="decimal" aria-label="Quantity">
-          <input name="lines[<%= i %>][unit]" value="<%= l.unit || 'pcs' %>" aria-label="Unit" list="piUnits">
-          <div class="pi-suf"><input name="lines[<%= i %>][unit_price]" value="<%= l.unit_price === 0 ? '' : l.unit_price %>" class="r num" inputmode="decimal" placeholder="0.00" aria-label="Unit price"><em><%= cur %></em></div>
-          <div class="r amt num" data-amt>0.00</div>
-          <button type="button" class="pi-rm" title="Remove line" aria-label="Remove line" data-rm>×</button>
-          <% if (l.product_id) { %><input type="hidden" name="lines[<%= i %>][product_id]" value="<%= l.product_id %>"><% } %>
+        <div class="pi-line" data-row>
+          <div class="pi-ir">
+            <div class="pi-pb">
+              <input name="lines[<%= i %>][description]" value="<%= l.description %>" placeholder="Search a product or SKU — or type a custom description" autocomplete="off" aria-label="Product or description" data-desc>
+              <input type="hidden" name="lines[<%= i %>][product_id]" value="<%= l.product_id || '' %>" data-pid>
+              <input type="hidden" name="lines[<%= i %>][sku]" value="<%= l.sku || '' %>" data-sku>
+              <div class="pi-meta" data-meta><%= l.sku || '' %></div>
+              <div class="pi-dd" data-dd hidden></div>
+            </div>
+            <input name="lines[<%= i %>][quantity]" value="<%= l.quantity %>" class="r num" inputmode="decimal" aria-label="Quantity">
+            <input name="lines[<%= i %>][unit]" value="<%= l.unit || 'pcs' %>" aria-label="Unit" list="piUnits">
+            <div class="pi-pc">
+              <div class="pi-suf"><input name="lines[<%= i %>][unit_price]" value="<%= l.unit_price === 0 ? '' : l.unit_price %>" class="r num" inputmode="decimal" placeholder="0.00" aria-label="Unit price"><em><%= cur %></em></div>
+              <button type="button" class="pi-clock" data-clock hidden tabindex="-1" aria-label="Earlier prices">🕘</button>
+              <div class="pi-pop" data-pop hidden></div>
+            </div>
+            <div class="r amt num" data-amt>0.00</div>
+            <button type="button" class="pi-rm" title="Remove line" aria-label="Remove line" data-rm>×</button>
+          </div>
+          <div class="pi-warns" data-warns></div>
         </div>
       <% }) %>
       </div>
@@ -165,6 +176,17 @@
 </aside>
 </div>
 </form>
+<div class="pi-ov" id="npOv" hidden>
+  <div class="pi-modal" role="dialog" aria-modal="true" aria-label="New product">
+    <h3>New product</h3>
+    <p class="muted small">Saved to your product list now. Add photos, packing details and the supplier on the product page later.</p>
+    <div class="alert warn" id="npErr" hidden></div>
+    <label>Product name <input id="npName" maxlength="200" placeholder="e.g. Steel wire rope 12 mm"></label>
+    <div class="pi-g2"><label>SKU <span class="muted small">optional</span><input id="npSku" maxlength="80"></label><label>HS code <span class="muted small">optional</span><input id="npHs" maxlength="40"></label></div>
+    <div class="pi-g2"><label>Supplier price <span class="muted small">optional</span><input id="npCost" inputmode="decimal" placeholder="0.00"></label><label>Currency <select id="npCur"><option>CNY</option><option>USD</option><option>EUR</option></select></label></div>
+    <div class="pi-modal-acts"><button type="button" class="btn" id="npCancel">Cancel</button><button type="button" class="btn primary" id="npSave">Create and use</button></div>
+  </div>
+</div>
 <script>
 (function () {
   const F = document.getElementById('piForm'), $ = id => document.getElementById(id);
@@ -180,11 +202,15 @@
   };
   function calc() {
     let goods = 0, unpriced = 0, lines = 0;
+    let nDiff = 0, nBad = 0, nInfo = 0;
     q('[data-row]').forEach(row => {
-      const [, , qty, , price] = q('input:not([type=hidden])', row);
+      const [desc, qty, , price] = q('input:not([type=hidden])', row);
       const a = num(qty.value) * num(price.value);
-      if (num(qty.value) > 0 || (row.querySelector('input').value || '').trim()) { lines++; goods += a; if (!(num(price.value) > 0)) unpriced++; }
+      if (num(qty.value) > 0 || (desc.value || '').trim()) { lines++; goods += a; if (!(num(price.value) > 0)) unpriced++; }
       row.querySelector('[data-amt]').textContent = fmt(a);
+      const flags = PF && row._info ? PF.priceFlags({ price: num(price.value), info: row._info, minMargin: MINM }) : [];
+      renderWarns(row, flags);
+      if (flags.some(f => f.kind === 'bad')) nBad++; else if (flags.some(f => f.kind === 'warn')) nDiff++; if (row._info) nInfo++;
     });
     const mode = (F.querySelector('[name=freight_mode]:checked') || {}).value || 'none';
     const base = num($('fr_amt').value), buf = num($('fr_buf').value);
@@ -212,18 +238,25 @@
       [mailOk, mailOk ? 'Client email is set' : 'Enter a valid client email'],
       [dateOk, dateOk ? 'Valid until is in the future' : 'Set a “valid until” date in the future'],
     ];
-    $('ck').innerHTML = checks.map(([ok, t]) => '<li class="' + (ok ? 'ok' : 'no') + '"><span class="d">' + (ok ? '✓' : '!') + '</span><span>' + t + '</span></li>').join('');
+    const soft = [];   // price review: shown, but never blocks sending
+    if (nBad) soft.push(['bad', nBad + ' line' + (nBad > 1 ? 's are' : ' is') + ' priced below the supplier price']);
+    if (nDiff) soft.push(['no', nDiff + ' line' + (nDiff > 1 ? 's differ' : ' differs') + ' from an earlier price or the supplier price — review']);
+    if (!nBad && !nDiff && nInfo) soft.push(['ok', 'Prices match earlier orders and supplier prices']);
+    $('ck').innerHTML = checks.map(([ok, t]) => '<li class="' + (ok ? 'ok' : 'no') + '"><span class="d">' + (ok ? '✓' : '!') + '</span><span>' + t + '</span></li>').join('')
+      + soft.map(([k, t]) => '<li class="' + k + ' soft"><span class="d">' + (k === 'ok' ? '✓' : '!') + '</span><span>' + t + '</span></li>').join('');
     const all = checks.every(c => c[0]); $('sendBtn').disabled = !all; $('sendAny').hidden = all;
   }
   const mark = () => { dirty = true; $('saved').textContent = 'Unsaved changes — Print / Preview use the last saved version.'; };
   F.addEventListener('input', () => { mark(); calc(); }); F.addEventListener('change', () => { mark(); calc(); });
   // lines
   $('addLine').onclick = () => {
-    const rows = $('piRows'), last = rows.lastElementChild, n = rows.children.length, row = last.cloneNode(true);
-    q('input', row).forEach(i => { if (i.type === 'hidden') i.remove(); else i.value = i.name.endsWith('[unit]') ? 'pcs' : ''; });
+    const rows = $('piRows'), row = rows.lastElementChild.cloneNode(true);
+    q('input', row).forEach(i => { i.value = i.name.endsWith('[unit]') ? 'pcs' : ''; });
+    row._info = null; delete row.dataset.auto; delete row.dataset.src; delete row.dataset.isnew;
+    q('[data-meta]', row)[0].textContent = ''; q('[data-warns]', row)[0].innerHTML = ''; q('[data-dd]', row)[0].hidden = true; q('[data-pop]', row)[0].hidden = true; q('[data-clock]', row)[0].hidden = true;
     rows.appendChild(row); renumber(); row.querySelector('input').focus(); mark(); calc();
   };
-  $('piRows').addEventListener('click', e => { const b = e.target.closest('[data-rm]'); if (!b) return; const rows = $('piRows'); if (rows.children.length > 1) b.closest('[data-row]').remove(); else q('input:not([type=hidden])', rows.firstElementChild).forEach(i => { i.value = i.name.endsWith('[unit]') ? 'pcs' : ''; }); renumber(); mark(); calc(); });
+  $('piRows').addEventListener('click', e => { const b = e.target.closest('[data-rm]'); if (!b) return; const rows = $('piRows'), row = b.closest('[data-row]'); if (rows.children.length > 1) row.remove(); else { q('input', row).forEach(i => { i.value = i.name.endsWith('[unit]') ? 'pcs' : ''; }); row._info = null; delete row.dataset.auto; delete row.dataset.src; delete row.dataset.isnew; q('[data-meta]', row)[0].textContent = ''; q('[data-warns]', row)[0].innerHTML = ''; q('[data-clock]', row)[0].hidden = true; } renumber(); mark(); calc(); });
   // schedule
   const instRow = (l, p) => { const w = document.createElement('div'); w.className = 'pi-sr'; w.setAttribute('data-inst', ''); w.innerHTML = '<input name="sched[0][label]" placeholder="e.g. Deposit" aria-label="Instalment"><div class="pi-suf"><input name="sched[0][percent]" class="r num" inputmode="decimal" aria-label="Share"><em>%</em></div><div class="r amt num" data-iamt>0.00</div><input type="date" name="sched[0][due]" aria-label="Due date"><button type="button" class="pi-rm" title="Remove" aria-label="Remove instalment" data-irm>×</button>'; const ins = q('input', w); ins[0].value = l || ''; ins[1].value = p || ''; return w; };
   $('addInst').onclick = () => { $('sched').appendChild(instRow('', '')); renumber(); mark(); calc(); };
@@ -248,12 +281,115 @@
   $('billBtn').onclick = () => { syncBill(); const on = !$('billEdit').hidden; $('billEdit').hidden = on; $('billView').hidden = !on; $('billBtn').textContent = on ? 'Edit' : 'Done'; };
   $('bankBtn').onclick = () => { const on = !$('bank').hidden; $('bank').hidden = on; $('bankView').hidden = !on; if (on) $('bankView').textContent = $('bank').value || 'No bank details — add them in Settings or press Edit.'; $('bankBtn').textContent = on ? 'Edit' : 'Done'; };
   // sending
-  const confirmSend = (extra) => confirm((extra ? 'Some checks are not met:\n' + q('#ck li.no span:last-child').map(s => '• ' + s.textContent).join('\n') + '\n\n' : '') + 'Send the proforma invoice to the client now?');
+  const confirmSend = (extra) => confirm((extra ? 'Some checks are not met:\n' + q('#ck li.no:not(.soft) span:last-child').map(s => '• ' + s.textContent).join('\n') + '\n\n' : '') + 'Send the proforma invoice to the client now?');
   let skip = false;
   $('sendBtn').addEventListener('click', e => { if (skip) { skip = false; sending = true; return; } if (!confirmSend(false)) e.preventDefault(); else sending = true; });
   $('sendAny').onclick = () => { if (!confirmSend(true)) return; skip = true; $('sendBtn').disabled = false; $('sendBtn').click(); };
   F.addEventListener('submit', () => { sending = true; });
   window.addEventListener('beforeunload', e => { if (dirty && !sending) { e.preventDefault(); e.returnValue = ''; } });
+  // ---------- product picker, earlier prices, price checks ----------
+  const MINM = Number(F.dataset.minmargin) || 20, ORG = F.dataset.org;
+  let PF = null;
+  const h = t => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  const M = n => (PF ? PF.money(n) : Number(n).toFixed(2));
+  const infoCache = new Map();
+  const getInfo = (pid, fresh) => { if (fresh) infoCache.delete(pid); if (!infoCache.has(pid)) infoCache.set(pid, fetch('/admin/pi/price-info?product=' + pid + '&org=' + ORG + '&cur=' + CUR, { headers: { Accept: 'application/json' } }).then(r => (r.ok ? r.json() : null)).catch(() => null)); return infoCache.get(pid); };
+  const priceEl = row => row.querySelector('[name$="[unit_price]"]'), qtyEl = row => row.querySelector('[name$="[quantity]"]');
+  function setMeta(row) {
+    const pid = row.querySelector('[data-pid]').value, sku = row.querySelector('[data-sku]').value, desc = row.querySelector('[data-desc]').value.trim(), parts = [];
+    if (sku) parts.push('<span>' + h(sku) + '</span>');
+    if (pid) parts.push(row.dataset.isnew ? '<span class="pi-badge new">New product · details incomplete</span>' : '<span class="pi-badge prod">Product</span>');
+    else if (desc) parts.push('<span class="pi-badge">Custom line</span>');
+    if (row.dataset.src) parts.push('<span>price from ' + h(row.dataset.src) + '</span>');
+    row.querySelector('[data-meta]').innerHTML = parts.join('');
+  }
+  const showClock = row => { const i = row._info; row.querySelector('[data-clock]').hidden = !(i && ((i.hist || []).length || i.cost != null)); };
+  function renderWarns(row, flags) {
+    row.querySelector('[data-warns]').innerHTML = flags.map(f => '<div class="pi-w ' + f.kind + '"><span>' + h(f.text) + '</span>' + (f.use != null ? '<button type="button" data-use="' + PF.trim4(f.use) + '">Use ' + PF.money(f.use) + '</button>' : '') + '</div>').join('');
+  }
+  function setPrice(row, v) { priceEl(row).value = v; delete row.dataset.auto; delete row.dataset.src; setMeta(row); showPop(row, false); mark(); calc(); }
+  async function setProduct(row, p, isNew) {
+    const pid = row.querySelector('[data-pid]'), sku = row.querySelector('[data-sku]');
+    delete row.dataset.src; delete row.dataset.isnew;
+    if (!p) { pid.value = ''; row._info = null; showClock(row); setMeta(row); mark(); calc(); return; }
+    row.querySelector('[data-desc]').value = p.name; pid.value = p.id; sku.value = p.sku || ''; if (isNew) row.dataset.isnew = '1';
+    const info = await getInfo(p.id, !!isNew); row._info = info; showClock(row);
+    const last = info && info.hist && info.hist[0];
+    if (last && (!num(priceEl(row).value) || row.dataset.auto)) { priceEl(row).value = PF.trim4(last.price); row.dataset.auto = '1'; row.dataset.src = 'last order ' + last.order_no + ' · ' + last.date + (last.cur_orig !== CUR ? ' (converted from ' + last.cur_orig + ')' : ''); }
+    else if (!last && row.dataset.auto) { priceEl(row).value = ''; delete row.dataset.auto; }
+    if (last && !num(qtyEl(row).value)) qtyEl(row).value = last.qty;
+    setMeta(row); mark(); calc();
+  }
+  async function search(row, q) {
+    const dd = row.querySelector('[data-dd]'); let list = [];
+    try { const r = await fetch('/admin/pi/products?q=' + encodeURIComponent(q) + '&org=' + ORG + '&cur=' + CUR, { headers: { Accept: 'application/json' } }); list = r.ok ? await r.json() : []; } catch (e) { list = []; }
+    row._opts = list; row._hi = -1;
+    dd.innerHTML = list.map((p, k) => '<div class="pi-opt" data-k="' + k + '"><b>' + h(p.name) + '</b><small>' + h(p.sku || 'no SKU') + (p.last ? ' · last order ' + h(p.last.date) : ' · not ordered by this client') + '</small><span class="p">'
+      + (p.last ? M(p.last.price) + ' ' + CUR + '<small>last price</small>' : p.cost != null ? M(p.cost) + ' ' + CUR + '<small>supplier price</small>' : '<small>no price yet</small>') + '</span></div>').join('')
+      + (list.length ? '<hr>' : '') + '<div class="pi-opt act" data-act="new">+ Create new product' + (q ? ' “' + h(q) + '”' : '') + '</div><div class="pi-opt act plain" data-act="custom">Use as a custom line (no product)</div>';
+    dd.hidden = false;
+  }
+  const rowsEl = $('piRows');
+  rowsEl.addEventListener('input', e => {
+    const el = e.target, row = el.closest('[data-row]');
+    if (el.matches('[data-desc]')) { clearTimeout(row._t); row._t = setTimeout(() => search(row, el.value.trim()), 180); setMeta(row); }
+    else if (el.name && /\[unit_price\]$/.test(el.name)) { delete row.dataset.auto; delete row.dataset.src; setMeta(row); }
+  });
+  rowsEl.addEventListener('focusin', e => { const el = e.target; if (el.matches('[data-desc]') && !el.value.trim()) search(el.closest('[data-row]'), ''); });
+  rowsEl.addEventListener('keydown', e => {
+    if (!e.target.matches('[data-desc]')) return;
+    const row = e.target.closest('[data-row]'), dd = row.querySelector('[data-dd]');
+    if (e.key === 'Escape') { dd.hidden = true; return; }
+    if (dd.hidden || !row._opts || !row._opts.length) return;
+    const opts = q('.pi-opt[data-k]', dd);
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); row._hi = Math.max(0, Math.min(opts.length - 1, (row._hi ?? -1) + (e.key === 'ArrowDown' ? 1 : -1))); opts.forEach((o, i) => o.classList.toggle('hi', i === row._hi)); }
+    else if (e.key === 'Enter' && row._hi >= 0) { e.preventDefault(); dd.hidden = true; setProduct(row, row._opts[row._hi]); }
+  });
+  rowsEl.addEventListener('mousedown', e => {
+    const o = e.target.closest('.pi-opt'); if (!o) return; e.preventDefault();
+    const row = o.closest('[data-row]'); row.querySelector('[data-dd]').hidden = true;
+    if (o.dataset.act === 'new') openNew(row, row.querySelector('[data-desc]').value.trim());
+    else if (o.dataset.act === 'custom') setProduct(row, null);
+    else setProduct(row, row._opts[Number(o.dataset.k)]);
+  });
+  document.addEventListener('mousedown', e => { if (!e.target.closest('.pi-pb')) q('[data-dd]').forEach(d => { d.hidden = true; }); });
+  rowsEl.addEventListener('click', e => { const b = e.target.closest('[data-use]'); if (b) setPrice(b.closest('[data-row]'), b.dataset.use); });
+  // hover the price: earlier orders to this client, the supplier price and the margin (staff only)
+  function popHtml(row) {
+    const i = row._info; if (!i) return ''; const price = num(priceEl(row).value);
+    let t = '<h4>Previous orders · this client</h4>';
+    t += (i.hist || []).length ? '<table><tr><th>Date</th><th>Order</th><th class="r">Qty</th><th class="r">Price</th></tr>' + i.hist.map(x => '<tr class="use" data-use="' + PF.trim4(x.price) + '"><td>' + h(x.date) + '</td><td>' + h(x.order_no) + '</td><td class="r">' + x.qty + '</td><td class="r">' + M(x.price_orig) + ' ' + h(x.cur_orig) + (x.cur_orig !== CUR ? '<small> ≈ ' + M(x.price) + ' ' + CUR + '</small>' : '') + '</td></tr>').join('') + '</table>' : '<div class="pi-mut">No earlier orders of this product for this client.</div>';
+    if (i.cost != null) { const m = PF.marginAt(price, i.cost); t += '<div class="pi-staff">Staff only · supplier price ' + M(i.cost) + ' ' + CUR + (i.cost_orig && i.cost_orig.cur !== CUR ? ' (' + M(i.cost_orig.v) + ' ' + h(i.cost_orig.cur) + ')' : '') + (m != null ? ' · margin at this price <b>' + m.toFixed(0) + '%</b>' : '') + '</div>'; }
+    return t + '<div class="pi-tip">Click a row to use that price. Prices of other clients are never shown.</div>';
+  }
+  function showPop(row, on) { const pop = row.querySelector('[data-pop]'), i = row._info; if (on && PF && i && ((i.hist || []).length || i.cost != null)) { pop.innerHTML = popHtml(row); pop.hidden = false; } else pop.hidden = true; }
+  rowsEl.addEventListener('mouseover', e => { const pc = e.target.closest('.pi-pc'); if (pc) showPop(pc.closest('[data-row]'), true); });
+  rowsEl.addEventListener('mouseout', e => { const pc = e.target.closest('.pi-pc'); if (pc && !pc.contains(e.relatedTarget)) showPop(pc.closest('[data-row]'), false); });
+  rowsEl.addEventListener('focusin', e => { if (e.target.name && /\[unit_price\]$/.test(e.target.name)) showPop(e.target.closest('[data-row]'), true); });
+  rowsEl.addEventListener('focusout', e => { if (e.target.name && /\[unit_price\]$/.test(e.target.name)) { const row = e.target.closest('[data-row]'); setTimeout(() => { if (!row.querySelector('.pi-pc:hover')) showPop(row, false); }, 200); } });
+  // create a product without leaving the invoice
+  let npRow = null, npDup = null;
+  function openNew(row, name) { npRow = row; npDup = null; $('npName').value = name || ''; ['npSku', 'npHs', 'npCost'].forEach(id => { $(id).value = ''; }); $('npErr').hidden = true; $('npOv').hidden = false; $('npName').focus(); }
+  $('npCancel').onclick = () => { $('npOv').hidden = true; };
+  $('npErr').addEventListener('click', e => { if (e.target.closest('[data-dup]') && npDup) { e.preventDefault(); $('npOv').hidden = true; setProduct(npRow, npDup); } });
+  $('npSave').onclick = async () => {
+    const name = $('npName').value.trim(); if (!name) { $('npName').focus(); return; }
+    const err = t => { $('npErr').innerHTML = t; $('npErr').hidden = false; };
+    $('npSave').disabled = true;
+    try {
+      const r = await fetch('/admin/pi/product-new', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ name, sku: $('npSku').value, hs_code: $('npHs').value, unit_cost: $('npCost').value, cost_currency: $('npCur').value }) });
+      const j = await r.json();
+      if (!r.ok) err(h(j.error || 'Could not save the product.'));
+      else if (j.duplicate) { npDup = j.duplicate; err('“' + h(j.duplicate.name) + '” already exists. <a href="#" data-dup>Use the existing product</a>'); }
+      else { $('npOv').hidden = true; await setProduct(npRow, j.product, true); }
+    } catch (e) { err('Could not save the product — check your connection.'); } finally { $('npSave').disabled = false; }
+  };
+  // earlier prices of the products already on the invoice
+  import('/js/price-flags.js').then(m => {
+    PF = m;
+    q('[data-row]').forEach(async row => { setMeta(row); const pid = row.querySelector('[data-pid]').value; if (pid) { row._info = await getInfo(pid); showClock(row); calc(); } });
+    calc();
+  }).catch(() => {});
   renumber(); calc();
 })();
 </script>
