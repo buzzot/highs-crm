@@ -3053,3 +3053,19 @@ label>.pi-suf{margin-top:5px}
 .pill.g{background:#e7f6ef;color:#047857}.pill.a{background:#fff4e0;color:#b45309}.pill.b{background:#fdecec;color:#b91c1c}
 .pi-cost{display:flex;justify-content:space-between;color:#6b7280;margin-top:2px}.pi-cost b{color:#111827}
 .pi-l+.pi-cost{margin-top:8px;padding-top:8px;border-top:1px dashed #d1d5db}
+
+/* freight card v2 */
+.pi-fr{display:flex;gap:18px;align-items:flex-end;flex-wrap:wrap}
+.pi-fr>label{flex:0 0 auto!important;margin:0!important}
+.pi-fr>label:nth-child(1){width:156px}.pi-fr>label:nth-child(2){width:88px}
+.pi-fr .pi-seg{margin-top:5px}
+.pi-fr input[type=number]{-moz-appearance:textfield}.pi-fr input[type=number]::-webkit-outer-spin-button,.pi-fr input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.pi-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.pi-note{display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap;width:fit-content;max-width:100%;margin:0;padding:4px 10px;border-radius:8px}
+.pi-note[hidden]{display:none!important}
+.pi-note .link{padding:0;font-weight:600;text-decoration:underline}
+.pi-sum2{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap}
+.pi-see{max-width:380px;color:var(--ink-2);font-size:12.5px}.pi-see b{color:var(--ink)}
+.pi-sum2 .pi-tot{margin:0;padding:0;border:0;min-width:260px}
+.pi-sum2 .pi-tot div{grid-template-columns:1fr auto;gap:30px}
+.pi-sum2 .pi-tot .grand{font-size:15px}.pi-sum2 .pi-tot .grand b{font-size:18px}
