@@ -17,18 +17,43 @@
   <button class="navtoggle" aria-label="Menu" onclick="this.parentNode.classList.toggle('open')">☰</button>
   <a class="brand" href="/">Lumi<span>Trade</span></a>
   <div class="links">
-    <% if (isStaff) { %>
+    <% if (isStaff) {
+      const np = typeof navPending !== 'undefined' ? navPending : {};
+      const cap = n => (n > 99 ? '99+' : n);
+      const ball = (n, title) => (n > 0 ? '<span class="navball" title="' + String(title).replace(/"/g, '&quot;') + '">' + cap(n) + '</span>' : '');
+      const plural = (n, a, b) => (n > 1 ? b : a);
+      const ordersTitle = [np.ordersNew > 0 ? np.ordersNew + ' new order' + plural(np.ordersNew, '', 's') + ' from clients to review' : '', np.ordersPay > 0 ? np.ordersPay + ' payment' + plural(np.ordersPay, '', 's') + ' to confirm' : ''].filter(Boolean).join(' · ');
+      const reqTitle = np.sourcing + ' item' + plural(np.sourcing, '', 's') + ' waiting for you (new requests, client changes or purchase orders)';
+      const purTitle = np.purchasing + ' supplier repl' + plural(np.purchasing, 'y', 'ies') + ' to check';
+      const prodTitle = np.products + ' supplier product' + plural(np.products, '', 's') + ' to review (new, edit requests or updates)';
+      const isManager = user.role === 'staff' && user.staff_level === 'manager';
+      const inPricing = path.startsWith('/admin/pricing') && !path.startsWith('/admin/pricing/settings');
+      const inCompanies = path.startsWith('/admin/clients') && !path.startsWith('/admin/clients/staff');
+      const groups = [
+        { name: 'Clients', on: inCompanies || path.startsWith('/admin/sourcing') || path.startsWith('/admin/orders'), n: (np.orders || 0) + (np.sourcing || 0), title: [np.orders > 0 ? ordersTitle : '', np.sourcing > 0 ? reqTitle : ''].filter(Boolean).join(' · '), items: [
+          { href: '/admin/clients', t: 'Companies', d: 'Client list and contacts', on: inCompanies },
+          { href: '/admin/sourcing', t: 'Requests', d: 'What clients ask us to source', on: path.startsWith('/admin/sourcing'), n: np.sourcing, title: reqTitle },
+          { href: '/admin/orders', t: 'Orders', d: 'Confirmed and new client orders', on: path.startsWith('/admin/orders'), n: np.orders, title: ordersTitle } ] },
+        { name: 'Sourcing', on: ['/admin/suppliers', '/admin/rfqs', '/admin/purchasing'].some(x => path.startsWith(x)), n: np.purchasing || 0, title: purTitle, items: [
+          { href: '/admin/suppliers', t: 'Suppliers', d: 'Supplier list and contacts', on: path.startsWith('/admin/suppliers') },
+          { href: '/admin/rfqs', t: 'RFQs', d: 'Ask suppliers for prices', on: path.startsWith('/admin/rfqs') },
+          { href: '/admin/purchasing', t: 'Purchasing', d: 'Supplier orders and proformas', on: path.startsWith('/admin/purchasing'), n: np.purchasing, title: purTitle } ] },
+        { name: 'Catalog', on: path.startsWith('/admin/products') || inPricing, n: np.products || 0, title: prodTitle, items: [
+          { href: '/admin/products', t: 'Products', d: 'Items, specs, photos, supplier prices', on: path.startsWith('/admin/products'), n: np.products, title: prodTitle },
+          { href: '/admin/pricing', t: 'Pricing', d: 'Margins and price rules', on: inPricing } ] },
+      ];
+    %>
       <a href="/admin" class="<%= path === '/admin' ? 'on' : '' %>">Dashboard</a>
-      <a href="/admin/orders" class="<%= path.startsWith('/admin/orders') ? 'on' : '' %>">Orders<% if (typeof navPending !== 'undefined' && navPending.orders > 0) { %><span class="navball" title="<%= [navPending.ordersNew > 0 ? navPending.ordersNew + ' new order' + (navPending.ordersNew > 1 ? 's' : '') + ' from clients to review' : '', navPending.ordersPay > 0 ? navPending.ordersPay + ' payment' + (navPending.ordersPay > 1 ? 's' : '') + ' to confirm' : ''].filter(Boolean).join(' · ') %>"><%= navPending.orders > 99 ? '99+' : navPending.orders %></span><% } %></a>
-      <a href="/admin/clients" class="<%= path.startsWith('/admin/clients') ? 'on' : '' %>">Clients</a>
-      <a href="/admin/suppliers" class="<%= path.startsWith('/admin/suppliers') ? 'on' : '' %>">Suppliers</a>
-      <a href="/admin/products" class="<%= path.startsWith('/admin/products') ? 'on' : '' %>">Products<% if (typeof navPending !== 'undefined' && navPending.products > 0) { %><span class="navball" title="<%= navPending.products %> supplier product<%= navPending.products > 1 ? 's' : '' %> to review (new, edit requests or updates)"><%= navPending.products > 99 ? '99+' : navPending.products %></span><% } %></a>
-      <a href="/admin/sourcing" class="<%= path.startsWith('/admin/sourcing') ? 'on' : '' %>">Sourcing<% if (typeof navPending !== 'undefined' && navPending.sourcing > 0) { %><span class="navball" title="<%= navPending.sourcing %> item<%= navPending.sourcing > 1 ? 's' : '' %> waiting for you (new requests, client changes or purchase orders)"><%= navPending.sourcing > 99 ? '99+' : navPending.sourcing %></span><% } %></a>
-      <a href="/admin/rfqs" class="<%= path.startsWith('/admin/rfqs') ? 'on' : '' %>">RFQs</a>
-      <a href="/admin/purchasing" class="<%= path.startsWith('/admin/purchasing') ? 'on' : '' %>">Purchasing<% if (typeof navPending !== 'undefined' && navPending.purchasing > 0) { %><span class="navball" title="<%= navPending.purchasing %> supplier repl<%= navPending.purchasing > 1 ? 'ies' : 'y' %> to check"><%= navPending.purchasing > 99 ? '99+' : navPending.purchasing %></span><% } %></a>
+      <% groups.forEach(g => { %>
+      <div class="navgrp<%= g.on ? ' on' : '' %>">
+        <button type="button" class="navgrp-b" aria-haspopup="true" aria-expanded="false"><%= g.name %><%- ball(g.n, g.title) %><span class="navcar" aria-hidden="true">▾</span></button>
+        <div class="navmenu" role="menu">
+          <% g.items.forEach(it => { %><a href="<%= it.href %>" role="menuitem" class="<%= it.on ? 'on' : '' %>"><span><%= it.t %><small><%= it.d %></small></span><%- ball(it.n, it.title) %></a><% }) %>
+        </div>
+      </div>
+      <% }) %>
       <a href="/admin/logistics" class="<%= path.startsWith('/admin/logistics') ? 'on' : '' %>">Logistics</a>
-      <a href="/admin/pricing" class="<%= path.startsWith('/admin/pricing') ? 'on' : '' %>">Pricing</a>
-      <% if (!(user.role === 'staff' && user.staff_level === 'manager')) { %><a href="/admin/report" class="<%= path.startsWith('/admin/report') ? 'on' : '' %>">Report</a><% } %>
+      <% if (!isManager) { %><a href="/admin/report" class="<%= path.startsWith('/admin/report') ? 'on' : '' %>">Report</a><% } %>
     <% } else { %>
       <a href="/portal" class="<%= path === '/portal' ? 'on' : '' %>">Overview</a>
       <a href="/portal/requests" class="<%= path.startsWith('/portal/requests') ? 'on' : '' %>">Requests</a>
@@ -37,11 +62,36 @@
     <% } %>
   </div>
   <div class="me">
-    <% if (user.role === 'admin') { %><a href="/admin/clients/staff/list" class="muted">Staff</a><a href="/admin/pricing/settings" class="muted">Settings</a><a href="/admin/email-check" class="muted">Email</a><a href="/admin/ai-usage" class="muted">AI usage</a><% } %>
-    <a href="/account"><%= user.full_name || user.email %><% if (user.organizations) { %> · <%= user.organizations.name %><% } %></a>
-    <form method="post" action="/logout"><button class="link">Sign out</button></form>
+    <div class="navgrp navme<%= path.startsWith('/account') || (user.role === 'admin' && ['/admin/clients/staff', '/admin/pricing/settings', '/admin/email-check', '/admin/ai-usage'].some(x => path.startsWith(x))) ? ' on' : '' %>">
+      <button type="button" class="navgrp-b" aria-haspopup="true" aria-expanded="false"><%= user.full_name || user.email %><span class="navcar" aria-hidden="true">▾</span></button>
+      <div class="navmenu right" role="menu">
+        <a href="/account" role="menuitem"><span>My account<small><%= user.email %><% if (user.organizations) { %> · <%= user.organizations.name %><% } %></small></span></a>
+        <% if (user.role === 'admin') { %>
+        <div class="navlab">Administration</div>
+        <a href="/admin/clients/staff/list" role="menuitem"><span>Staff</span></a>
+        <a href="/admin/pricing/settings" role="menuitem"><span>Settings</span></a>
+        <a href="/admin/email-check" role="menuitem"><span>Email check</span></a>
+        <a href="/admin/ai-usage" role="menuitem"><span>AI usage</span></a>
+        <% } %>
+        <hr>
+        <form method="post" action="/logout"><button class="navout" role="menuitem">Sign out</button></form>
+      </div>
+    </div>
   </div>
 </nav>
+<script>
+(function () {
+  var nav = document.querySelector('.topbar'); if (!nav) return;
+  var groups = [].slice.call(nav.querySelectorAll('.navgrp'));
+  function closeAll(except) { groups.forEach(function (g) { if (g !== except) { g.classList.remove('open'); g.querySelector('.navgrp-b').setAttribute('aria-expanded', 'false'); } }); }
+  groups.forEach(function (g) {
+    var b = g.querySelector('.navgrp-b');
+    b.addEventListener('click', function (e) { e.stopPropagation(); var o = !g.classList.contains('open'); closeAll(g); g.classList.toggle('open', o); b.setAttribute('aria-expanded', o ? 'true' : 'false'); });
+  });
+  document.addEventListener('click', function (e) { if (!e.target.closest('.navgrp')) closeAll(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeAll(); });
+})();
+</script>
 <% } %>
 <% if (!(user && !isStaff)) { %><main class="page"><% } %>
 <%- include('flash') %>

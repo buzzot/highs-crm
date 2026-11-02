@@ -105,7 +105,16 @@ test('staff see the client order block, the client target column and an edit for
 test('menu: red ball on Orders for new client orders and payments, with a plain title', () => {
   const l = (np) => ({ ...pages['admin/orders/index'], navPending: np });
   let html = render(path.join(views, 'admin/orders/index.ejs'), l({ sourcing: 0, orders: 3, ordersNew: 2, ordersPay: 1, purchasing: 0, products: 0 }));
-  assert.match(html, /Orders<span class="navball" title="2 new orders from clients to review · 1 payment to confirm">3<\/span>/);
+  assert.match(html, /Confirmed and new client orders<\/small><\/span><span class="navball" title="2 new orders from clients to review · 1 payment to confirm">3<\/span>/);
+  assert.match(html, /Clients<span class="navball"[^>]*>3<\/span>/);   // the group adds its items up
   html = render(path.join(views, 'admin/orders/index.ejs'), l({ sourcing: 0, orders: 0, ordersNew: 0, ordersPay: 0, purchasing: 0, products: 0 }));
-  assert.doesNotMatch(html, /Orders<span class="navball"/);
+  assert.doesNotMatch(html, /class="navball"/);
+});
+
+test('menu: grouped like Clients / Sourcing / Catalog, admin tools in the user menu', () => {
+  const html = render(path.join(views, 'admin/orders/index.ejs'), { ...pages['admin/orders/index'], navPending: { sourcing: 2, orders: 0, ordersNew: 0, ordersPay: 0, purchasing: 1, products: 4 } });
+  for (const g of ['Clients', 'Sourcing', 'Catalog']) assert.match(html, new RegExp('navgrp-b"[^>]*>' + g));
+  for (const [href, t] of [['/admin/clients', 'Companies'], ['/admin/sourcing', 'Requests'], ['/admin/orders', 'Orders'], ['/admin/suppliers', 'Suppliers'], ['/admin/rfqs', 'RFQs'], ['/admin/purchasing', 'Purchasing'], ['/admin/products', 'Products'], ['/admin/pricing', 'Pricing']]) assert.match(html, new RegExp('href="' + href + '"[^>]*><span>' + t));
+  assert.match(html, /class="navgrp on">\s*<button[^>]*>Clients/);   // on an orders page the Clients group is lit
+  assert.match(html, /Administration/); assert.match(html, /action="\/logout"/);
 });

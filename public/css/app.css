@@ -3077,3 +3077,33 @@ label>.pi-suf{margin-top:5px}
 @media(max-width:900px){.rfq-tbl col.c-notes{width:30%}}
 .qtyunit input:last-child{flex:0 0 66px;width:66px;padding:0 6px 0 10px;text-overflow:clip}
 .rfq-tbl col.c-qty{width:180px}
+
+/* top menu: grouped links with drop-downs */
+.topbar .links{overflow:visible}
+.navgrp{position:relative}
+.navgrp-b{display:flex;align-items:center;gap:0;padding:7px 11px;border:0;background:none;color:rgba(255,255,255,.78);font:inherit;font-weight:500;font-size:13.5px;cursor:pointer;border-radius:6px;white-space:nowrap}
+.navgrp-b:hover,.navgrp.open>.navgrp-b{color:#fff}
+.navgrp.on>.navgrp-b{color:#fff;background:rgba(255,255,255,.12);box-shadow:inset 0 -2px 0 #6fd3c4;border-radius:6px 6px 0 0}
+.navgrp-b .navball{margin-left:7px}.navcar{font-size:9px;opacity:.65;margin-left:6px}
+.navmenu{display:none;position:absolute;top:100%;left:0;min-width:250px;background:#fff;border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.22);padding:6px;z-index:30}
+.navmenu.right{left:auto;right:0}
+.navgrp:hover>.navmenu,.navgrp.open>.navmenu,.navgrp:focus-within>.navmenu{display:block}
+.topbar .navmenu a{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:8px 10px;border-radius:7px;color:var(--ink);background:none;box-shadow:none;font-size:13.5px;white-space:normal}
+.topbar .navmenu a:hover,.topbar .navmenu a.on{background:#eef3f8;color:var(--ink);text-decoration:none}
+.topbar .navmenu a.on{font-weight:600}
+.navmenu small{display:block;color:var(--muted);font-size:11.5px;font-weight:400;margin-top:1px}
+.navmenu hr{border:0;border-top:1px solid #eef0f3;margin:4px 0}
+.navlab{padding:8px 10px 2px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;font-weight:600}
+.navmenu form{margin:0}.navout{width:100%;text-align:left;border:0;background:none;padding:8px 10px;border-radius:7px;font:inherit;font-size:13.5px;color:var(--ink);cursor:pointer}.navout:hover{background:#eef3f8}
+.navme>.navgrp-b{font-size:13px}
+@media(max-width:760px){
+  .topbar.open .links{align-items:stretch}
+  .topbar .navgrp-b{width:100%;justify-content:flex-start;cursor:default;pointer-events:none;text-transform:uppercase;font-size:11px;letter-spacing:.06em;opacity:.7;padding:10px 11px 2px;box-shadow:none!important;background:none!important}
+  .topbar .navcar{display:none}
+  .topbar .navmenu{display:block;position:static;background:none;box-shadow:none;padding:0 0 4px 8px;min-width:0}
+  .topbar .navmenu a{color:rgba(255,255,255,.85)}.topbar .navmenu a:hover,.topbar .navmenu a.on{background:rgba(255,255,255,.12);color:#fff}
+  .topbar .navmenu small,.topbar .navlab,.topbar .navmenu hr{display:none}
+  .topbar .navmenu .navout{color:rgba(255,255,255,.85)}.topbar .navout:hover{background:rgba(255,255,255,.12)}
+  .topbar .me .navgrp{width:100%}
+}
+@media(max-width:760px){.topbar.open .links,.topbar.open .me{flex:1 1 100%}}
