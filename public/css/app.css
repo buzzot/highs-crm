@@ -3107,3 +3107,8 @@ label>.pi-suf{margin-top:5px}
   .topbar .me .navgrp{width:100%}
 }
 @media(max-width:760px){.topbar.open .links,.topbar.open .me{flex:1 1 100%}}
+/* clearer drop-down arrow */
+.navcar{font-size:0;opacity:1;margin-left:8px;width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:translateY(-2px) rotate(45deg);transition:transform .15s;display:inline-block}
+.navgrp-b{opacity:1}.navgrp-b .navcar{opacity:.85}.navgrp:hover>.navgrp-b .navcar,.navgrp.open>.navgrp-b .navcar{opacity:1}
+.navgrp.open>.navgrp-b .navcar{transform:translateY(1px) rotate(225deg)}
+.navme .navcar{width:6px;height:6px}
