@@ -257,6 +257,10 @@
           <label>Reference <input name="reference" value="<%= x.reference || '' %>"></label>
           <div class="actions"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn primary">Save</button></div>
         </form>
+        <form method="post" action="/admin/orders/<%= order.id %>/payments/<%= x.id %>/delete" class="paydel" onsubmit="return confirm('Delete this payment of <%= fmt.money(x.amount, x.currency) %>? This cannot be undone.')">
+          <button class="link small danger">Delete this payment</button>
+          <span class="muted small">Use it for a wrong or duplicate entry. Totals are recalculated.</span>
+        </form>
       </dialog>
       <% }) %>
 

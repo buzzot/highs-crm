@@ -193,6 +193,19 @@ r.post('/:id/payments/:pid/edit', async (req, res) => {
   back(res, to, { msg: 'Payment updated.' });
 });
 
+// delete a recorded payment (wrong entry, duplicate). Totals are recalculated; the proof files stay in the order's documents.
+r.post('/:id/payments/:pid/delete', async (req, res) => {
+  const id = req.params.id, to = `/admin/orders/${id}#payments`;
+  const { data: pay } = await admin.from('order_payments').select('id, amount, currency, label, status').eq('id', req.params.pid).eq('order_id', id).maybeSingle();
+  if (!pay) return notFound(res, 'Payment');
+  const { error } = await admin.from('order_payments').delete().eq('id', pay.id);
+  if (error) return back(res, to, { err: error.message });
+  await recalcOrder(id);
+  if (typeof req.app.locals.refreshNav === 'function') req.app.locals.refreshNav();
+  await log({ entityType: 'order', entityId: id, action: 'payment_deleted', actorId: req.user.id, clientVisible: false, detail: { note: `${Number(pay.amount).toFixed(2)} ${pay.currency}${pay.label ? ' · ' + pay.label : ''} (${pay.status})` } });
+  back(res, to, { msg: 'Payment deleted.' });
+});
+
 r.post('/:id/payments', async (req, res) => {
   const id = req.params.id;
   const { data: o } = await admin.from('orders').select('id, org_id, currency, amount_due').eq('id', id).single();
